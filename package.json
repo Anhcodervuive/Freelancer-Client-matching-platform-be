@@ -4,7 +4,8 @@
 	"main": "index.js",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"dev": "npx nodemon"
+		"dev": "npx nodemon",
+		"worker:email": "ts-node -r tsconfig-paths/register src/queues/email.worker.ts"
 	},
 	"keywords": [],
 	"author": "",
@@ -17,17 +18,22 @@
 		"@types/jsonwebtoken": "^9.0.10",
 		"@types/morgan": "^1.9.10",
 		"@types/node": "^24.2.1",
+		"@types/nodemailer": "^7.0.1",
 		"morgan": "^1.10.1",
 		"nodemon": "^3.1.10",
 		"ts-node": "^10.9.2",
+		"tsconfig-paths": "^4.2.0",
 		"typescript": "^5.9.2"
 	},
 	"dependencies": {
 		"@prisma/client": "^6.13.0",
 		"bcrypt": "^6.0.0",
+		"bullmq": "^5.58.0",
 		"dotenv": "^17.2.1",
 		"express": "^5.1.0",
+		"ioredis": "^5.7.0",
 		"jsonwebtoken": "^9.0.2",
+		"nodemailer": "^7.0.5",
 		"prisma": "^6.13.0",
 		"zod": "^4.0.17"
 	}

@@ -13,3 +13,32 @@ datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  firstName       String?   @map("first_name")
+  lastName        String?   @map("last_name")
+  password        String
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at") // nullable, chỉ có giá trị khi xóa mềm
+  isActive        Boolean   @default(true) @map("is_active")
+
+  emailVerifyTokens EmailVerifyToken[]
+
+  @@map("user")
+}
+
+model EmailVerifyToken {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("email_verify_token") // Table SQL: email_verify_token
+}

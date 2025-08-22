@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Xác nhận email</title>
+    <style>
+        .btn {
+            background: #4f46e5;
+            color: #fff;
+            padding: 10px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Chào {{name}},</h2>
+    <p>Cảm ơn bạn đã đăng ký tài khoản.</p>
+    <p>Bấm vào nút bên dưới để xác nhận email:</p>
+    <a href="{{verifyLink}}" class="btn">Xác nhận email</a>
+    <p>Nếu không phải bạn, hãy bỏ qua email này.</p>
+    <hr>
+    <small>Đây là email tự động. Đừng trả lời lại email này.</small>
+</body>
+
+</html>
