@@ -7,6 +7,11 @@ import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
 import { hashSync } from 'bcrypt'
 import { CLIENT } from '~/config/environment'
+import authService from '~/services/auth.service'
+import ms from 'ms'
+import { StatusCodes } from 'http-status-codes'
+import { UnauthorizedException } from '~/exceptions/unauthoried'
+import { blacklistRefreshToken } from '~/helpers/blacklist'
 
 export const signup = async (req: Request, res: Response, next: NextFunction) => {
 	const { email, password, firstName, lastName, role } = req.body
@@ -55,7 +60,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
 		verifyLink
 	})
 
-	res.json({
+	res.status(StatusCodes.OK).json({
 		user: createdUser,
 		verifyLink
 	})
@@ -88,5 +93,43 @@ export const verify = async (req: Request, res: Response, next: NextFunction) =>
 	await prismaClient.emailVerifyToken.delete({ where: { token } })
 
 	// Có thể redirect về trang login hoặc trả JSON
-	return res.json({ message: 'Xác nhận email thành công! Bạn có thể đăng nhập.' })
+	return res.status(StatusCodes.OK).json({ message: 'Xác nhận email thành công! Bạn có thể đăng nhập.' })
+}
+
+export const signin = async (req: Request, res: Response, next: NextFunction) => {
+	const result = await authService.signin(req.body)
+
+	res.cookie('accessToken', result.accessToken, {
+		httpOnly: true,
+		secure: true,
+		sameSite: 'none',
+		maxAge: ms('14 days')
+	})
+
+	res.cookie('refreshToken', result.refreshToken, {
+		httpOnly: true,
+		secure: true,
+		sameSite: 'none',
+		maxAge: ms('14 days')
+	})
+
+	res.status(StatusCodes.OK).json(result)
+}
+
+export const logout = async (req: Request, res: Response, next: NextFunction) => {
+	const decoded = req.decoded
+	const refreshToken = req.cookies?.refreshToken
+
+	const expiredAt = new Date(decoded.exp * 1000) // Chuyển thành object Date JS
+	console.log('Token sẽ hết hạn vào:', expiredAt.toLocaleString())
+	const expMs = decoded.exp * 1000
+	const nowMs = Date.now()
+	const expiresInSeconds = Math.max(Math.floor((expMs - nowMs) / 1000), 1) // còn lại bao nhiêu giây
+
+	await blacklistRefreshToken(refreshToken, expiresInSeconds, req.user?.id)
+
+	res.clearCookie('accessToken')
+	res.clearCookie('refreshToken')
+
+	res.status(StatusCodes.OK).json({ message: 'Logout successfully' })
 }

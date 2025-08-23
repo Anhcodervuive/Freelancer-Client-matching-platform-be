@@ -16,3 +16,11 @@ export const MAIL = {
 export const CLIENT = {
 	URL: process.env.CLIENT_URL || 'http://localhost:5173'
 }
+
+export const JWT_CONFIG_INFO = {
+	ACCESS_TOKEN_SECRET_SIGNATURE: process.env.ACCESS_TOKEN_SECRET_SIGNATURE ?? 'secret',
+	ACCESS_TOKEN_LIFE: process.env.ACCESS_TOKEN_LIFE ?? '1h',
+
+	REFRESH_TOKEN_SECRET_SIGNATURE: process.env.REFRESH_TOKEN_SECRET_SIGNATURE ?? 'secret',
+	REFRESH_TOKEN_LIFE: process.env.REFRESH_TOKEN_LIFE ?? '14 days'
+}
