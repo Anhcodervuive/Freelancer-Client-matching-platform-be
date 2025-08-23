@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>{{subject}}</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+        body {
+            background: #f8fafc;
+            font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+            color: #484954;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 430px;
+            margin: 40px auto;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(72, 73, 84, 0.1);
+            overflow: hidden;
+            padding: 32px 28px 22px 28px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        {{> header}}
+        {{> @partial-block }}
+        {{> footer}}
+    </div>
+</body>
+
+</html>

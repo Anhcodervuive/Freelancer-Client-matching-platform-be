@@ -38,7 +38,7 @@ model EmailVerifyToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("email_verify_token") // Table SQL: email_verify_token
 }

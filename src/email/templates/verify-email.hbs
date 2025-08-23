@@ -1,0 +1,11 @@
+{{#> base subject="Xác nhận tài khoản"}}
+  <h2 style="margin-top:0;">Xác nhận email của bạn</h2>
+  <p>Xin chào <b>{{name}}</b>,</p>
+  <p>Cảm ơn bạn đã đăng ký tài khoản trên website của chúng tôi.<br>
+    Để hoàn tất đăng ký, vui lòng xác nhận email bằng cách bấm vào nút dưới đây:
+  </p>
+  <div style="display: flex; justify-content: center; justify-items: center;">
+    {{> button link=verifyLink text="Xác nhận email"}}
+  </div>
+  <p style="font-size:13px;color:#484954;margin-top:18px;">Nếu không phải bạn, hãy bỏ qua email này.</p>
+{{/base}}
