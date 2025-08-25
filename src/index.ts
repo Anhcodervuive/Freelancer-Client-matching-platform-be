@@ -1,5 +1,6 @@
 import express from 'express'
 import morgan from 'morgan'
+import cors from 'cors'
 import cookieParser from 'cookie-parser'
 
 import { PORT } from './config/environment'
@@ -8,6 +9,7 @@ import { prismaClient } from './config/prisma-client'
 import rootRouter from './routes'
 import { errorMiddleware } from './middlewares/errors'
 import { redisClient } from './config/redis-client'
+import { corsOptions } from './config/cors'
 
 async function START_SERVIER() {
 	try {
@@ -19,6 +21,7 @@ async function START_SERVIER() {
 
 		app.use(express.json())
 		app.use(cookieParser())
+		app.use(cors(corsOptions))
 
 		app.use(morgan('combined'))
 

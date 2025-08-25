@@ -24,3 +24,5 @@ export const JWT_CONFIG_INFO = {
 	REFRESH_TOKEN_SECRET_SIGNATURE: process.env.REFRESH_TOKEN_SECRET_SIGNATURE ?? 'secret',
 	REFRESH_TOKEN_LIFE: process.env.REFRESH_TOKEN_LIFE ?? '14 days'
 }
+
+export const NODE_ENV = process.env.NODE_ENV ?? 'development'

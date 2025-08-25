@@ -14,6 +14,9 @@ export class HttpException extends Error {
 }
 
 export enum ErrorCode {
+	// Cors
+	CORS_NOT_ALLOWED = 100,
+
 	// Authentication
 	USER_NOT_FOUND = 1001,
 	USER_ALREADY_EXISTS = 1002,
