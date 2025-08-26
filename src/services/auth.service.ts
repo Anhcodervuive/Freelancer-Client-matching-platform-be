@@ -136,18 +136,33 @@ export async function findOrCreateUserFromGoogle(profile: Profile) {
 		}
 	})
 
-	if (!user) {
-		// Nếu chưa có, tạo user mới
-		user = await prismaClient.user.create({
-			data: {
-				googleId,
-				email,
-				firstName: name,
-				avatar,
-				emailVerifiedAt: new Date()
-			}
-		})
+	if (user) return user
+
+	// Nếu chưa, check đã tồn tại email này chưa
+	const userByEmail = await prismaClient.user.findUnique({
+		where: { email }
+	})
+
+	if (userByEmail) {
+		// Đã có user đăng ký bằng email này nhưng chưa liên kết Google
+		// QUĂNG LỖI custom
+		const err = new UnauthorizedException(
+			'Email này đã được đăng ký, vui lòng đăng nhập truyền thống rồi liên kết Google trong phần cài đặt.',
+			ErrorCode.EMAIL_EXISTS
+		)
+
+		throw err
 	}
+
+	// Nếu email chưa tồn tại, tạo user mới
+	user = await prismaClient.user.create({
+		data: {
+			email,
+			firstName: name,
+			avatar,
+			googleId
+		}
+	})
 
 	return user
 }

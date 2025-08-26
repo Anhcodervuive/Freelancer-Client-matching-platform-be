@@ -12,8 +12,12 @@ passport.use(
 		},
 		async (accessToken, refreshToken, profile, done) => {
 			// Xử lý lấy user từ DB hoặc tạo mới
-			const user = await findOrCreateUserFromGoogle(profile)
-			return done(null, user)
+			try {
+				const user = await findOrCreateUserFromGoogle(profile)
+				done(null, user)
+			} catch (err) {
+				done(err) // Đẩy lỗi vào flow Passport
+			}
 		}
 	)
 )
