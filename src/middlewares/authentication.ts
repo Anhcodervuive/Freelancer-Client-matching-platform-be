@@ -9,7 +9,7 @@ import { UserInfoToEnCode } from '~/types'
 const authenticateMiddleware = async (req: Request, res: Response, next: NextFunction) => {
 	try {
 		// Lấy token từ cookie
-		const token = req.cookies?.accessToken
+		const token = req.cookies?.refreshToken
 		if (!token) {
 			return next(new UnauthorizedException('No token provided', ErrorCode.UNAUTHORIED))
 		}

@@ -26,3 +26,9 @@ export const JWT_CONFIG_INFO = {
 }
 
 export const NODE_ENV = process.env.NODE_ENV ?? 'development'
+
+export const GOOGLE = {
+	CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+	CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+	CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL
+}

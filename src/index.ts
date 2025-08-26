@@ -10,6 +10,7 @@ import rootRouter from './routes'
 import { errorMiddleware } from './middlewares/errors'
 import { redisClient } from './config/redis-client'
 import { corsOptions } from './config/cors'
+import '~/config/passport'
 
 async function START_SERVIER() {
 	try {

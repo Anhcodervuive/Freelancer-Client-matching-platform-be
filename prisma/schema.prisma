@@ -17,9 +17,11 @@ datasource db {
 model User {
   id              String    @id @default(uuid())
   email           String    @unique
+  googleId        String?   @unique @map("google_id")
   firstName       String?   @map("first_name")
   lastName        String?   @map("last_name")
-  password        String
+  avatar          String?   
+  password        String?
   emailVerifiedAt DateTime? @map("email_verified_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")

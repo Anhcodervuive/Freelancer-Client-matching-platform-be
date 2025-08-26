@@ -32,36 +32,15 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
 			password: hashSync(password, 10),
 			firstName,
 			lastName
-		},
-		select: {
-			id: true,
-			email: true,
-			firstName: true
 		}
 	})
 
-	// --- TẠO TOKEN & LƯU DB ---
-	const token = crypto.randomBytes(32).toString('hex')
-	const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 phút
+	const verifyLink = await authService.sendVerifyEmail(createdUser)
 
-	await prismaClient.emailVerifyToken.create({
-		data: {
-			userId: createdUser.id,
-			token,
-			expiresAt
-		}
-	})
-
-	const verifyLink = `${CLIENT.URL}/verify?token=${token}`
-
-	await emailQueue.add('sendVerifyEmail', {
-		to: createdUser.email,
-		name: createdUser.firstName,
-		verifyLink
-	})
+	const { password: _pw, ...publicUser } = createdUser
 
 	res.status(StatusCodes.OK).json({
-		user: createdUser,
+		user: publicUser,
 		verifyLink
 	})
 }
@@ -78,9 +57,13 @@ export const verify = async (req: Request, res: Response, next: NextFunction) =>
 		include: { user: true }
 	})
 
-	if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
+	if (!tokenRecord) {
+		throw new BadRequestException('Invalid token', ErrorCode.UNPROCESSABLE_ENTITY)
+	}
+
+	if (tokenRecord.expiresAt < new Date()) {
 		await prismaClient.emailVerifyToken.delete({ where: { token } })
-		throw new BadRequestException('Invalid or expired token', ErrorCode.UNPROCESSABLE_ENTITY)
+		throw new BadRequestException('Token is Expired', ErrorCode.UNPROCESSABLE_ENTITY)
 	}
 
 	// Cập nhật trạng thái xác thực email cho user
@@ -94,6 +77,38 @@ export const verify = async (req: Request, res: Response, next: NextFunction) =>
 
 	// Có thể redirect về trang login hoặc trả JSON
 	return res.status(StatusCodes.OK).json({ message: 'Xác nhận email thành công! Bạn có thể đăng nhập.' })
+}
+
+export const resendVerifyEmail = async (req: Request, res: Response, next: NextFunction) => {
+	const { email } = req.params
+
+	if (!email) {
+		throw new BadRequestException('Email invalid', ErrorCode.UNPROCESSABLE_ENTITY)
+	}
+
+	const existedUser = await prismaClient.user.findFirst({
+		where: {
+			email
+		}
+	})
+
+	if (!existedUser) {
+		throw new BadRequestException('User not founded', ErrorCode.USER_NOT_FOUND)
+	}
+
+	if (existedUser?.emailVerifiedAt) {
+		throw new BadRequestException('User is verified', ErrorCode.ACCOUNT_VERIFIED)
+	}
+
+	const userId = existedUser.id
+	await prismaClient.emailVerifyToken.deleteMany({ where: { userId } })
+
+	const verifyLink = await authService.sendVerifyEmail(existedUser)
+
+	res.status(StatusCodes.OK).json({
+		message: 'Resend verify link successfully!',
+		verifyLink
+	})
 }
 
 export const signin = async (req: Request, res: Response, next: NextFunction) => {
@@ -114,6 +129,36 @@ export const signin = async (req: Request, res: Response, next: NextFunction) =>
 	})
 
 	res.status(StatusCodes.OK).json(result)
+}
+
+export const signinGoogle = async (req: Request, res: Response, next: NextFunction) => {
+	// Lúc này req.user đã có thông tin user rồi
+	const user = req.user as any
+
+	const result = await authService.signinGoogle(user)
+
+	res.cookie('accessToken', result.accessToken, {
+		httpOnly: true,
+		secure: true,
+		sameSite: 'none',
+		maxAge: ms('14 days')
+	})
+
+	res.cookie('refreshToken', result.refreshToken, {
+		httpOnly: true,
+		secure: true,
+		sameSite: 'none',
+		maxAge: ms('14 days')
+	})
+	const publicUserStringified = Object.fromEntries(
+		Object.entries(result.publicUser).map(([key, value]) => [
+			key,
+			value === null ? '' : value instanceof Date ? value.toISOString() : value.toString()
+		])
+	)
+	const queryString = new URLSearchParams(publicUserStringified).toString()
+
+	res.redirect(`${CLIENT.URL}/signin?${queryString}`)
 }
 
 export const logout = async (req: Request, res: Response, next: NextFunction) => {
