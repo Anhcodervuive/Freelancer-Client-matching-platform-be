@@ -1,6 +1,14 @@
 import { Router } from 'express'
 import passport from 'passport'
-import { logout, resendVerifyEmail, signin, signinGoogle, signup, verify } from '~/controllers/auth.controller'
+import {
+	logout,
+	refreshToken,
+	resendVerifyEmail,
+	signin,
+	signinGoogle,
+	signup,
+	verify
+} from '~/controllers/auth.controller'
 import authenticateMiddleware from '~/middlewares/authentication'
 import { googleAuthHandler } from '~/middlewares/google'
 import { errorHandler } from '~/utils/error-handler'
@@ -11,6 +19,7 @@ router.post('/signup', errorHandler(signup))
 router.put('/verify/:token', errorHandler(verify))
 
 router.post('/signin', errorHandler(signin))
+router.post('/refresh_token', errorHandler(refreshToken))
 router.post('/logout', authenticateMiddleware, errorHandler(logout))
 router.post('/resend-verify-email/:email', errorHandler(resendVerifyEmail))
 

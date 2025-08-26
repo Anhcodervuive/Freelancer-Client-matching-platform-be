@@ -1,5 +1,5 @@
 import JWT from 'jsonwebtoken'
-import { UserInfoToEnCode } from '~/types'
+import { DecodedToken, UserInfoToEnCode } from '~/types'
 
 const generateToken = async (userInfo: UserInfoToEnCode, secretSignature: string, tokenLife: any) => {
 	return JWT.sign(userInfo, secretSignature, {
@@ -8,8 +8,13 @@ const generateToken = async (userInfo: UserInfoToEnCode, secretSignature: string
 	})
 }
 
-const verifyToken = async (token: string, secretSignature: string) => {
-	return JWT.verify(token, secretSignature)
+const verifyToken = async (token: string, secretSignature: string): Promise<DecodedToken> => {
+	const decoded = JWT.verify(token, secretSignature)
+	if (typeof decoded === 'string') {
+		console.log('flag 1')
+		throw new Error('Invalid token payload')
+	}
+	return decoded as DecodedToken
 }
 
 export const JwtProvider = {

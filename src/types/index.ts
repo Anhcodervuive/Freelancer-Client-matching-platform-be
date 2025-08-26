@@ -1,5 +1,8 @@
+import { JwtPayload } from 'jsonwebtoken'
+
 export interface UserInfoToEnCode {
 	id: string
 	email: string
-	customExp?: Number
 }
+
+export type DecodedToken = JwtPayload & UserInfoToEnCode

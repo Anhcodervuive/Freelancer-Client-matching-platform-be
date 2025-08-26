@@ -18,19 +18,45 @@ model User {
   id              String    @id @default(uuid())
   email           String    @unique
   googleId        String?   @unique @map("google_id")
-  firstName       String?   @map("first_name")
-  lastName        String?   @map("last_name")
-  avatar          String?   
+
+  // ĐÃ LOẠI BỎ: first_name, last_name, avatar -> chuyển sang Profile
+
   password        String?
   emailVerifiedAt DateTime? @map("email_verified_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
-  deletedAt       DateTime? @map("deleted_at") // nullable, chỉ có giá trị khi xóa mềm
+  deletedAt       DateTime? @map("deleted_at")
   isActive        Boolean   @default(true) @map("is_active")
+
+  // 1-1
+  profile         Profile?
 
   emailVerifyTokens EmailVerifyToken[]
 
   @@map("user")
+}
+
+model Profile {
+  // 1-1 với User
+  userId      String   @id @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Trường hồ sơ
+  displayName String?  @map("display_name")
+  firstName   String?  @map("first_name")
+  lastName    String?  @map("last_name")
+  avatar      String?  @map("avatar")
+  bio         String?
+  location    String?
+
+  // MySQL: dùng JSON cho mảng
+  languages   Json?    // ví dụ: ["vi","en"]
+  links       Json?    // ví dụ: ["https://github.com/..."]
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("profile")
 }
 
 model EmailVerifyToken {
@@ -42,5 +68,5 @@ model EmailVerifyToken {
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("email_verify_token") // Table SQL: email_verify_token
+  @@map("email_verify_token")
 }
