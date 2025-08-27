@@ -1,9 +1,8 @@
 import bcrypt from 'bcrypt'
 import crypto from 'crypto'
-import { Profile } from 'passport-google-oauth20'
+import { Profile as GoogleProfile } from 'passport-google-oauth20'
 
 import { CLIENT, JWT_CONFIG_INFO } from '~/config/environment'
-
 import { prismaClient } from '~/config/prisma-client'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
@@ -12,13 +11,35 @@ import { JwtProvider } from '~/providers/jwt.provider'
 import { emailQueue } from '~/queues/email.queue'
 import { UserInfoToEnCode } from '~/types'
 
+/** Chuẩn hoá dữ liệu trả về cho FE, giữ tương thích cũ */
+const toPublicUser = (u: User & { profile?: any }) => {
+	// chú ý: u.profile có thể undefined nếu chưa khởi tạo profile
+	const firstName = u.profile?.firstName ?? null
+	const lastName = u.profile?.lastName ?? null
+	const avatar = u.profile?.avatar ?? null
+	const displayName =
+		u.profile?.displayName ?? ([u.profile?.firstName, u.profile?.lastName].filter(Boolean).join(' ') || null)
+
+	// loại bỏ password trước khi trả về
+	const { password: _pw, ...rest } = u as any
+
+	return {
+		...rest,
+		// giữ các field cũ để FE không gãy
+		firstName,
+		lastName,
+		avatar,
+		displayName,
+		profile: u.profile ?? null
+	}
+}
+
 const signin = async (reqBody: { email: string; password: string }) => {
 	const { email, password } = reqBody
 
 	const existedUser = await prismaClient.user.findFirst({
-		where: {
-			email
-		}
+		where: { email },
+		include: { profile: true } // <-- quan trọng: lấy kèm profile
 	})
 
 	if (!existedUser) {
@@ -29,14 +50,13 @@ const signin = async (reqBody: { email: string; password: string }) => {
 		throw new UnauthorizedException('Account is not verified', ErrorCode.ACCOUNT_NOT_VERIFIED)
 	}
 
-	if (!bcrypt.compareSync(password, existedUser.password!)) {
+	if (!existedUser.password || !bcrypt.compareSync(password, existedUser.password)) {
 		throw new UnauthorizedException('Password is not correct!', ErrorCode.INCORRECT_PASSWORD)
 	}
 
 	const userInfo: UserInfoToEnCode = {
 		id: existedUser.id,
-		email: existedUser.email,
-		customExp: Date.now() + 14 * 24 * 60 * 60 * 1000
+		email: existedUser.email
 	}
 
 	const accessToken = await JwtProvider.generateToken(
@@ -51,7 +71,7 @@ const signin = async (reqBody: { email: string; password: string }) => {
 		JWT_CONFIG_INFO.REFRESH_TOKEN_LIFE
 	)
 
-	const { password: _pw, ...publicUser } = existedUser
+	const publicUser = toPublicUser(existedUser)
 
 	return {
 		accessToken,
@@ -66,13 +86,13 @@ const signinGoogle = async (user: User) => {
 	}
 
 	if (!user.emailVerifiedAt) {
+		// Với Google, user mới tạo đã được set emailVerifiedAt (ở hàm findOrCreateUserFromGoogle)
 		throw new UnauthorizedException('Account not found', ErrorCode.USER_NOT_FOUND)
 	}
 
 	const userInfo: UserInfoToEnCode = {
 		id: user.id,
-		email: user.email,
-		customExp: Date.now() + 14 * 24 * 60 * 60 * 1000
+		email: user.email
 	}
 
 	const accessToken = await JwtProvider.generateToken(
@@ -87,7 +107,13 @@ const signinGoogle = async (user: User) => {
 		JWT_CONFIG_INFO.REFRESH_TOKEN_LIFE
 	)
 
-	const { password: _pw, ...publicUser } = user
+	// load lại kèm profile để trả publicUser đầy đủ
+	const fresh = await prismaClient.user.findUnique({
+		where: { id: user.id },
+		include: { profile: true }
+	})
+
+	const publicUser = toPublicUser(fresh as any)
 
 	return {
 		accessToken,
@@ -111,31 +137,34 @@ const sendVerifyEmail = async (user: User) => {
 
 	const verifyLink = `${CLIENT.URL}/verify?token=${emailToken.token}`
 
+	// lấy tên từ profile (fallback sang email nếu rỗng)
+	const profile = await prismaClient.profile.findUnique({ where: { userId: user.id } })
+	const name = profile?.displayName || [profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || user.email
+
 	await emailQueue.add('sendVerifyEmail', {
 		to: user.email,
-		name: user.firstName,
+		name,
 		verifyLink
 	})
 
 	return verifyLink
 }
 
-export async function findOrCreateUserFromGoogle(profile: Profile) {
+export async function findOrCreateUserFromGoogle(googleProfile: GoogleProfile) {
 	// Lấy info từ profile Google
-	const googleId = profile.id
-	const email = profile.emails?.[0]?.value ?? ''
-	const name = profile.displayName ?? ''
-	const avatar = profile.photos?.[0]?.value ?? ''
+	const googleId = googleProfile.id
+	const email = googleProfile.emails?.[0]?.value ?? ''
+	const displayName = googleProfile.displayName ?? ''
+	const avatar = googleProfile.photos?.[0]?.value ?? ''
+	const givenName = (googleProfile as any).name?.givenName as string | undefined
+	const familyName = (googleProfile as any).name?.familyName as string | undefined
 
 	if (!email) throw new Error('No email from Google!')
 
 	// Tìm user theo googleId
 	let user = await prismaClient.user.findFirst({
-		where: {
-			googleId
-		}
+		where: { googleId }
 	})
-
 	if (user) return user
 
 	// Nếu chưa, check đã tồn tại email này chưa
@@ -144,31 +173,56 @@ export async function findOrCreateUserFromGoogle(profile: Profile) {
 	})
 
 	if (userByEmail) {
-		// Đã có user đăng ký bằng email này nhưng chưa liên kết Google
-		// QUĂNG LỖI custom
-		const err = new UnauthorizedException(
+		// Đã có user đăng ký bằng email nhưng chưa liên kết Google
+		throw new UnauthorizedException(
 			'Email này đã được đăng ký, vui lòng đăng nhập truyền thống rồi liên kết Google trong phần cài đặt.',
 			ErrorCode.EMAIL_EXISTS
 		)
-
-		throw err
 	}
 
-	// Nếu email chưa tồn tại, tạo user mới
+	// Nếu email chưa tồn tại, tạo user mới + profile
 	user = await prismaClient.user.create({
 		data: {
 			email,
-			firstName: name,
-			avatar,
-			googleId
+			googleId,
+			emailVerifiedAt: new Date(), // Google coi như đã verified
+			profile: {
+				create: {
+					displayName: displayName ?? null,
+					firstName: givenName ?? null,
+					lastName: familyName ?? null,
+					avatar: avatar ?? null
+				}
+			}
 		}
 	})
 
 	return user
 }
 
+const refreshToken = async (clientRefreshToken: string) => {
+	const refreshTokenDecoded = await JwtProvider.verifyToken(
+		clientRefreshToken,
+		JWT_CONFIG_INFO.REFRESH_TOKEN_SECRET_SIGNATURE
+	)
+
+	const userInfo: UserInfoToEnCode = {
+		id: refreshTokenDecoded.id,
+		email: refreshTokenDecoded.email
+	}
+
+	const accessToken = await JwtProvider.generateToken(
+		userInfo,
+		JWT_CONFIG_INFO.ACCESS_TOKEN_SECRET_SIGNATURE,
+		JWT_CONFIG_INFO.ACCESS_TOKEN_LIFE
+	)
+
+	return accessToken
+}
+
 export default {
 	signin,
 	signinGoogle,
-	sendVerifyEmail
+	sendVerifyEmail,
+	refreshToken
 }
