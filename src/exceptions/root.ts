@@ -30,6 +30,7 @@ export enum ErrorCode {
 
 	// Req data
 	UNPROCESSABLE_ENTITY = 2001,
+	PARAM_QUERY_ERROR = 2002,
 
 	INTERNAL_SERVER_ERROR = 5000
 }

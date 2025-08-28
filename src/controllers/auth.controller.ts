@@ -156,7 +156,7 @@ export const signin = async (req: Request, res: Response, next: NextFunction) =>
 		maxAge: ms('14 days')
 	})
 
-	res.status(StatusCodes.OK).json(result)
+	res.status(StatusCodes.OK).json(result.publicUser)
 }
 
 export const signinGoogle = async (req: Request, res: Response, next: NextFunction) => {
@@ -209,7 +209,6 @@ export const logout = async (req: Request, res: Response, next: NextFunction) =>
 	)
 
 	const expSec = decoded.exp!
-	const expiredAt = new Date(expSec * 1000)
 	const ttlSec = Math.max(expSec - Math.floor(Date.now() / 1000), 1)
 
 	await blacklistRefreshToken(refreshToken, ttlSec, req.user?.id)

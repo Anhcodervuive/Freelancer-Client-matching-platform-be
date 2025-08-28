@@ -31,8 +31,8 @@ const authenticateMiddleware = async (req: Request, res: Response, next: NextFun
 		next()
 	} catch (error) {
 		// Sử dụng 1 mã lỗi 410 để trả về nếu accessToken hết hạn, trình duyệt se gọi refreshToken
-		if (error instanceof JsonWebTokenError && error?.message?.includes('jwt expired')) {
-			return next(new UnauthorizedException('Unauthorized', ErrorCode.UNAUTHORIED, null, StatusCodes.GONE))
+		if (error instanceof JsonWebTokenError) {
+			return next(new UnauthorizedException('Token is not validated', ErrorCode.UNAUTHORIED, null, StatusCodes.GONE))
 		}
 		return next(new UnauthorizedException('Unauthorized', ErrorCode.UNAUTHORIED))
 	}

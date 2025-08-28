@@ -13,24 +13,11 @@ import { UserInfoToEnCode } from '~/types'
 
 /** Chuẩn hoá dữ liệu trả về cho FE, giữ tương thích cũ */
 const toPublicUser = (u: User & { profile?: any }) => {
-	// chú ý: u.profile có thể undefined nếu chưa khởi tạo profile
-	const firstName = u.profile?.firstName ?? null
-	const lastName = u.profile?.lastName ?? null
-	const avatar = u.profile?.avatar ?? null
-	const displayName =
-		u.profile?.displayName ?? ([u.profile?.firstName, u.profile?.lastName].filter(Boolean).join(' ') || null)
-
-	// loại bỏ password trước khi trả về
-	const { password: _pw, ...rest } = u as any
-
+	const profile = u.profile
 	return {
-		...rest,
-		// giữ các field cũ để FE không gãy
-		firstName,
-		lastName,
-		avatar,
-		displayName,
-		profile: u.profile ?? null
+		id: u.id,
+		email: u.email,
+		...profile
 	}
 }
 

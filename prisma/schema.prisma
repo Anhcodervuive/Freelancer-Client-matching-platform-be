@@ -50,7 +50,7 @@ model Profile {
   location    String?
 
   // MySQL: dùng JSON cho mảng
-  languages   Json?    // ví dụ: ["vi","en"]
+  languages   ProfileLanguage[]
   links       Json?    // ví dụ: ["https://github.com/..."]
 
   createdAt   DateTime @default(now()) @map("created_at")
@@ -69,4 +69,27 @@ model EmailVerifyToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("email_verify_token")
+}
+
+enum LanguageProficiency {
+  BASIC            // biết cơ bản
+  CONVERSATIONAL   // giao tiếp
+  FLUENT           // lưu loát
+  NATIVE           // bản ngữ
+}
+
+model ProfileLanguage {
+  // KHÓA TỔNG HỢP: userId + languageCode
+  userId       String   @map("user_id")
+  languageCode String   @db.VarChar(10)
+  proficiency  LanguageProficiency
+
+  profile      Profile  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt      @map("updated_at")
+
+  @@id([userId, languageCode])
+  @@index([languageCode], name: "idx_language_code")
+  @@map("profile_language")
 }
