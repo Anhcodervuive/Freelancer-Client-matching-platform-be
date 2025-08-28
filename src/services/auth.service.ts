@@ -171,6 +171,7 @@ export async function findOrCreateUserFromGoogle(googleProfile: GoogleProfile) {
 	user = await prismaClient.user.create({
 		data: {
 			email,
+			role: 'FREELANCER',
 			googleId,
 			emailVerifiedAt: new Date(), // Google coi như đã verified
 			profile: {

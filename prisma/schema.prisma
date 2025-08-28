@@ -14,6 +14,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  CLIENT
+  FREELANCER
+  ADMIN
+}
+
 model User {
   id              String    @id @default(uuid())
   email           String    @unique
@@ -27,6 +33,8 @@ model User {
   updatedAt       DateTime  @updatedAt @map("updated_at")
   deletedAt       DateTime? @map("deleted_at")
   isActive        Boolean   @default(true) @map("is_active")
+
+  role Role
 
   // 1-1
   profile         Profile?
@@ -48,10 +56,10 @@ model Profile {
   avatar      String?  @map("avatar")
   bio         String?
   location    String?
-
-  // MySQL: dùng JSON cho mảng
-  languages   ProfileLanguage[]
+  
   links       Json?    // ví dụ: ["https://github.com/..."]
+
+  freelancer Freelancer?
 
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -78,18 +86,54 @@ enum LanguageProficiency {
   NATIVE           // bản ngữ
 }
 
-model ProfileLanguage {
-  // KHÓA TỔNG HỢP: userId + languageCode
-  userId       String   @map("user_id")
+model FreelancerLanguage {
+  // KHÓA TỔNG HỢP: freelancerId + languageCode
+  freelancerId String   @map("freelancer_id")
   languageCode String   @db.VarChar(10)
   proficiency  LanguageProficiency
 
-  profile      Profile  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
 
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt      @map("updated_at")
 
-  @@id([userId, languageCode])
+  @@id([freelancerId, languageCode])
   @@index([languageCode], name: "idx_language_code")
-  @@map("profile_language")
+  @@map("freelancer_language")
+}
+
+
+model Freelancer {
+  userId       String    @id @map("user_id")
+  profile      Profile   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  title        String?   @db.VarChar(255)
+
+  // Quan hệ ngược
+  educations   Education[]
+  languages    FreelancerLanguage[] // ✅ Thêm dòng này
+
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt      @map("updated_at")
+
+  @@map("freelancer")
+}
+
+model Education {
+  id           String   @id @default(cuid())
+
+  freelancerId String   @map("freelancer_id")
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+  schoolName   String   @db.VarChar(255) @map("school_name")
+  degreeTitle  String   @db.VarChar(255) @map("degree_title")
+  fieldOfStudy String?  @db.VarChar(255) @map("field_of_study")
+  startYear    Int?     @map("start_year")
+  endYear      Int?     @map("end_year")
+
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt      @map("updated_at")
+
+  @@index([freelancerId, startYear])
+  @@map("education")
 }

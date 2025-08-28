@@ -11,6 +11,7 @@ import { blacklistRefreshToken } from '~/helpers/blacklist'
 import { JwtProvider } from '~/providers/jwt.provider'
 import { DecodedToken, UserInfoToEnCode } from '~/types'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
+import { SignUpSchema } from '~/schema/auth.schema'
 
 /** Helper: chuẩn hoá publicUser, lấy tên/ảnh từ profile */
 const toPublicUser = (u: any) => {
@@ -48,7 +49,8 @@ const pickForQuery = (publicUser: any) => {
 }
 
 export const signup = async (req: Request, res: Response, next: NextFunction) => {
-	const { email, password, firstName, lastName /*, role*/ } = req.body
+	const data = SignUpSchema.parse(req.body)
+	const { email, password, firstName, lastName, role } = data
 
 	const existed = await prismaClient.user.findFirst({ where: { email } })
 	if (existed) {
@@ -59,12 +61,21 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
 	const createdUser = await prismaClient.user.create({
 		data: {
 			email,
+			role,
 			password: hashSync(password, 10),
 			profile: {
 				create: {
 					firstName: firstName || null,
 					lastName: lastName || null,
-					displayName: firstName || lastName ? `${firstName ?? ''} ${lastName ?? ''}`.trim() : null
+					displayName: firstName || lastName ? `${firstName ?? ''} ${lastName ?? ''}`.trim() : null,
+					// Nếu là freelancer thì tạo luôn freelancer record
+					...(role === 'FREELANCER' && {
+						freelancer: {
+							create: {
+								title: null // hoặc gán giá trị mặc định
+							}
+						}
+					})
 				}
 			}
 		},
