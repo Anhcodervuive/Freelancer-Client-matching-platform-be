@@ -2,13 +2,13 @@ import { Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
 
 import freelancerLanguageService from '~/services/freelancerLanguage.service'
-import { AddOneSchema } from '~/schema/freelancerLanguage'
+import { AddOneSchema } from '~/schema/freelancerLanguage.schema'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 
 function ensureOwnerOrAdmin(req: Request, targetUserId: string) {
-	const requester = (req as any).user
+	const requester = req.user
 	if (!requester) throw new UnauthorizedException('Unauthorized', ErrorCode.UNAUTHORIED)
 
 	if (requester.role === 'ADMIN') return
