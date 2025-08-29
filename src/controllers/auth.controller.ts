@@ -75,6 +75,14 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
 								title: null // hoặc gán giá trị mặc định
 							}
 						}
+					}),
+					...(role === 'CLIENT' && {
+						client: {
+							create: {
+								companyName: '',
+								size: 'JUST_ME'
+							}
+						}
 					})
 				}
 			}
@@ -155,15 +163,15 @@ export const signin = async (req: Request, res: Response, next: NextFunction) =>
 
 	res.cookie('accessToken', result.accessToken, {
 		httpOnly: true,
-		secure: true,
-		sameSite: 'none',
+		sameSite: 'lax',
+		path: '/',
 		maxAge: ms('14 days')
 	})
 
 	res.cookie('refreshToken', result.refreshToken, {
 		httpOnly: true,
-		secure: true,
-		sameSite: 'none',
+		sameSite: 'lax',
+		path: '/',
 		maxAge: ms('14 days')
 	})
 
@@ -177,15 +185,15 @@ export const signinGoogle = async (req: Request, res: Response, next: NextFuncti
 
 	res.cookie('accessToken', result.accessToken, {
 		httpOnly: true,
-		secure: true,
-		sameSite: 'none',
+		sameSite: 'lax',
+		path: '/',
 		maxAge: ms('14 days')
 	})
 
 	res.cookie('refreshToken', result.refreshToken, {
 		httpOnly: true,
-		secure: true,
-		sameSite: 'none',
+		sameSite: 'lax',
+		path: '/',
 		maxAge: ms('14 days')
 	})
 
@@ -201,8 +209,8 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
 
 	res.cookie('accessToken', accessToken, {
 		httpOnly: true,
-		secure: true,
-		sameSite: 'none',
+		sameSite: 'lax',
+		path: '/',
 		maxAge: ms('14 days')
 	})
 
@@ -212,7 +220,7 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
 export const logout = async (req: Request, res: Response, next: NextFunction) => {
 	const refreshToken = req.cookies?.refreshToken
 	if (!refreshToken) {
-		throw new UnauthorizedException('Refresh token not founded', ErrorCode.UNAUTHORIED, null, StatusCodes.GONE)
+		throw new UnauthorizedException('Refresh token not founded', ErrorCode.UNAUTHORIED, null, StatusCodes.BAD_REQUEST)
 	}
 	const decoded: DecodedToken = await JwtProvider.verifyToken(
 		refreshToken,
@@ -224,8 +232,13 @@ export const logout = async (req: Request, res: Response, next: NextFunction) =>
 
 	await blacklistRefreshToken(refreshToken, ttlSec, req.user?.id)
 
-	res.clearCookie('accessToken')
-	res.clearCookie('refreshToken')
+	// Xoá biến thể từng set ở PROD dev trước đây
+	res.clearCookie('accessToken', { path: '/', sameSite: 'none', secure: true })
+	res.clearCookie('refreshToken', { path: '/', sameSite: 'none', secure: true })
+
+	// Xoá biến thể hiện tại DEV
+	res.clearCookie('accessToken', { path: '/', sameSite: 'lax', secure: false })
+	res.clearCookie('refreshToken', { path: '/', sameSite: 'lax', secure: false })
 
 	res.status(StatusCodes.OK).json({ message: 'Logout successfully' })
 }

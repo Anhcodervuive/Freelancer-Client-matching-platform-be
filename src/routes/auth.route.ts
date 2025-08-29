@@ -9,7 +9,6 @@ import {
 	signup,
 	verify
 } from '~/controllers/auth.controller'
-import authenticateMiddleware from '~/middlewares/authentication'
 import { googleAuthHandler } from '~/middlewares/google'
 import { errorHandler } from '~/utils/error-handler'
 
@@ -20,7 +19,7 @@ router.put('/verify/:token', errorHandler(verify))
 
 router.post('/signin', errorHandler(signin))
 router.post('/refresh_token', errorHandler(refreshToken))
-router.post('/logout', authenticateMiddleware, errorHandler(logout))
+router.post('/logout', errorHandler(logout))
 router.post('/resend-verify-email/:email', errorHandler(resendVerifyEmail))
 
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }))

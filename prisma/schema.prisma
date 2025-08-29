@@ -60,6 +60,7 @@ model Profile {
   links       Json?    // ví dụ: ["https://github.com/..."]
 
   freelancer Freelancer?
+  client Client?
 
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -136,4 +137,28 @@ model Education {
 
   @@index([freelancerId, startYear])
   @@map("education")
+}
+
+enum CompanySize {
+  JUST_ME        // It's just me
+  TWO_TO_NINE    // 2-9 employees
+  TEN_TO_NINETY  // 10-99 employees
+  HUNDRED_TO_K   // 100-1,000 employees
+  MORE_THAN_K    // More than 1,000 employees
+}
+
+model Client {
+  // Dùng profile_user_id làm PK để đảm bảo 1–1 tuyệt đối với Profile
+  userId String   @id @map("profile_user_id")
+  profile       Profile  @relation( fields: [userId], references: [userId], onDelete: Cascade)
+
+  companyName   String    @map("company_name")
+  websiteUrl    String?   @map("website_url")
+  size          CompanySize @map("size")
+  description   String?   @map("description")
+
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("client")
 }

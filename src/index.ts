@@ -19,6 +19,13 @@ async function START_SERVIER() {
 		console.log('✅ Connected to Mysql!')
 
 		const app = express()
+		app.disable('etag') // bỏ ETag để tránh re-use
+		app.use((req, res, next) => {
+			res.set('Cache-Control', 'no-store') // hoặc 'no-cache, no-store, must-revalidate'
+			res.set('Pragma', 'no-cache')
+			res.set('Expires', '0')
+			next()
+		})
 
 		app.use(express.json())
 		app.use(cookieParser())

@@ -179,7 +179,12 @@ export async function findOrCreateUserFromGoogle(googleProfile: GoogleProfile) {
 					displayName: displayName ?? null,
 					firstName: givenName ?? null,
 					lastName: familyName ?? null,
-					avatar: avatar ?? null
+					avatar: avatar ?? null,
+					freelancer: {
+						create: {
+							title: null
+						}
+					}
 				}
 			}
 		}
