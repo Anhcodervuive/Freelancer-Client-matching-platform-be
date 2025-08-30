@@ -2,8 +2,8 @@ import { Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
-import { AddOneEducationSchema, UpdateOneEducationSchema } from '~/schema/freelancerEducation.schema'
-import freelancerEducationService from '~/services/freelancerEducation.service'
+import { AddOneEducationSchema, UpdateOneEducationSchema } from '~/schema/freelancer.schema'
+import freelancerEducationService from '~/services/freelancer/education.service'
 
 export const getAllEducationOfFreelancer = async (req: Request, res: Response) => {
 	const { userId } = req.params

@@ -1,5 +1,5 @@
 import { prismaClient } from '~/config/prisma-client'
-import { AddOneEducationInput } from '~/schema/freelancerEducation.schema'
+import { AddOneEducationInput } from '~/schema/freelancer.schema'
 
 const getAllByFreelancerId = async (userId: string) => {
 	return prismaClient.education.findMany({

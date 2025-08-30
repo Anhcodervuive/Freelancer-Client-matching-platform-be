@@ -1,8 +1,8 @@
 import { Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
 
-import freelancerLanguageService from '~/services/freelancerLanguage.service'
-import { AddOneSchema } from '~/schema/freelancerLanguage.schema'
+import freelancerLanguageService from '~/services/freelancer/language.service'
+import { AddOneSchema } from '~/schema/freelancer.schema'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'

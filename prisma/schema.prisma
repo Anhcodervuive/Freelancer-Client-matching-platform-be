@@ -54,10 +54,8 @@ model Profile {
   firstName   String?  @map("first_name")
   lastName    String?  @map("last_name")
   avatar      String?  @map("avatar")
-  bio         String?
+
   location    String?
-  
-  links       Json?    // ví dụ: ["https://github.com/..."]
 
   freelancer Freelancer?
   client Client?
@@ -109,7 +107,9 @@ model Freelancer {
   profile      Profile   @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   title        String?   @db.VarChar(255)
-
+  bio         String?   @db.MediumText
+  links       Json?    // ví dụ: ["https://github.com/..."]
+  
   // Quan hệ ngược
   educations   Education[]
   languages    FreelancerLanguage[] // ✅ Thêm dòng này

@@ -4,7 +4,7 @@ import {
 	addOneFreelancerLanguage,
 	getAllFreelancerLanguages,
 	removeOneFreelancerLanguage
-} from '~/controllers/freelancerLanguage.controller'
+} from '~/controllers/freelancer/language.controller'
 import authenticateMiddleware from '~/middlewares/authentication'
 import { errorHandler } from '~/utils/error-handler'
 import {
@@ -12,7 +12,8 @@ import {
 	deleteOneEducation,
 	getAllEducationOfFreelancer,
 	updateOneEducation
-} from '~/controllers/freelancerEducation.controller'
+} from '~/controllers/freelancer/education.controller'
+import { getFreelancerProfile, updateFreelancerProfile } from '~/controllers/freelancer/root.controller'
 
 const router: Router = Router()
 
@@ -27,5 +28,8 @@ router.get('/profile/:userId/education', authenticateMiddleware, errorHandler(ge
 router.post('/profile/:userId/education', authenticateMiddleware, errorHandler(addOneEducation))
 router.put('/profile/:userId/education/:educationId', authenticateMiddleware, errorHandler(updateOneEducation))
 router.delete('/profile/:userId/education/:educationId', authenticateMiddleware, errorHandler(deleteOneEducation))
+
+router.get('/profile/:userId/freelancer', authenticateMiddleware, errorHandler(getFreelancerProfile))
+router.put('/profile/:userId/freelancer', authenticateMiddleware, errorHandler(updateFreelancerProfile))
 
 export default router

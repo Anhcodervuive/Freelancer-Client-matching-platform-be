@@ -1,5 +1,13 @@
 import { z } from 'zod'
 
+export const UpdateFreelancerProfileSchema = z.object({
+	title: z.string().max(255).optional(),
+	bio: z.string().max(5000).optional(),
+	links: z.array(z.string().url()).optional()
+})
+
+export type UpdateFreelanceProfileInput = z.infer<typeof UpdateFreelancerProfileSchema>
+
 export const AddOneEducationSchema = z
 	.object({
 		schoolName: z.string().min(10).max(50),
@@ -47,3 +55,10 @@ export const UpdateOneEducationSchema = z
 	})
 
 export type AddOneEducationInput = z.infer<typeof AddOneEducationSchema>
+
+export const ProficiencyEnum = z.enum(['BASIC', 'CONVERSATIONAL', 'FLUENT', 'NATIVE'])
+
+export const AddOneSchema = z.object({
+	languageCode: z.string().min(1).max(10), // ISO 639-1, ví dụ "en"
+	proficiency: ProficiencyEnum
+})

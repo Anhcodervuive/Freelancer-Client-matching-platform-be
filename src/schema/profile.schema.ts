@@ -5,9 +5,7 @@ export const UpdateProfileSchema = z.object({
 	firstName: z.string().trim().min(1).max(50).optional(),
 	lastName: z.string().trim().min(1).max(50).optional(),
 	avatar: z.string().url().optional(),
-	bio: z.string().trim().max(1000).optional(),
-	location: z.string().trim().max(120).optional(),
-	links: z.array(z.string().url()).max(10).optional()
+	location: z.string().trim().max(120).optional()
 })
 
 export type UpdateProfileInput = z.infer<typeof UpdateProfileSchema>
