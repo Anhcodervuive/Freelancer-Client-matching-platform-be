@@ -162,3 +162,90 @@ model Client {
 
   @@map("client")
 }
+
+enum AssetProvider {
+  CLOUDINARY 
+  S3 
+  GCS 
+  R2 
+  MINIO 
+}
+enum AssetKind {
+  IMAGE 
+  VIDEO 
+  FILE 
+}
+enum AssetVisibility { 
+  PUBLIC 
+  PRIVATE 
+  AUTHENTICATED 
+}
+enum AssetStatus { 
+  PENDING 
+  READY 
+  INFECTED 
+  DELETED 
+}
+
+model Asset {
+  id         String          @id @default(cuid())
+  provider   AssetProvider?
+  kind       AssetKind
+  publicId   String?         @unique @map("public_id")   // Cloudinary…
+  bucket     String?                                      // S3/R2
+  storageKey String?         @unique                      // object key (path) trên S3/R2
+  url        String?                                       // có thể không lưu nếu build từ provider
+  mimeType   String?
+  bytes      Int?
+  width      Int?
+  height     Int?
+  checksum   String?          @map("checksum_sha256")     // để dedupe/toàn vẹn
+  visibility AssetVisibility  @default(PUBLIC)
+  status     AssetStatus      @default(PENDING)
+  createdBy  String?                                          // userId tạo
+  meta       Json?            // {originalName, pageCount, duration, exif, ...}
+  parentId   String?          // biến thể/thumbnail/source
+  parent     Asset?           @relation("AssetVariants", fields: [parentId], references: [id])
+  variants   Asset[]          @relation("AssetVariants")
+  createdAt  DateTime         @default(now())
+
+  links      AssetLink[]
+
+  @@index([provider, bucket, storageKey])
+  @@index([status])
+  @@map("asset")
+}
+
+enum AssetRole { 
+  AVATAR
+  COVER 
+  GALLERY 
+  ATTACHMENT 
+  BANNER 
+  OTHER
+}
+
+enum AssetOwnerType {
+  USER
+  JOB
+  MESSAGE
+}
+
+model AssetLink {
+  id         String    @id @default(cuid())
+  ownerType  AssetOwnerType    // 'USER' | 'FREELANCER' | 'JOB' | 'MESSAGE' | ...
+  ownerId    String
+  role       AssetRole
+  position   Int       @default(0)          // 0 cho single; >0 cho gallery
+  label      String?                         // tên hiển thị
+  caption    String?                         // mô tả
+  isPrimary  Boolean   @default(false)
+  createdBy  String?                         // người gán
+  assetId    String
+  asset      Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+
+  @@index([ownerType, ownerId, role])
+  @@unique([ownerType, ownerId, role, position])
+  @@map("asset_link")
+}

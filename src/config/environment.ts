@@ -32,3 +32,13 @@ export const GOOGLE = {
 	CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
 	CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL
 }
+
+export const CLOUDINARY_CONFIG_INFO = {
+	CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
+	API_KEY: process.env.CLOUDINARY_API_KEY,
+	API_SECRET: process.env.CLOUDINARY_API_SECRET,
+
+	BASE_FOLDER: 'lvtn',
+
+	PROFILE_FOLDER: 'user'
+}

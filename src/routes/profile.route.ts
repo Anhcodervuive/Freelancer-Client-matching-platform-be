@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getMyProfile, updateMyProfile } from '~/controllers/profile.controller'
+import { getMyProfile, updateMyProfile, uploadAvatar } from '~/controllers/profile.controller'
 import {
 	addOneFreelancerLanguage,
 	getAllFreelancerLanguages,
@@ -14,11 +14,13 @@ import {
 	updateOneEducation
 } from '~/controllers/freelancer/education.controller'
 import { getFreelancerProfile, updateFreelancerProfile } from '~/controllers/freelancer/root.controller'
+import { uploadImages } from '~/middlewares/multer'
 
 const router: Router = Router()
 
 router.get('/profile', authenticateMiddleware, errorHandler(getMyProfile))
 router.put('/profile', authenticateMiddleware, errorHandler(updateMyProfile))
+router.put('/profile/upload-avatar', authenticateMiddleware, uploadImages.single('avatar'), errorHandler(uploadAvatar))
 
 router.get('/profile/:userId/language', authenticateMiddleware, errorHandler(getAllFreelancerLanguages))
 router.put('/profile/:userId/language', authenticateMiddleware, errorHandler(addOneFreelancerLanguage))

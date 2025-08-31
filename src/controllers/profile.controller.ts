@@ -1,11 +1,13 @@
-import { NextFunction, Request, Response } from 'express'
+import { Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
+import { UnprocessableEntityException } from '~/exceptions/validation'
 import { UpdateProfileSchema } from '~/schema/profile.schema'
 import profileService from '~/services/profile.service'
+import assetService from '~/services/asset.service'
 
-export const getMyProfile = async (req: Request, res: Response, next: NextFunction) => {
+export const getMyProfile = async (req: Request, res: Response) => {
 	const userId = req.user?.id
 	if (!userId) throw new BadRequestException('Unauthorized', ErrorCode.UNAUTHORIED)
 
@@ -13,7 +15,7 @@ export const getMyProfile = async (req: Request, res: Response, next: NextFuncti
 	return res.status(StatusCodes.OK).json(profile)
 }
 
-export const updateMyProfile = async (req: Request, res: Response, next: NextFunction) => {
+export const updateMyProfile = async (req: Request, res: Response) => {
 	const userId = req.user?.id
 	if (!userId) throw new BadRequestException('Unauthorized', ErrorCode.UNAUTHORIED)
 
@@ -21,4 +23,21 @@ export const updateMyProfile = async (req: Request, res: Response, next: NextFun
 
 	const profile = await profileService.updateMyProfile(userId, parsed)
 	return res.status(StatusCodes.OK).json(profile)
+}
+
+export const uploadAvatar = async (req: Request, res: Response) => {
+	const userId = req.user?.id
+	if (!userId) throw new BadRequestException('Unauthorized', ErrorCode.UNAUTHORIED)
+
+	const file = req.file
+	if (!file) {
+		throw new UnprocessableEntityException('No file provided', ErrorCode.UNPROCESSABLE_ENTITY)
+	}
+
+	const asset = await assetService.replaceProfileAvatar(userId, file)
+
+	return res.status(StatusCodes.OK).json({
+		message: 'Upload avatar successfully!',
+		avatarUrl: asset.url
+	})
 }

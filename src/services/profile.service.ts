@@ -20,7 +20,10 @@ const updateMyProfile = async (userId: string, input: any) => {
 	})
 }
 
+const replaceProfileAvatar = (userId: string, input: any) => {}
+
 export default {
 	getOrCreateMyProfile,
-	updateMyProfile
+	updateMyProfile,
+	replaceProfileAvatar
 }

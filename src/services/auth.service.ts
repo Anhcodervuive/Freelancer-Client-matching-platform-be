@@ -10,6 +10,7 @@ import { User } from '~/generated/prisma'
 import { JwtProvider } from '~/providers/jwt.provider'
 import { emailQueue } from '~/queues/email.queue'
 import { UserInfoToEnCode } from '~/types'
+import assetService from './asset.service'
 
 /** Chuẩn hoá dữ liệu trả về cho FE, giữ tương thích cũ */
 const toPublicUser = (u: User & { profile?: any }) => {
@@ -58,7 +59,11 @@ const signin = async (reqBody: { email: string; password: string }) => {
 		JWT_CONFIG_INFO.REFRESH_TOKEN_LIFE
 	)
 
+	const avatarUrl = await assetService.getProfileAvatarUrl(existedUser.id)
+
 	const publicUser = toPublicUser(existedUser)
+
+	publicUser.avatar = avatarUrl
 
 	return {
 		accessToken,
@@ -100,7 +105,11 @@ const signinGoogle = async (user: User) => {
 		include: { profile: true }
 	})
 
+	const avatarUrl = await assetService.getProfileAvatarUrl(user.id)
+
 	const publicUser = toPublicUser(fresh as any)
+
+	publicUser.avatar = avatarUrl
 
 	return {
 		accessToken,
@@ -179,13 +188,30 @@ export async function findOrCreateUserFromGoogle(googleProfile: GoogleProfile) {
 					displayName: displayName ?? null,
 					firstName: givenName ?? null,
 					lastName: familyName ?? null,
-					avatar: avatar ?? null,
 					freelancer: {
 						create: {
 							title: null
 						}
 					}
 				}
+			}
+		}
+	})
+
+	// Lấy URL image của gg để tạo asset
+	const newAsset = await prismaClient.asset.create({
+		data: {
+			url: avatar ?? null,
+			kind: 'IMAGE'
+		}
+	})
+	await prismaClient.assetLink.create({
+		data: {
+			ownerType: 'USER',
+			ownerId: user.id,
+			role: 'AVATAR',
+			asset: {
+				connect: { id: newAsset.id }
 			}
 		}
 	})
