@@ -136,7 +136,7 @@ const sendVerifyEmail = async (user: User) => {
 
 	// lấy tên từ profile (fallback sang email nếu rỗng)
 	const profile = await prismaClient.profile.findUnique({ where: { userId: user.id } })
-	const name = profile?.displayName || [profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || user.email
+	const name = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || user.email
 
 	await emailQueue.add('sendVerifyEmail', {
 		to: user.email,
@@ -151,7 +151,6 @@ export async function findOrCreateUserFromGoogle(googleProfile: GoogleProfile) {
 	// Lấy info từ profile Google
 	const googleId = googleProfile.id
 	const email = googleProfile.emails?.[0]?.value ?? ''
-	const displayName = googleProfile.displayName ?? ''
 	const avatar = googleProfile.photos?.[0]?.value ?? ''
 	const givenName = (googleProfile as any).name?.givenName as string | undefined
 	const familyName = (googleProfile as any).name?.familyName as string | undefined
@@ -186,7 +185,6 @@ export async function findOrCreateUserFromGoogle(googleProfile: GoogleProfile) {
 			emailVerifiedAt: new Date(), // Google coi như đã verified
 			profile: {
 				create: {
-					displayName: displayName ?? null,
 					firstName: givenName ?? null,
 					lastName: familyName ?? null,
 					freelancer: {

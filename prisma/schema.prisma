@@ -50,12 +50,14 @@ model Profile {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Trường hồ sơ
-  displayName String?  @map("display_name")
   firstName   String?  @map("first_name")
   lastName    String?  @map("last_name")
-  avatar      String?  @map("avatar")
+  phoneNumber String?  @map("phone_number")
 
-  location    String?
+  country String? 
+  city String?
+  district String?
+  address String?
 
   freelancer Freelancer?
   client Client?

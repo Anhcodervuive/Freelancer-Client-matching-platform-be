@@ -18,16 +18,13 @@ const toPublicUser = (u: any) => {
 	const firstName = u?.profile?.firstName ?? null
 	const lastName = u?.profile?.lastName ?? null
 	const avatar = u?.profile?.avatar ?? null
-	const displayName =
-		u?.profile?.displayName ?? ([u?.profile?.firstName, u?.profile?.lastName].filter(Boolean).join(' ') || null)
 
 	const { password: _pw, ...rest } = u || {}
 	return {
 		...rest,
 		firstName,
 		lastName,
-		avatar,
-		displayName
+		avatar
 	}
 }
 
@@ -39,7 +36,6 @@ const pickForQuery = (publicUser: any) => {
 		firstName: publicUser.firstName ?? '',
 		lastName: publicUser.lastName ?? '',
 		role: publicUser.role ?? '',
-		displayName: publicUser.displayName ?? '',
 		avatar: publicUser.avatar ?? '',
 		googleId: publicUser.googleId ?? ''
 	}
@@ -64,7 +60,6 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
 				create: {
 					firstName: firstName || null,
 					lastName: lastName || null,
-					displayName: firstName || lastName ? `${firstName ?? ''} ${lastName ?? ''}`.trim() : null,
 					// Nếu là freelancer thì tạo luôn freelancer record
 					...(role === 'FREELANCER' && {
 						freelancer: {

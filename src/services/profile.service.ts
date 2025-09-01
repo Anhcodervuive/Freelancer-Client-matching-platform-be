@@ -7,12 +7,6 @@ const getOrCreateMyProfile = async (userId: string) => {
 }
 
 const updateMyProfile = async (userId: string, input: any) => {
-	// Nếu không gửi displayName, auto từ firstName + lastName (nếu có)
-	let displayName = input.displayName
-	if (!displayName && (input.firstName || input.lastName)) {
-		displayName = `${input.firstName ?? ''} ${input.lastName ?? ''}`.trim() || undefined
-	}
-
 	await prismaClient.profile.upsert({
 		where: { userId },
 		create: { userId, ...input },
