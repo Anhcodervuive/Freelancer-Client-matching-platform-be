@@ -18,6 +18,7 @@ const toPublicUser = (u: User & { profile?: any }) => {
 	return {
 		id: u.id,
 		email: u.email,
+		role: u.role,
 		...profile
 	}
 }

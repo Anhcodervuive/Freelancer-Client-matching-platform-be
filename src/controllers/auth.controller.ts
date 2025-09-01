@@ -38,12 +38,9 @@ const pickForQuery = (publicUser: any) => {
 		email: publicUser.email ?? '',
 		firstName: publicUser.firstName ?? '',
 		lastName: publicUser.lastName ?? '',
+		role: publicUser.role ?? '',
 		displayName: publicUser.displayName ?? '',
 		avatar: publicUser.avatar ?? '',
-		emailVerifiedAt: publicUser.emailVerifiedAt ? new Date(publicUser.emailVerifiedAt).toISOString() : '',
-		createdAt: publicUser.createdAt ? new Date(publicUser.createdAt).toISOString() : '',
-		updatedAt: publicUser.updatedAt ? new Date(publicUser.updatedAt).toISOString() : '',
-		isActive: String(publicUser.isActive ?? ''),
 		googleId: publicUser.googleId ?? ''
 	}
 }
@@ -199,6 +196,7 @@ export const signinGoogle = async (req: Request, res: Response, next: NextFuncti
 
 	// Chỉ đẩy các field primitive cần thiết lên query string
 	const qsObject = pickForQuery(result.publicUser)
+	console.log(qsObject)
 	const queryString = new URLSearchParams(Object.entries(qsObject).map(([k, v]) => [k, v ?? ''])).toString()
 
 	res.redirect(`${CLIENT.URL}/signin?${queryString}`)
