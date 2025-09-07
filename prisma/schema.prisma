@@ -1,253 +1,492 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+  // This is your Prisma schema file,
+  // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+  // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+  // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
-generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
-}
+  generator client {
+    provider = "prisma-client-js"
+    output   = "../src/generated/prisma"
+  }
 
-datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
-}
+  datasource db {
+    provider = "mysql"
+    url      = env("DATABASE_URL")
+  }
 
-enum Role {
-  CLIENT
-  FREELANCER
-  ADMIN
-}
+  enum Role {
+    CLIENT
+    FREELANCER
+    ADMIN
+  }
 
-model User {
-  id              String    @id @default(uuid())
-  email           String    @unique
-  googleId        String?   @unique @map("google_id")
+  model User {
+    id              String    @id @default(uuid())
+    email           String    @unique
+    googleId        String?   @unique @map("google_id")
 
-  // ĐÃ LOẠI BỎ: first_name, last_name, avatar -> chuyển sang Profile
+    // ĐÃ LOẠI BỎ: first_name, last_name, avatar -> chuyển sang Profile
 
-  password        String?
-  emailVerifiedAt DateTime? @map("email_verified_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  deletedAt       DateTime? @map("deleted_at")
-  isActive        Boolean   @default(true) @map("is_active")
+    password        String?
+    emailVerifiedAt DateTime? @map("email_verified_at")
+    createdAt       DateTime  @default(now()) @map("created_at")
+    updatedAt       DateTime  @updatedAt @map("updated_at")
+    deletedAt       DateTime? @map("deleted_at")
+    isActive        Boolean   @default(true) @map("is_active")
 
-  role Role
+    role Role
 
-  // 1-1
-  profile         Profile?
+    // 1-1
+    profile         Profile?
 
-  emailVerifyTokens EmailVerifyToken[]
+    emailVerifyTokens EmailVerifyToken[]
 
-  @@map("user")
-}
+    @@map("user")
+  }
 
-model Profile {
-  // 1-1 với User
-  userId      String   @id @map("user_id")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  model Profile {
+    // 1-1 với User
+    userId      String   @id @map("user_id")
+    user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Trường hồ sơ
-  firstName   String?  @map("first_name")
-  lastName    String?  @map("last_name")
-  phoneNumber String?  @map("phone_number")
+    // Trường hồ sơ
+    firstName   String?  @map("first_name")
+    lastName    String?  @map("last_name")
+    phoneNumber String?  @map("phone_number")
 
-  country String? 
-  city String?
-  district String?
-  address String?
+    country String? 
+    city String?
+    district String?
+    address String?
+    stripeCustomerId  String?  @unique @map("stripe_customer_id")
 
-  freelancer Freelancer?
-  client Client?
+    freelancer Freelancer?
+    client Client?
+    paymentMethodRef PaymentMethodRef[]
 
+    createdAt   DateTime @default(now()) @map("created_at")
+    updatedAt   DateTime @updatedAt @map("updated_at")
+
+    @@map("profile")
+  }
+
+  model EmailVerifyToken {
+    id        Int      @id @default(autoincrement())
+    userId    String
+    token     String   @unique
+    expiresAt DateTime
+    createdAt DateTime @default(now())
+
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@map("email_verify_token")
+  }
+
+  enum LanguageProficiency {
+    BASIC            // biết cơ bản
+    CONVERSATIONAL   // giao tiếp
+    FLUENT           // lưu loát
+    NATIVE           // bản ngữ
+  }
+
+  model FreelancerLanguage {
+    // KHÓA TỔNG HỢP: freelancerId + languageCode
+    freelancerId String   @map("freelancer_id")
+    languageCode String   @db.VarChar(10)
+    proficiency  LanguageProficiency
+
+    freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+    createdAt    DateTime @default(now()) @map("created_at")
+    updatedAt    DateTime @updatedAt      @map("updated_at")
+
+    @@id([freelancerId, languageCode])
+    @@index([languageCode], name: "idx_language_code")
+    @@map("freelancer_language")
+  }
+
+
+  model Freelancer {
+    userId       String    @id @map("user_id")
+    profile      Profile   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+    title        String?   @db.VarChar(255)
+    bio         String?   @db.MediumText
+    links       Json?    // ví dụ: ["https://github.com/..."]
+    
+    // Quan hệ ngược
+    educations   Education[]
+    languages    FreelancerLanguage[] // ✅ Thêm dòng này
+    contracts Contract[]
+
+    createdAt    DateTime  @default(now()) @map("created_at")
+    updatedAt    DateTime  @updatedAt      @map("updated_at")
+
+    @@map("freelancer")
+  }
+
+  model Education {
+    id           String   @id @default(cuid())
+
+    freelancerId String   @map("freelancer_id")
+    freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+    schoolName   String   @db.VarChar(255) @map("school_name")
+    degreeTitle  String   @db.VarChar(255) @map("degree_title")
+    fieldOfStudy String?  @db.VarChar(255) @map("field_of_study")
+    startYear    Int?     @map("start_year")
+    endYear      Int?     @map("end_year")
+
+    createdAt    DateTime @default(now()) @map("created_at")
+    updatedAt    DateTime @updatedAt      @map("updated_at")
+
+    @@index([freelancerId, startYear])
+    @@map("education")
+  }
+
+  enum CompanySize {
+    JUST_ME        // It's just me
+    TWO_TO_NINE    // 2-9 employees
+    TEN_TO_NINETY  // 10-99 employees
+    HUNDRED_TO_K   // 100-1,000 employees
+    MORE_THAN_K    // More than 1,000 employees
+  }
+
+  model Client {
+    // Dùng profile_user_id làm PK để đảm bảo 1–1 tuyệt đối với Profile
+    userId String   @id @map("profile_user_id")
+    profile       Profile  @relation( fields: [userId], references: [userId], onDelete: Cascade)
+
+    companyName   String    @map("company_name")
+    websiteUrl    String?   @map("website_url")
+    size          CompanySize @map("size")
+    description   String?   @map("description")
+    
+    contracts Contract[]
+
+    createdAt     DateTime  @default(now()) @map("created_at")
+    updatedAt     DateTime  @updatedAt @map("updated_at")
+
+    @@map("client")
+  }
+
+  enum AssetProvider {
+    CLOUDINARY 
+    S3 
+    GCS 
+    R2 
+    MINIO 
+  }
+  enum AssetKind {
+    IMAGE 
+    VIDEO 
+    FILE 
+  }
+  enum AssetVisibility { 
+    PUBLIC 
+    PRIVATE 
+    AUTHENTICATED 
+  }
+  enum AssetStatus { 
+    PENDING 
+    READY 
+    INFECTED 
+    DELETED 
+  }
+
+  model Asset {
+    id         String          @id @default(cuid())
+    provider   AssetProvider?
+    kind       AssetKind
+    publicId   String?         @unique @map("public_id")   // Cloudinary…
+    bucket     String?                                      // S3/R2
+    storageKey String?         @unique                      // object key (path) trên S3/R2
+    url        String?                                       // có thể không lưu nếu build từ provider
+    mimeType   String?
+    bytes      Int?
+    width      Int?
+    height     Int?
+    checksum   String?          @map("checksum_sha256")     // để dedupe/toàn vẹn
+    visibility AssetVisibility  @default(PUBLIC)
+    status     AssetStatus      @default(PENDING)
+    createdBy  String?                                          // userId tạo
+    meta       Json?            // {originalName, pageCount, duration, exif, ...}
+    parentId   String?          // biến thể/thumbnail/source
+    parent     Asset?           @relation("AssetVariants", fields: [parentId], references: [id])
+    variants   Asset[]          @relation("AssetVariants")
+    createdAt  DateTime         @default(now())
+
+    links      AssetLink[]
+
+    @@index([provider, bucket, storageKey])
+    @@index([status])
+    @@map("asset")
+  }
+
+  enum AssetRole { 
+    AVATAR
+    COVER 
+    GALLERY 
+    ATTACHMENT 
+    BANNER 
+    OTHER
+  }
+
+  enum AssetOwnerType {
+    USER
+    JOB
+    MESSAGE
+  }
+
+  model AssetLink {
+    id         String    @id @default(cuid())
+    ownerType  AssetOwnerType    // 'USER' | 'FREELANCER' | 'JOB' | 'MESSAGE' | ...
+    ownerId    String
+    role       AssetRole
+    position   Int       @default(0)          // 0 cho single; >0 cho gallery
+    label      String?                         // tên hiển thị
+    caption    String?                         // mô tả
+    isPrimary  Boolean   @default(false)
+    createdBy  String?                         // người gán
+    assetId    String
+    asset      Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+    createdAt  DateTime  @default(now())
+
+    @@index([ownerType, ownerId, role])
+    @@unique([ownerType, ownerId, role, position])
+    @@map("asset_link")
+  }
+
+  // ---------- Enums ----------
+  enum MilestoneStatus { 
+    OPEN 
+    SUBMITTED 
+    APPROVED 
+    RELEASED 
+    CANCELED 
+  }
+
+  enum EscrowStatus { 
+    UNFUNDED 
+    FUNDED 
+    PARTIALLY_RELEASED 
+    RELEASED
+    PARTIALLY_REFUNDED
+    REFUNDED
+    DISPUTED // bật nếu có khiếu nại
+  }
+
+  enum PaymentStatus { 
+    REQUIRES_PAYMENT 
+    SUCCEEDED_REFUNDED 
+    FAILED 
+  }
+  enum TransferStatus { 
+    PENDING_SUCCEEDED 
+    FAILED_REVERSED 
+  }
+  enum RefundStatus { 
+    PENDING_SUCCEEDED 
+    FAILED 
+  }
+  enum AccountType { 
+    INDIVIDUAL 
+    COMPANY 
+  }
+
+  // Chỉ dùng fixed-price → mỗi contract có nhiều milestone
+  model Contract {
+    id           String   @id @default(cuid())
+    clientId     String    @map("client_id")
+    freelancerId String    @map("freelancer_id")
+    title        String
+    currency     String   // "usd", ...
+    createdAt    DateTime @default(now()) @map("created_at")
+    updatedAt    DateTime @updatedAt  @map("updated_at")
+
+    client       Client     @relation(fields: [clientId], references: [userId])
+    freelancer   Freelancer     @relation(fields: [freelancerId], references: [userId])
+    milestones   Milestone[]
+  }
+
+  model Milestone {
+    id          String         @id @default(cuid())
+    contractId  String         @map("contract_id")
+    title       String
+    amount      Decimal        @db.Decimal(12,2)
+    currency    String
+    status      MilestoneStatus @default(OPEN)
+    escrowId    String         @map("escrow_id")
+    updatedAt   DateTime       @updatedAt @map("updated_at")
+
+    contract    Contract       @relation(fields: [contractId], references: [id])
+    escrow      Escrow?        @relation(fields: [escrowId], references: [id])
+
+    @@unique([escrowId])
+  }
+
+  // ---------- Payments / Escrow ----------
+  model Escrow {
+    id               String   @id @default(cuid())
+    currency         String
+    amountFunded     Decimal  @db.Decimal(12,2) @default(0) @map("amount_funded")
+    amountReleased   Decimal  @db.Decimal(12,2) @default(0) @map("amount_released")
+    amountRefunded   Decimal  @db.Decimal(12,2) @default(0) @map("amount_refunded")
+    status           EscrowStatus @default(UNFUNDED)
+
+     // Phí & thuế (lũy kế)
+    platformFeeTotal   Decimal @db.Decimal(12,2) @default(0) @map("flatform_fee_total") // tổng platform fee trên milestone
+    processingFeeTotal Decimal @db.Decimal(12,2) @default(0) @map("processing_fee_total")// tổng phí Stripe thực chi
+    taxWithholdingTotal Decimal @db.Decimal(12,2) @default(0) @map("tax_with_holding_total")// nếu có khấu trừ thuế
+
+    createdAt        DateTime @default(now()) @map("created_at")
+    updatedAt        DateTime @updatedAt  @map("updated_at")
+
+    milestone        Milestone?
+    dispute          Dispute?
+    payments         Payment[]
+
+
+    transfers        Transfer[]
+    refunds          Refund[]
+  }
+
+  model Payment {
+    id               String   @id @default(cuid())
+    escrowId         String?  @map("escrow_id")
+    amount           Decimal  @db.Decimal(12,2)
+    currency         String
+    status           PaymentStatus
+    // Stripe refs
+    paymentIntentId  String   @unique @map("payment_intent_id")  // pi_xxx
+    chargeId         String?  @map("charge_id")        // ch_xxx (set qua webhook)
+    // Idempotency
+    idemKey          String?  @unique @map("idem_key")
+    createdAt        DateTime @default(now()) @map("created_at")
+    updatedAt        DateTime @updatedAt  @map("updated_at")
+
+    escrow           Escrow?   @relation(fields: [escrowId], references: [id])
+    refund           Refund?
+    @@index([escrowId])
+  }
+
+  model Transfer {
+    id                    String   @id @default(cuid())
+    escrowId              String   @map("escrow_id")
+    amount                Decimal  @db.Decimal(12,2)
+    currency              String
+    status                TransferStatus
+    // Stripe refs
+    transferId            String?  @unique @map("tranfer_id")  // tr_xxx
+    destinationAccountId  String   @map("destination_account_id")         // acct_xxx (freelancer)
+    // Idempotency
+    idemKey               String?  @unique  @map("idem_key")
+    createdAt             DateTime @default(now()) @map("created_at")
+    updatedAt             DateTime @updatedAt @map("updated_at")
+
+    escrow                Escrow   @relation(fields: [escrowId], references: [id])
+
+    @@index([escrowId])
+  }
+
+  model Refund {
+    id              String   @id @default(cuid())
+    escrowId        String   @map("escrow_id")
+    paymentId       String   @map("payment_id")
+    amount          Decimal  @db.Decimal(12,2)
+    currency        String
+    status          RefundStatus
+    // Stripe refs
+    stripeRefundId  String?  @unique @map("stripe_refund_id")// re_xxx
+    // Idempotency
+    idemKey         String?  @unique @map("idem_key")
+    createdAt       DateTime @default(now()) @map("created_at")
+    updatedAt       DateTime @updatedAt @map("updated_at")
+
+    escrow          Escrow   @relation(fields: [escrowId], references: [id])
+    payment         Payment?  @relation(fields: [paymentId], references: [id])
+    @@index([escrowId])
+    @@index([paymentId])
+    @@unique([paymentId])
+  }
+
+  enum DisputeStatus {
+    OPEN            // vừa mở
+    NEGOTIATION     // (tùy dùng hay không) đang thương lượng
+    AWAITING_ARBITRATION_FEES
+    ARBITRATION     // đã thu phí, chờ quyết
+    RESOLVED_RELEASE_ALL
+    RESOLVED_REFUND_ALL
+    RESOLVED_SPLIT
+    CANCELED        // rút dispute/không hợp lệ
+    EXPIRED         // quá hạn không phản hồi
+  }
+
+  model Dispute {
+  id            String   @id @default(cuid())
+  escrowId      String   @unique
+  openedById    String
+  status        DisputeStatus @default(OPEN)
+
+  // đề xuất cuối cùng (để 2 bên nhìn & đồng ý)
+  proposedRelease Decimal @db.Decimal(12,2) @default(0) @map("proposed_release")  // trả freelancer
+  proposedRefund  Decimal @db.Decimal(12,2) @default(0) @map("proposed_refund")  // trả client
+
+  // phí trọng tài (demo: flat $20 mỗi bên)
+  arbFeePerParty Decimal @db.Decimal(12,2) @default(20) @map("arb_fee_per_party")
+  clientArbFeePaid     Boolean @default(false) @map("client_arb_fee_paid")
+  freelancerArbFeePaid Boolean @default(false) @map("freelancer_arb_fee_paid")
+
+  // hạn phản hồi/đóng phí
+  responseDeadline DateTime?  @map("response_deadline")
+  arbitrationDeadline DateTime? @map("arbitration_deadline")
+
+  // kết quả chốt (nếu RESOLVED_*)
+  decidedRelease Decimal @db.Decimal(12,2) @default(0) @map("decided_release")
+  decidedRefund  Decimal @db.Decimal(12,2) @default(0) @map("decided_refund")
+  decidedById    String? @map("decided_by_id")
+
+  note        String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  @@map("profile")
+  escrow      Escrow   @relation(fields: [escrowId], references: [id])
 }
 
-model EmailVerifyToken {
-  id        Int      @id @default(autoincrement())
-  userId    String
-  token     String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  // ---------- Cards / Methods (cache nhẹ cho UI) ----------
+  model PaymentMethodRef {
+    id               String   @id @default(cuid())
+    profileId        String   @map("profile_id")
+    stripeCustomerId String   @map("stripe_customer_id")// cus_xxx
+    paymentMethodId  String   @map("payment_method_id")// pm_xxx
+    firstName        String   @map("first_name")
+    lastName         String   @map("last_name")
+    brand            String?
+    last4            String?
+    expMonth         Int?     @map("exp_month")
+    expYear          Int?     @map("exp_year")
+    isDefault        Boolean  @default(false) @map("is_default")
+    createdAt        DateTime @default(now()) @map("created_at")
+    updatedAt        DateTime @updatedAt  @map("updated_at")
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    // Billing address
+    billingCountry   String? @map("billing_country")
+    billingCity      String? @map("billing_city")
+    billingLine1     String? @map("billing_line1")
+    billingLine2     String? @map("billing_line2")
+    billingPostal    String? @map("billing_postal")
 
-  @@map("email_verify_token")
-}
+    profile             Profile     @relation(fields: [profileId], references: [userId])
+    @@index([profileId])
+    @@unique([stripeCustomerId, paymentMethodId])
+  }
 
-enum LanguageProficiency {
-  BASIC            // biết cơ bản
-  CONVERSATIONAL   // giao tiếp
-  FLUENT           // lưu loát
-  NATIVE           // bản ngữ
-}
-
-model FreelancerLanguage {
-  // KHÓA TỔNG HỢP: freelancerId + languageCode
-  freelancerId String   @map("freelancer_id")
-  languageCode String   @db.VarChar(10)
-  proficiency  LanguageProficiency
-
-  freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
-
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt      @map("updated_at")
-
-  @@id([freelancerId, languageCode])
-  @@index([languageCode], name: "idx_language_code")
-  @@map("freelancer_language")
-}
-
-
-model Freelancer {
-  userId       String    @id @map("user_id")
-  profile      Profile   @relation(fields: [userId], references: [userId], onDelete: Cascade)
-
-  title        String?   @db.VarChar(255)
-  bio         String?   @db.MediumText
-  links       Json?    // ví dụ: ["https://github.com/..."]
-  
-  // Quan hệ ngược
-  educations   Education[]
-  languages    FreelancerLanguage[] // ✅ Thêm dòng này
-
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt      @map("updated_at")
-
-  @@map("freelancer")
-}
-
-model Education {
-  id           String   @id @default(cuid())
-
-  freelancerId String   @map("freelancer_id")
-  freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
-
-  schoolName   String   @db.VarChar(255) @map("school_name")
-  degreeTitle  String   @db.VarChar(255) @map("degree_title")
-  fieldOfStudy String?  @db.VarChar(255) @map("field_of_study")
-  startYear    Int?     @map("start_year")
-  endYear      Int?     @map("end_year")
-
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt      @map("updated_at")
-
-  @@index([freelancerId, startYear])
-  @@map("education")
-}
-
-enum CompanySize {
-  JUST_ME        // It's just me
-  TWO_TO_NINE    // 2-9 employees
-  TEN_TO_NINETY  // 10-99 employees
-  HUNDRED_TO_K   // 100-1,000 employees
-  MORE_THAN_K    // More than 1,000 employees
-}
-
-model Client {
-  // Dùng profile_user_id làm PK để đảm bảo 1–1 tuyệt đối với Profile
-  userId String   @id @map("profile_user_id")
-  profile       Profile  @relation( fields: [userId], references: [userId], onDelete: Cascade)
-
-  companyName   String    @map("company_name")
-  websiteUrl    String?   @map("website_url")
-  size          CompanySize @map("size")
-  description   String?   @map("description")
-
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-
-  @@map("client")
-}
-
-enum AssetProvider {
-  CLOUDINARY 
-  S3 
-  GCS 
-  R2 
-  MINIO 
-}
-enum AssetKind {
-  IMAGE 
-  VIDEO 
-  FILE 
-}
-enum AssetVisibility { 
-  PUBLIC 
-  PRIVATE 
-  AUTHENTICATED 
-}
-enum AssetStatus { 
-  PENDING 
-  READY 
-  INFECTED 
-  DELETED 
-}
-
-model Asset {
-  id         String          @id @default(cuid())
-  provider   AssetProvider?
-  kind       AssetKind
-  publicId   String?         @unique @map("public_id")   // Cloudinary…
-  bucket     String?                                      // S3/R2
-  storageKey String?         @unique                      // object key (path) trên S3/R2
-  url        String?                                       // có thể không lưu nếu build từ provider
-  mimeType   String?
-  bytes      Int?
-  width      Int?
-  height     Int?
-  checksum   String?          @map("checksum_sha256")     // để dedupe/toàn vẹn
-  visibility AssetVisibility  @default(PUBLIC)
-  status     AssetStatus      @default(PENDING)
-  createdBy  String?                                          // userId tạo
-  meta       Json?            // {originalName, pageCount, duration, exif, ...}
-  parentId   String?          // biến thể/thumbnail/source
-  parent     Asset?           @relation("AssetVariants", fields: [parentId], references: [id])
-  variants   Asset[]          @relation("AssetVariants")
-  createdAt  DateTime         @default(now())
-
-  links      AssetLink[]
-
-  @@index([provider, bucket, storageKey])
-  @@index([status])
-  @@map("asset")
-}
-
-enum AssetRole { 
-  AVATAR
-  COVER 
-  GALLERY 
-  ATTACHMENT 
-  BANNER 
-  OTHER
-}
-
-enum AssetOwnerType {
-  USER
-  JOB
-  MESSAGE
-}
-
-model AssetLink {
-  id         String    @id @default(cuid())
-  ownerType  AssetOwnerType    // 'USER' | 'FREELANCER' | 'JOB' | 'MESSAGE' | ...
-  ownerId    String
-  role       AssetRole
-  position   Int       @default(0)          // 0 cho single; >0 cho gallery
-  label      String?                         // tên hiển thị
-  caption    String?                         // mô tả
-  isPrimary  Boolean   @default(false)
-  createdBy  String?                         // người gán
-  assetId    String
-  asset      Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  createdAt  DateTime  @default(now())
-
-  @@index([ownerType, ownerId, role])
-  @@unique([ownerType, ownerId, role, position])
-  @@map("asset_link")
-}
+  // ---------- Ops / Webhooks ----------
+  model WebhookEventLog {
+    id         String   @id @default(cuid())
+    eventId    String   @unique @map("event_id")  // evt_xxx
+    type       String   
+    raw        Json
+    processed  Boolean  @default(false) 
+    createdAt  DateTime @default(now()) @map("created_at")
+  }

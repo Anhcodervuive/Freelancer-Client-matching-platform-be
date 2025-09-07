@@ -28,6 +28,9 @@ export enum ErrorCode {
 	// Google Authentication
 	EMAIL_EXISTS = 1030,
 
+	// Payment
+	PAYMENT_METHOD_NOT_FOUNT = 1050,
+
 	// Req data
 	UNPROCESSABLE_ENTITY = 2001,
 	PARAM_QUERY_ERROR = 2002,

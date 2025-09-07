@@ -42,3 +42,7 @@ export const CLOUDINARY_CONFIG_INFO = {
 
 	PROFILE_FOLDER: 'user'
 }
+
+export const STRIPE_CONFIG_INFO = {
+	API_KEY: process.env.STRIPE_API_KEY
+}
