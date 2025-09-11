@@ -41,6 +41,8 @@
 
     emailVerifyTokens EmailVerifyToken[]
 
+    @@index([email])
+
     @@map("user")
   }
 
@@ -118,6 +120,10 @@
     educations   Education[]
     languages    FreelancerLanguage[] // ✅ Thêm dòng này
     contracts Contract[]
+    
+    freelancerCategorySelection FreelancerCategorySelection[]
+    freelancerSpecialtySelection FreelancerSpecialtySelection[]
+    freelancerSkillSelection FreelancerSkillSelection[]
 
     createdAt    DateTime  @default(now()) @map("created_at")
     updatedAt    DateTime  @updatedAt      @map("updated_at")
@@ -360,6 +366,11 @@
     // Stripe refs
     paymentIntentId  String   @unique @map("payment_intent_id")  // pi_xxx
     chargeId         String?  @map("charge_id")        // ch_xxx (set qua webhook)
+    cardBrand      String? // ENUM -> ~1 byte
+    cardLast4      String?    @db.Char(4)
+    cardExpMonth   Int?       @db.UnsignedTinyInt
+    cardExpYear    Int?       @db.UnsignedSmallInt
+    cardFingerprint String?   @db.Char(32) // optional
     // Idempotency
     idemKey          String?  @unique @map("idem_key")
     createdAt        DateTime @default(now()) @map("created_at")
@@ -477,6 +488,10 @@
     billingPostal    String? @map("billing_postal")
 
     profile             Profile     @relation(fields: [profileId], references: [userId])
+    
+    isDeleted Boolean  @map("is_deleted") @default(false)
+    deletedAt DateTime? @map("deleted_at")
+    deletedBy String? @map("deleted_by")
     @@index([profileId])
     @@unique([stripeCustomerId, paymentMethodId])
   }
@@ -490,3 +505,173 @@
     processed  Boolean  @default(false) 
     createdAt  DateTime @default(now()) @map("created_at")
   }
+
+
+  /// Step 2/10: Top-level category (e.g., IT & Networking, Design & Creative, ...)
+model Category {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  isActive  Boolean  @default(true)   @map("is_active")
+  description String? @db.MediumText
+  sortOrder Int      @default(0)      @map("sort_order")
+  createdAt DateTime @default(now())  @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  isDeleted Boolean  @map("is_deleted")  @default(false)
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String? @map("deleted_by")
+
+  specialties Specialty[]
+  // Optional mapping to suggest skills when user picks this category
+  suggestedSkills CategorySkill[]
+
+  freelancerCategorySelection FreelancerCategorySelection[]
+}
+
+/// Subcategory / Specialty inside a category (e.g., "Network & System Administration")
+model Specialty {
+  id          String    @id @default(cuid())
+  categoryId  String    @map("category_id")
+  slug        String    @unique
+  name        String
+  isActive    Boolean   @default(true)  @map("is_active")
+  sortOrder   Int       @default(0)   @map("sort_order")
+  createdAt   DateTime  @default(now())   @map("created_at")
+  updatedAt   DateTime  @updatedAt    @map("updated_at")
+
+  isDeleted Boolean  @map("is_deleted")  @default(false)
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String? @map("deleted_by")
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // Optional mapping to suggest skills for this specialty
+  suggestedSkills SpecialtySkill[]
+  freelancerSpecialtySelection FreelancerSpecialtySelection[]
+}
+
+
+/// Atomic skill (e.g., React, Kubernetes, Prisma, Penetration Testing, …)
+model Skill {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  isDeleted Boolean  @map("is_deleted")  @default(false)
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String? @map("deleted_by")
+
+  // Backrefs
+  categories CategorySkill[]
+  specialties SpecialtySkill[]
+
+  freelancerSkillSelection FreelancerSkillSelection[]
+
+  @@index([name, isDeleted])
+  @@index([slug, isDeleted])
+}
+
+/* ----------------------  TAXONOMY → SKILL SUGGESTION  --------------------- */
+
+/// (Optional) Which skills are relevant to a category
+model CategorySkill {
+  categoryId String @map("category_id")
+  skillId    String @map("skill_id")
+  weight     Int      @default(50) // 0–100: mức độ gợi ý/độ liên quan
+  
+  isDeleted Boolean  @map("is_deleted")  @default(false)
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String? @map("deleted_by")
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  skill    Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, skillId])
+  @@index([skillId])
+  @@map("category_skill")
+}
+
+/// (Optional) Which skills are relevant to a specialty
+model SpecialtySkill {
+  specialtyId String  @map("specialty_id")
+  skillId     String  @map("skill_id")
+  weight      Int      @default(70) // gợi ý mạnh hơn category
+
+  specialty Specialty @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
+  skill     Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  isDeleted Boolean  @map("is_deleted")  @default(false)
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String? @map("deleted_by")
+
+  @@id([specialtyId, skillId])
+  @@index([skillId])
+  @@map("specialty_skill")
+}
+
+/* ----------------------------  USER SELECTIONS  --------------------------- */
+
+model FreelancerCategorySelection {
+  id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId     String   @map("profile_id")
+  categoryId String   @map("category_id")
+  pickedAt   DateTime @default(now()) @map("picked_at")
+
+  isDeleted Boolean  @map("is_deleted")  @default(false)
+  deletedAt  DateTime?               @map("deleted_at")
+  deletedBy  String?                 @map("deleted_by")
+
+  freelancer Freelancer @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  // Dashboard/analytics theo category
+  @@index([categoryId, isDeleted])
+
+  // Nếu thường sort theo thời điểm chọn cho 1 user:
+  @@index([userId, isDeleted, pickedAt])
+  @@map("freelancer_category_selection")
+}
+
+
+model FreelancerSpecialtySelection {
+  id          String   @id @default(cuid())
+  userId   String
+  specialtyId String
+  pickedAt    DateTime @default(now())
+
+  isDeleted Boolean  @map("is_deleted")  @default(false)
+  deletedAt  DateTime?
+  deletedBy  String?
+
+  freelancer   Freelancer @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  specialty Specialty         @relation(fields: [specialtyId], references: [id], onDelete: Restrict)
+
+  // chỉ 1 bản ghi active / (profile, specialty)
+  @@index([userId, isDeleted])
+  @@index([specialtyId, isDeleted])
+  @@map("freelancer_specialty_selection")
+}
+
+model FreelancerSkillSelection {
+  id        String    @id @default(cuid())
+  userId String
+  skillId   String
+  orderHint Int?
+  pickedAt  DateTime  @default(now())
+
+  isDeleted Boolean  @map("is_deleted")  @default(false)
+  deletedAt DateTime?
+  deletedBy String?
+
+  freelancer Freelancer @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  skill   Skill            @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@index([userId, isDeleted])
+  @@index([skillId, isDeleted])
+
+  @@map("freelancer_skill_selection")
+}
