@@ -16,6 +16,16 @@ export async function getCategories(req: Request, res: Response) {
 	res.status(StatusCodes.OK).json({ data: result.data, total: result.total })
 }
 
+export async function getCategoryDetail(req: Request, res: Response) {
+	const { id } = req.params
+	if (!id) {
+		throw new BadRequestException('Missing id parameter', ErrorCode.PARAM_QUERY_ERROR)
+	}
+	const result = await categorySerivce.getById(id)
+
+	return res.status(StatusCodes.OK).json(result)
+}
+
 export async function createCategory(req: Request, res: Response) {
 	if (req.body?.slug) {
 		req.body.slug = toSlug(req.body.slug)

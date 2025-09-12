@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { defineConfig } from 'prisma/config'
 import path from 'node:path'
 // (tuỳ chọn) nạp biến môi trường

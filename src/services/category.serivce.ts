@@ -6,10 +6,7 @@ const getAll = async (page: number, limit: number, search: string) => {
 	const where =
 		search && search.trim() !== ''
 			? {
-					OR: [
-						{ name: { contains: String(search), mode: 'insensitive' } },
-						{ slug: { contains: String(search), mode: 'insensitive' } }
-					]
+					OR: [{ name: { contains: String(search) } }, { slug: { contains: String(search) } }]
 			  }
 			: {}
 
@@ -24,6 +21,12 @@ const getAll = async (page: number, limit: number, search: string) => {
 	])
 
 	return { data, total }
+}
+
+const getById = async (id: string) => {
+	return prismaClient.category.findUnique({
+		where: { id }
+	})
 }
 
 const create = async (data: any) => {
@@ -78,6 +81,7 @@ const deleteById = async (id: string) => {
 
 export default {
 	getAll,
+	getById,
 	create,
 	update,
 	deleteById

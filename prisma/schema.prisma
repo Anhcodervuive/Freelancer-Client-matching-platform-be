@@ -522,6 +522,8 @@ model Category {
   deletedAt DateTime? @map("deleted_at")
   deletedBy String? @map("deleted_by")
 
+  @@index([name, slug])
+
   specialties Specialty[]
   // Optional mapping to suggest skills when user picks this category
   suggestedSkills CategorySkill[]
@@ -535,6 +537,7 @@ model Specialty {
   categoryId  String    @map("category_id")
   slug        String    @unique
   name        String
+  description String? @db.MediumText
   isActive    Boolean   @default(true)  @map("is_active")
   sortOrder   Int       @default(0)   @map("sort_order")
   createdAt   DateTime  @default(now())   @map("created_at")
@@ -546,6 +549,7 @@ model Specialty {
 
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
+  @@index([categoryId])  
   // Optional mapping to suggest skills for this specialty
   suggestedSkills SpecialtySkill[]
   freelancerSpecialtySelection FreelancerSpecialtySelection[]
@@ -557,6 +561,7 @@ model Skill {
   id        String   @id @default(cuid())
   slug      String   @unique
   name      String
+  description String? @db.MediumText
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
