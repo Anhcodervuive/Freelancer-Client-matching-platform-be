@@ -2,7 +2,7 @@
 import { PrismaClient } from '../generated/prisma' // chỉnh path cho đúng
 // Reuse instance ở dev hot-reload
 const g = globalThis as unknown as { __basePrisma?: PrismaClient }
-const base = g.__basePrisma ?? new PrismaClient({ log: ['warn', 'error'] })
+const base = g.__basePrisma ?? new PrismaClient({ log: ['warn', 'error', 'query'] })
 if (process.env.NODE_ENV !== 'production') g.__basePrisma = base
 
 // CHỈ các model này mới có isDeleted
@@ -31,7 +31,12 @@ export const prismaClient = base.$extends({
 					}
 				}
 				// xoá cờ custom nếu có
-				if ((args as any).__withDeleted) delete (args as any).__withDeleted
+				if ((args as any).__withDeleted) {
+					;(args as any).where = {
+						AND: [{ isDeleted: true }, (args as any).where ?? {}]
+					}
+					delete (args as any).__withDeleted
+				}
 				return query(args)
 			},
 			async findMany({ model, args, query }) {
@@ -40,7 +45,12 @@ export const prismaClient = base.$extends({
 						AND: [{ isDeleted: false }, (args as any).where ?? {}]
 					}
 				}
-				if ((args as any).__withDeleted) delete (args as any).__withDeleted
+				if ((args as any).__withDeleted) {
+					;(args as any).where = {
+						AND: [{ isDeleted: true }, (args as any).where ?? {}]
+					}
+					delete (args as any).__withDeleted
+				}
 				return query(args)
 			},
 			async count({ model, args, query }) {
@@ -49,7 +59,12 @@ export const prismaClient = base.$extends({
 						AND: [{ isDeleted: false }, (args as any).where ?? {}]
 					}
 				}
-				if ((args as any).__withDeleted) delete (args as any).__withDeleted
+				if ((args as any).__withDeleted) {
+					;(args as any).where = {
+						AND: [{ isDeleted: true }, (args as any).where ?? {}]
+					}
+					delete (args as any).__withDeleted
+				}
 				return query(args)
 			},
 

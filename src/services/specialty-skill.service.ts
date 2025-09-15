@@ -2,22 +2,29 @@ import { prismaClient } from '~/config/prisma-client'
 
 export async function getSpecialtySkills(
 	specialtyId: string,
-	{ search, status, page, limit }: { search?: string; status?: boolean; page: number; limit: number }
+	{ search, status, page, limit }: { search?: string; status: 'all' | 'deleted'; page: number; limit: number }
 ) {
 	const where: any = {
 		specialtyId,
-		isActive: status,
 		...(search ? { skill: { OR: [{ name: { contains: search } }, { slug: { contains: search } }] } } : {})
 	}
 
 	const [items, total] = await Promise.all([
-		prismaClient.specialtySkill.findMany({
-			where,
-			include: { skill: true },
-			orderBy: [{ isDeleted: 'asc' }, { weight: 'desc' }, { skill: { name: 'asc' } }],
-			take: limit,
-			skip: (page - 1) * limit
-		}),
+		status === 'all'
+			? prismaClient.specialtySkill.findMany({
+					where,
+					include: { skill: true },
+					orderBy: [{ isDeleted: 'asc' }, { weight: 'desc' }, { skill: { name: 'asc' } }],
+					take: limit,
+					skip: (page - 1) * limit
+			  })
+			: prismaClient.specialtySkill.findManyWithDeleted({
+					where,
+					include: { skill: true },
+					orderBy: [{ isDeleted: 'asc' }, { weight: 'desc' }, { skill: { name: 'asc' } }],
+					take: limit,
+					skip: (page - 1) * limit
+			  }),
 		prismaClient.specialtySkill.count({ where })
 	])
 

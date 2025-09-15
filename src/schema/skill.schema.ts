@@ -13,7 +13,7 @@ export const OwnerParamsSchema = z.object({
 
 export const ListOwnerSkillsQuerySchema = z.object({
 	search: z.string().trim().optional(),
-	status: z.boolean().default(true),
+	status: z.enum(['all', 'deleted']).default('all'),
 	page: z.string().optional(),
 	limit: z.string().optional()
 })
