@@ -4,9 +4,11 @@ import { Profile as GoogleProfile } from 'passport-google-oauth20'
 
 import { CLIENT, JWT_CONFIG_INFO } from '~/config/environment'
 import { prismaClient } from '~/config/prisma-client'
+import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { User } from '~/generated/prisma'
+import { blacklistRefreshToken } from '~/helpers/blacklist'
 import { JwtProvider } from '~/providers/jwt.provider'
 import { emailQueue } from '~/queues/email.queue'
 import { UserInfoToEnCode } from '~/types'
@@ -14,20 +16,56 @@ import assetService from './asset.service'
 
 /** Chuẩn hoá dữ liệu trả về cho FE, giữ tương thích cũ */
 const toPublicUser = (u: User & { profile?: any }) => {
-	const profile = u.profile
-	return {
-		id: u.id,
-		email: u.email,
-		role: u.role,
-		...profile
-	}
+        const profile = u.profile
+        return {
+                id: u.id,
+                email: u.email,
+                role: u.role,
+                ...profile
+        }
+}
+
+const signup = async (data: { email: string; password: string; firstName?: string; lastName?: string }) => {
+        const { email, password, firstName, lastName } = data
+
+        const existed = await prismaClient.user.findFirst({ where: { email } })
+        if (existed) {
+                throw new BadRequestException('User already exist', ErrorCode.USER_ALREADY_EXISTS)
+        }
+
+        const createdUser = await prismaClient.user.create({
+                data: {
+                        email,
+                        password: bcrypt.hashSync(password, 10),
+                        profile: {
+                                create: {
+                                        firstName: firstName || null,
+                                        lastName: lastName || null
+                                }
+                        }
+                },
+                include: { profile: true }
+        })
+
+        const verifyLink = await sendVerifyEmail(createdUser)
+
+        const avatarUrl = await assetService.getProfileAvatarUrl(createdUser.id)
+        const publicUser = {
+                ...toPublicUser(createdUser as any),
+                avatar: avatarUrl
+        }
+
+        return {
+                user: publicUser,
+                verifyLink
+        }
 }
 
 const signin = async (reqBody: { email: string; password: string }) => {
-	const { email, password } = reqBody
+        const { email, password } = reqBody
 
-	const existedUser = await prismaClient.user.findFirst({
-		where: { email },
+        const existedUser = await prismaClient.user.findFirst({
+                where: { email },
 		include: { profile: true } // <-- quan trọng: lấy kèm profile
 	})
 
@@ -120,8 +158,8 @@ const signinGoogle = async (user: User) => {
 }
 
 const sendVerifyEmail = async (user: User) => {
-	// --- TẠO TOKEN & LƯU DB ---
-	const token = crypto.randomBytes(32).toString('hex')
+        // --- TẠO TOKEN & LƯU DB ---
+        const token = crypto.randomBytes(32).toString('hex')
 	const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 phút
 
 	const emailToken = await prismaClient.emailVerifyToken.create({
@@ -144,13 +182,66 @@ const sendVerifyEmail = async (user: User) => {
 		verifyLink
 	})
 
-	return verifyLink
+        return verifyLink
+}
+
+const verifyEmailToken = async (token: string) => {
+        const tokenRecord = await prismaClient.emailVerifyToken.findUnique({
+                where: { token }
+        })
+
+        if (!tokenRecord) {
+                throw new BadRequestException('Invalid token', ErrorCode.UNPROCESSABLE_ENTITY)
+        }
+
+        if (tokenRecord.expiresAt < new Date()) {
+                await prismaClient.emailVerifyToken.delete({ where: { token } })
+                throw new BadRequestException('Token is Expired', ErrorCode.UNPROCESSABLE_ENTITY)
+        }
+
+        const existedUser = await prismaClient.user.update({
+                where: { id: tokenRecord.userId },
+                data: { emailVerifiedAt: new Date() },
+                include: { profile: true }
+        })
+
+        await prismaClient.emailVerifyToken.delete({ where: { token } })
+
+        const userInfo: UserInfoToEnCode = {
+                id: existedUser.id,
+                email: existedUser.email
+        }
+
+        const accessToken = await JwtProvider.generateToken(
+                userInfo,
+                JWT_CONFIG_INFO.ACCESS_TOKEN_SECRET_SIGNATURE,
+                JWT_CONFIG_INFO.ACCESS_TOKEN_LIFE
+        )
+
+        const refreshToken = await JwtProvider.generateToken(
+                userInfo,
+                JWT_CONFIG_INFO.REFRESH_TOKEN_SECRET_SIGNATURE,
+                JWT_CONFIG_INFO.REFRESH_TOKEN_LIFE
+        )
+
+        const avatarUrl = await assetService.getProfileAvatarUrl(existedUser.id)
+
+        const publicUser = {
+                ...toPublicUser(existedUser as any),
+                avatar: avatarUrl
+        }
+
+        return {
+                accessToken,
+                refreshToken,
+                publicUser
+        }
 }
 
 export async function findOrCreateUserFromGoogle(googleProfile: GoogleProfile) {
-	// Lấy info từ profile Google
-	const googleId = googleProfile.id
-	const email = googleProfile.emails?.[0]?.value ?? ''
+        // Lấy info từ profile Google
+        const googleId = googleProfile.id
+        const email = googleProfile.emails?.[0]?.value ?? ''
 	const avatar = googleProfile.photos?.[0]?.value ?? ''
 	const givenName = (googleProfile as any).name?.givenName as string | undefined
 	const familyName = (googleProfile as any).name?.familyName as string | undefined
@@ -219,28 +310,68 @@ export async function findOrCreateUserFromGoogle(googleProfile: GoogleProfile) {
 }
 
 const refreshToken = async (clientRefreshToken: string) => {
-	const refreshTokenDecoded = await JwtProvider.verifyToken(
-		clientRefreshToken,
-		JWT_CONFIG_INFO.REFRESH_TOKEN_SECRET_SIGNATURE
-	)
+        const refreshTokenDecoded = await JwtProvider.verifyToken(
+                clientRefreshToken,
+                JWT_CONFIG_INFO.REFRESH_TOKEN_SECRET_SIGNATURE
+        )
 
-	const userInfo: UserInfoToEnCode = {
-		id: refreshTokenDecoded.id,
-		email: refreshTokenDecoded.email
-	}
+        const userInfo: UserInfoToEnCode = {
+                id: refreshTokenDecoded.id,
+                email: refreshTokenDecoded.email
+        }
 
-	const accessToken = await JwtProvider.generateToken(
-		userInfo,
-		JWT_CONFIG_INFO.ACCESS_TOKEN_SECRET_SIGNATURE,
-		JWT_CONFIG_INFO.ACCESS_TOKEN_LIFE
-	)
+        const accessToken = await JwtProvider.generateToken(
+                userInfo,
+                JWT_CONFIG_INFO.ACCESS_TOKEN_SECRET_SIGNATURE,
+                JWT_CONFIG_INFO.ACCESS_TOKEN_LIFE
+        )
 
-	return accessToken
+        return accessToken
+}
+
+const resendVerifyEmail = async (email: string) => {
+        const existedUser = await prismaClient.user.findFirst({ where: { email } })
+        if (!existedUser) {
+                throw new BadRequestException('User not founded', ErrorCode.USER_NOT_FOUND)
+        }
+
+        if (existedUser.emailVerifiedAt) {
+                throw new BadRequestException('User is verified', ErrorCode.ACCOUNT_VERIFIED)
+        }
+
+        await prismaClient.emailVerifyToken.deleteMany({ where: { userId: existedUser.id } })
+
+        const verifyLink = await sendVerifyEmail(existedUser)
+
+        return {
+                message: 'Resend verify link successfully!',
+                verifyLink
+        }
+}
+
+const logoutWithBlacklist = async (refreshToken: string, userId?: string) => {
+        const decoded = await JwtProvider.verifyToken(
+                refreshToken,
+                JWT_CONFIG_INFO.REFRESH_TOKEN_SECRET_SIGNATURE
+        )
+
+        const expSec = decoded.exp
+        if (!expSec) {
+                throw new UnauthorizedException('Refresh token not valid', ErrorCode.UNAUTHORIED)
+        }
+
+        const ttlSec = Math.max(expSec - Math.floor(Date.now() / 1000), 1)
+
+        await blacklistRefreshToken(refreshToken, ttlSec, userId)
 }
 
 export default {
-	signin,
-	signinGoogle,
-	sendVerifyEmail,
-	refreshToken
+        signup,
+        signin,
+        signinGoogle,
+        sendVerifyEmail,
+        verifyEmailToken,
+        resendVerifyEmail,
+        refreshToken,
+        logoutWithBlacklist
 }
