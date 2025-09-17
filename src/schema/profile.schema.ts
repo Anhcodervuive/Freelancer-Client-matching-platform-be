@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { parsePhoneNumberFromString } from 'libphonenumber-js'
+import { Role } from '~/generated/prisma'
 
 export const phoneSchema = z
 	.string()
@@ -11,6 +12,10 @@ export const phoneSchema = z
 		},
 		{ message: 'Số điện thoại không hợp lệ' }
 	)
+
+export const chooseRoleSchema = z.object({
+	role: z.enum([Role.CLIENT, Role.FREELANCER])
+})
 
 export const UpdateProfileSchema = z.object({
 	firstName: z.string().trim().min(1).max(50).optional(),

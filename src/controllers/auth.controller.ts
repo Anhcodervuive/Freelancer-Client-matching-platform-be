@@ -12,6 +12,7 @@ import { JwtProvider } from '~/providers/jwt.provider'
 import { DecodedToken, UserInfoToEnCode } from '~/types'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { SignUpSchema } from '~/schema/auth.schema'
+import assetService from '~/services/asset.service'
 
 /** Helper: chuẩn hoá publicUser, lấy tên/ảnh từ profile */
 const toPublicUser = (u: any) => {
@@ -43,7 +44,7 @@ const pickForQuery = (publicUser: any) => {
 
 export const signup = async (req: Request, res: Response, next: NextFunction) => {
 	const data = SignUpSchema.parse(req.body)
-	const { email, password, firstName, lastName, role } = data
+	const { email, password, firstName, lastName } = data
 
 	const existed = await prismaClient.user.findFirst({ where: { email } })
 	if (existed) {
@@ -54,28 +55,11 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
 	const createdUser = await prismaClient.user.create({
 		data: {
 			email,
-			role,
 			password: hashSync(password, 10),
 			profile: {
 				create: {
 					firstName: firstName || null,
-					lastName: lastName || null,
-					// Nếu là freelancer thì tạo luôn freelancer record
-					...(role === 'FREELANCER' && {
-						freelancer: {
-							create: {
-								title: null // hoặc gán giá trị mặc định
-							}
-						}
-					}),
-					...(role === 'CLIENT' && {
-						client: {
-							create: {
-								companyName: '',
-								size: 'JUST_ME'
-							}
-						}
-					})
+					lastName: lastName || null
 				}
 			}
 		},
@@ -113,14 +97,54 @@ export const verify = async (req: Request, res: Response, next: NextFunction) =>
 		throw new BadRequestException('Token is Expired', ErrorCode.UNPROCESSABLE_ENTITY)
 	}
 
-	await prismaClient.user.update({
+	const existedUser = await prismaClient.user.update({
 		where: { id: tokenRecord.userId },
-		data: { emailVerifiedAt: new Date() }
+		data: { emailVerifiedAt: new Date() },
+		include: {
+			profile: true
+		}
 	})
 
 	await prismaClient.emailVerifyToken.delete({ where: { token } })
 
-	return res.status(StatusCodes.OK).json({ message: 'Xác nhận email thành công! Bạn có thể đăng nhập.' })
+	const userInfo: UserInfoToEnCode = {
+		id: existedUser.id,
+		email: existedUser.email
+	}
+
+	const accessToken = await JwtProvider.generateToken(
+		userInfo,
+		JWT_CONFIG_INFO.ACCESS_TOKEN_SECRET_SIGNATURE,
+		JWT_CONFIG_INFO.ACCESS_TOKEN_LIFE
+	)
+
+	const refreshToken = await JwtProvider.generateToken(
+		userInfo,
+		JWT_CONFIG_INFO.REFRESH_TOKEN_SECRET_SIGNATURE,
+		JWT_CONFIG_INFO.REFRESH_TOKEN_LIFE
+	)
+
+	const avatarUrl = await assetService.getProfileAvatarUrl(existedUser.id)
+
+	const publicUser = toPublicUser(existedUser)
+
+	publicUser.avatar = avatarUrl
+
+	res.cookie('accessToken', accessToken, {
+		httpOnly: true,
+		sameSite: 'lax',
+		path: '/',
+		maxAge: ms('14 days')
+	})
+
+	res.cookie('refreshToken', refreshToken, {
+		httpOnly: true,
+		sameSite: 'lax',
+		path: '/',
+		maxAge: ms('14 days')
+	})
+
+	return res.status(StatusCodes.OK).json(publicUser)
 }
 
 export const resendVerifyEmail = async (req: Request, res: Response, next: NextFunction) => {
@@ -191,7 +215,6 @@ export const signinGoogle = async (req: Request, res: Response, next: NextFuncti
 
 	// Chỉ đẩy các field primitive cần thiết lên query string
 	const qsObject = pickForQuery(result.publicUser)
-	console.log(qsObject)
 	const queryString = new URLSearchParams(Object.entries(qsObject).map(([k, v]) => [k, v ?? ''])).toString()
 
 	res.redirect(`${CLIENT.URL}/signin?${queryString}`)

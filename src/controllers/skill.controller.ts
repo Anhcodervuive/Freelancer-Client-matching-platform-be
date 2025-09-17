@@ -9,10 +9,22 @@ export const listSkills = async (req: Request, res: Response) => {
 	const q = ListSkillsQuerySchema.parse(req.query)
 	const page = q.page ? Number(q.page) : 1
 	const limit = q.limit ? Number(q.limit) : 10
+	const categoryIdArr = (q.categoryIds ?? '')
+		.split(',')
+		.map(s => s.trim())
+		.filter(Boolean)
+
+	const specialtyIdArr = (q.specialtyIds ?? '')
+		.split(',')
+		.map(s => s.trim())
+		.filter(Boolean)
+
 	const { items, total } = await getSkills({
 		...(q.search !== undefined ? { search: q.search } : {}),
 		page,
-		limit
+		limit,
+		categoryIdArr,
+		specialtyIdArr
 	})
 	return res.json({
 		data: items,

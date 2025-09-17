@@ -34,7 +34,7 @@
     deletedAt       DateTime? @map("deleted_at")
     isActive        Boolean   @default(true) @map("is_active")
 
-    role Role
+    role Role?
 
     // 1-1
     profile         Profile?
@@ -163,9 +163,9 @@
     userId String   @id @map("profile_user_id")
     profile       Profile  @relation( fields: [userId], references: [userId], onDelete: Cascade)
 
-    companyName   String    @map("company_name")
+    companyName   String?    @map("company_name")
     websiteUrl    String?   @map("website_url")
-    size          CompanySize @map("size")
+    size          CompanySize? @map("size")
     description   String?   @map("description")
     
     contracts Contract[]

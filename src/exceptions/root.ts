@@ -25,6 +25,8 @@ export enum ErrorCode {
 	ACCOUNT_NOT_VERIFIED = 1010,
 	ACCOUNT_VERIFIED = 1011,
 
+	USER_NOT_AUTHORITY = 1012,
+
 	// Google Authentication
 	EMAIL_EXISTS = 1030,
 
@@ -34,6 +36,7 @@ export enum ErrorCode {
 	// Req data
 	UNPROCESSABLE_ENTITY = 2001,
 	PARAM_QUERY_ERROR = 2002,
+	ITEM_NOT_FOUND = 2003,
 
 	INTERNAL_SERVER_ERROR = 5000
 }

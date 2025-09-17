@@ -2,18 +2,44 @@ import { prismaClient } from '~/config/prisma-client'
 import { ErrorCode } from '~/exceptions/root'
 import { UnprocessableEntityException } from '~/exceptions/validation'
 
-function buildWhere(search: string, categoryId?: string) {
+function buildWhere(search: string, categoryId?: string): object
+function buildWhere(search: string, categoryId?: string[]): object
+
+function buildWhere(search: string, categoryId?: string | string[]) {
 	const where: any = {}
-	if (categoryId) where.categoryId = categoryId
 	const s = search?.trim()
 	if (s) {
 		where.OR = [{ name: { contains: s } }, { slug: { contains: s } }]
 	}
+	if (Array.isArray(categoryId)) {
+		where.categoryId = {
+			in: categoryId
+		}
+	} else {
+		if (categoryId) where.categoryId = categoryId
+	}
 	return where
 }
 
-const getAll = async (page: number, limit: number, search: string, categoryId?: string) => {
-	const where = buildWhere(search, categoryId)
+async function getAll(
+	page: number,
+	limit: number,
+	search: string,
+	categoryId?: string
+): Promise<{ data: any; total: number }>
+async function getAll(
+	page: number,
+	limit: number,
+	search: string,
+	categoryId?: string[]
+): Promise<{ data: any; total: number }>
+async function getAll(page: number, limit: number, search: string, categoryId?: string | string[]) {
+	let where = {}
+	if (Array.isArray(categoryId)) {
+		where = buildWhere(search, categoryId)
+	} else {
+		where = buildWhere(search, categoryId)
+	}
 	const [data, total] = await Promise.all([
 		prismaClient.specialty.findMany({
 			where,

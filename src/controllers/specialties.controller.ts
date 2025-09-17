@@ -4,6 +4,7 @@ import { ErrorCode } from '~/exceptions/root'
 import { UnprocessableEntityException } from '~/exceptions/validation'
 import {
 	SpecialtyBaseSchema,
+	SpecialtyByCategoryIdsQuerySchema,
 	SpecialtyCreateGlobal,
 	SpecialtyCreateGlobalSchema,
 	SpecialtyQuerySchema,
@@ -20,6 +21,13 @@ export async function getSpecialties(req: Request, res: Response) {
 	const categoryId = paramCat ?? qCat
 
 	const result = await specialtieService.getAll(page, limit, search, categoryId)
+
+	return res.status(StatusCodes.OK).json({ data: result.data, total: result.total })
+}
+
+export async function getSpecialtiesByCategoryIds(req: Request, res: Response) {
+	const { page, limit, search, categoryIds: qCats } = SpecialtyByCategoryIdsQuerySchema.parse(req.query)
+	const result = await specialtieService.getAll(page, limit, search, qCats)
 
 	return res.status(StatusCodes.OK).json({ data: result.data, total: result.total })
 }

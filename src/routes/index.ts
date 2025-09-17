@@ -1,6 +1,7 @@
 import { Router } from 'express'
 
 import authRouter from './auth.route'
+import onboardingRoute from './onboarding.route'
 import profileRoute from './profile.route'
 import paymentMethodRoute from './payment-method.route'
 import categoryRoute from './category.route'
@@ -12,6 +13,7 @@ import skillRoute from './skill.route'
 const rootRouter: Router = Router()
 
 rootRouter.use('/auth', authRouter)
+rootRouter.use('/onboarding', onboardingRoute)
 rootRouter.use('/me', profileRoute)
 rootRouter.use('/payment-method', paymentMethodRoute)
 rootRouter.use('/category', categoryRoute, categorySkillRoute)

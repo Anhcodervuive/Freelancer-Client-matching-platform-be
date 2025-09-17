@@ -10,7 +10,7 @@ export type UpdateFreelanceProfileInput = z.infer<typeof UpdateFreelancerProfile
 
 export const AddOneEducationSchema = z
 	.object({
-		schoolName: z.string().min(10).max(50),
+		schoolName: z.string().min(5).max(50),
 		degreeTitle: z.string().min(1).max(50),
 		fieldOfStudy: z.string().min(1).max(50).optional(),
 		startYear: z.int(),

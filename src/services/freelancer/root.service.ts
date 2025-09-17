@@ -10,6 +10,7 @@ const getByUserId = async (userId: string) => {
 }
 
 const updateBasicInfo = async (userId: string, payload: any) => {
+	console.log(userId, payload)
 	return prismaClient.freelancer.update({
 		where: { userId },
 		data: payload,

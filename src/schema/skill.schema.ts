@@ -4,7 +4,9 @@ export const ListSkillsQuerySchema = z.object({
 	search: z.string().trim().optional(),
 	page: z.string().optional(),
 	limit: z.string().optional(),
-	status: z.enum(['deleted', 'all']).default('all')
+	status: z.enum(['deleted', 'all']).default('all'),
+	categoryIds: z.string().default(''),
+	specialtyIds: z.string().default('')
 })
 
 export const OwnerParamsSchema = z.object({

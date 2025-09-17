@@ -28,6 +28,10 @@ export const SpecialtyQuerySchema = z.object({
 	categoryId: z.string().optional() // filter theo category khi list (UX B)
 })
 
+export const SpecialtyByCategoryIdsQuerySchema = SpecialtyQuerySchema.extend({
+	categoryIds: z.string().default('')
+})
+
 export type SpecialtyBase = z.infer<typeof SpecialtyBaseSchema>
 export type SpecialtyCreateGlobal = z.infer<typeof SpecialtyCreateGlobalSchema>
 export type SpecialtyUpdate = z.infer<typeof SpecialtyUpdateSchema>

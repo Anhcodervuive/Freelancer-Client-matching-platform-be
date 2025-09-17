@@ -4,22 +4,51 @@ export async function getSkills({
 	search,
 	page,
 	limit,
-	onlyActive
+	categoryIdArr,
+	specialtyIdArr
 }: {
 	search?: string
 	page: number
 	limit: number
-	onlyActive?: boolean
+	categoryIdArr: string[]
+	specialtyIdArr: string[]
 }) {
-	const where = {
-		...(onlyActive ? { isActive: true } : {}),
+	const where: any = {
 		isDeleted: false,
 		...(search ? { OR: [{ name: { contains: search } }, { slug: { contains: search } }] } : {})
 	}
 
+	// Nếu không có categoryIds & không có specialtyIds thì bạn có 2 cách:
+	// 1) trả empty list; 2) trả toàn bộ skills (có search). Ở đây chọn trả theo search/all.
+	const noFilters = categoryIdArr.length === 0 && specialtyIdArr.length === 0
+
+	if (!noFilters) {
+		// intersect: skill hợp lệ cả theo category LẪN specialty
+		// (AND giữa 2 điều kiện)
+		if (categoryIdArr.length && specialtyIdArr.length) {
+			where.AND = [
+				{ categories: { some: { categoryId: { in: categoryIdArr } } } },
+				{ specialties: { some: { specialtyId: { in: specialtyIdArr } } } }
+			]
+		} else if (categoryIdArr.length === 0) {
+			// skill nằm trong ÍT NHẤT MỘT category đã chọn
+			where.categories = { some: { categoryId: { in: categoryIdArr } } }
+
+			// Nếu không có categoryIds nhưng có specialtyIds (và mode=category do auto)
+			if (categoryIdArr.length === 0 && specialtyIdArr.length > 0) {
+				where.specialties = { some: { specialtyId: { in: specialtyIdArr } } }
+			}
+		} else if (specialtyIdArr.length === 0) {
+			// skill nằm trong ÍT NHẤT MỘT specialty đã chọn
+			where.specialties = { some: { specialtyId: { in: specialtyIdArr } } }
+		}
+	}
+
 	const [items, total] = await Promise.all([
 		prismaClient.skill.findMany({
-			where,
+			where: {
+				categories: {}
+			},
 			orderBy: [{ name: 'asc' }],
 			take: limit,
 			skip: (page - 1) * limit,

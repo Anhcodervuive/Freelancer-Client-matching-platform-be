@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE `client` MODIFY `company_name` VARCHAR(191) NULL,
+    MODIFY `size` ENUM('JUST_ME', 'TWO_TO_NINE', 'TEN_TO_NINETY', 'HUNDRED_TO_K', 'MORE_THAN_K') NULL;
