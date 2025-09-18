@@ -18,7 +18,7 @@ import { uploadImages } from '~/middlewares/multer'
 
 const router: Router = Router()
 
-router.get('/profile', authenticateMiddleware, errorHandler(getMyProfile))
+router.get('/profile/:id', authenticateMiddleware, errorHandler(getMyProfile))
 router.put('/profile', authenticateMiddleware, errorHandler(updateMyProfile))
 router.put('/profile/upload-avatar', authenticateMiddleware, uploadImages.single('avatar'), errorHandler(uploadAvatar))
 

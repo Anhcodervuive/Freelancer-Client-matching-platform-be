@@ -8,11 +8,12 @@ import profileService from '~/services/profile.service'
 import assetService from '~/services/asset.service'
 
 export const getMyProfile = async (req: Request, res: Response) => {
-	const userId = req.user?.id
+	const { id: userId } = req.params
 	if (!userId) throw new BadRequestException('Unauthorized', ErrorCode.UNAUTHORIED)
 
 	const profile = await profileService.getOrCreateMyProfile(userId)
-	return res.status(StatusCodes.OK).json(profile)
+	const avatarUrl = await assetService.getProfileAvatarUrl(userId)
+	return res.status(StatusCodes.OK).json({ ...profile, avatarUrl })
 }
 
 export const updateMyProfile = async (req: Request, res: Response) => {
