@@ -112,11 +112,11 @@ const signin = async (reqBody: { email: string; password: string }) => {
 }
 
 const signinGoogle = async (user: User) => {
-	if (!user) {
-		throw new UnauthorizedException('Account not found', ErrorCode.USER_NOT_FOUND)
-	}
+        if (!user) {
+                throw new UnauthorizedException('Account not found', ErrorCode.USER_NOT_FOUND)
+        }
 
-	if (!user.emailVerifiedAt) {
+        if (!user.emailVerifiedAt) {
 		// Với Google, user mới tạo đã được set emailVerifiedAt (ở hàm findOrCreateUserFromGoogle)
 		throw new UnauthorizedException('Account not found', ErrorCode.USER_NOT_FOUND)
 	}
@@ -139,22 +139,25 @@ const signinGoogle = async (user: User) => {
 	)
 
 	// load lại kèm profile để trả publicUser đầy đủ
-	const fresh = await prismaClient.user.findUnique({
-		where: { id: user.id },
-		include: { profile: true }
-	})
+        const fresh = await prismaClient.user.findUnique({
+                where: { id: user.id },
+                include: { profile: true }
+        })
 
-	const avatarUrl = await assetService.getProfileAvatarUrl(user.id)
+        const avatarUrl = await assetService.getProfileAvatarUrl(user.id)
 
-	const publicUser = toPublicUser(fresh as any)
+        const publicUser = toPublicUser(fresh as any)
 
-	publicUser.avatar = avatarUrl
+        publicUser.avatar = avatarUrl
 
-	return {
-		accessToken,
-		refreshToken,
-		publicUser
-	}
+        const requiresOnboarding = !fresh?.role
+
+        return {
+                accessToken,
+                refreshToken,
+                publicUser,
+                requiresOnboarding
+        }
 }
 
 const sendVerifyEmail = async (user: User) => {
@@ -268,25 +271,19 @@ export async function findOrCreateUserFromGoogle(googleProfile: GoogleProfile) {
 	}
 
 	// Nếu email chưa tồn tại, tạo user mới + profile
-	user = await prismaClient.user.create({
-		data: {
-			email,
-			role: 'FREELANCER',
-			googleId,
-			emailVerifiedAt: new Date(), // Google coi như đã verified
-			profile: {
-				create: {
-					firstName: givenName ?? null,
-					lastName: familyName ?? null,
-					freelancer: {
-						create: {
-							title: null
-						}
-					}
-				}
-			}
-		}
-	})
+        user = await prismaClient.user.create({
+                data: {
+                        email,
+                        googleId,
+                        emailVerifiedAt: new Date(), // Google coi như đã verified
+                        profile: {
+                                create: {
+                                        firstName: givenName ?? null,
+                                        lastName: familyName ?? null
+                                }
+                        }
+                }
+        })
 
 	// Lấy URL image của gg để tạo asset
 	const newAsset = await prismaClient.asset.create({

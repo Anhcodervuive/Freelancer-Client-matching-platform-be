@@ -89,7 +89,7 @@ export const signin = async (req: Request, res: Response, next: NextFunction) =>
 export const signinGoogle = async (req: Request, res: Response, next: NextFunction) => {
 	// Lúc này req.user đã có thông tin user rồi (đã qua passport)
 	const user = req.user
-	const result = await authService.signinGoogle(user!)
+        const result = await authService.signinGoogle(user!)
 
 	res.cookie('accessToken', result.accessToken, {
 		httpOnly: true,
@@ -106,10 +106,12 @@ export const signinGoogle = async (req: Request, res: Response, next: NextFuncti
 	})
 
 	// Chỉ đẩy các field primitive cần thiết lên query string
-	const qsObject = pickForQuery(result.publicUser)
-	const queryString = new URLSearchParams(Object.entries(qsObject).map(([k, v]) => [k, v ?? ''])).toString()
+        const qsObject = pickForQuery(result.publicUser)
+        const queryString = new URLSearchParams(Object.entries(qsObject).map(([k, v]) => [k, v ?? ''])).toString()
 
-	res.redirect(`${CLIENT.URL}/signin?${queryString}`)
+        const redirectPath = result.requiresOnboarding ? '/onboarding' : '/signin'
+
+        res.redirect(`${CLIENT.URL}${redirectPath}?${queryString}`)
 }
 
 export const refreshToken = async (req: Request, res: Response, next: NextFunction) => {
