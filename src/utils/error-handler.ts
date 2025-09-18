@@ -14,8 +14,8 @@ export const errorHandler = (method: Function) => {
 				exception = error
 			} else if (error instanceof ZodError) {
 				exception = new UnprocessableEntityException(error.message, ErrorCode.UNPROCESSABLE_ENTITY, error)
-			} else {
-				exception = new InternalServerException('Something went wrong!', ErrorCode.INTERNAL_SERVER_ERROR, error)
+                        } else {
+                                exception = new InternalServerException('Đã có lỗi xảy ra, vui lòng thử lại sau.', ErrorCode.INTERNAL_SERVER_ERROR, error)
 			}
 			console.log(exception)
 			next(exception)
