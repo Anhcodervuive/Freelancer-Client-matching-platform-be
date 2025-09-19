@@ -47,7 +47,8 @@ export async function getAllCategoryAndSpecialty(userId: string) {
 		where: {
 			freelancerCategorySelection: {
 				every: {
-					userId
+					userId,
+					isDeleted: true
 				}
 			}
 		},
@@ -62,7 +63,8 @@ export async function getAllSkill(userId: string) {
 		where: {
 			freelancerSkillSelection: {
 				every: {
-					userId
+					userId,
+					isDeleted: true
 				}
 			}
 		}
@@ -152,10 +154,10 @@ export async function setCategoriesAndSpecialties(userId: string, categoryIds: s
 
 /** STEP 2: soft-replace skills (validate theo CategorySkill hoặc SpecialtySkill) */
 export async function setSkills(userId: string, skillIds: string[]) {
-        const now = new Date()
-        // Lấy category/specialty hiện tại (active)
-        const categoryIds = await getActiveCategoryIds(userId)
-        const specialtyIds = await getActiveSpecialtyIds(userId)
+	const now = new Date()
+	// Lấy category/specialty hiện tại (active)
+	const categoryIds = await getActiveCategoryIds(userId)
+	const specialtyIds = await getActiveSpecialtyIds(userId)
 	if (categoryIds.length === 0) throw new Error('Select categories first')
 
 	// Ưu tiên rule theo CategorySkill; nếu không có bảng này thì fallback theo SpecialtySkill
@@ -215,95 +217,87 @@ export async function setSkills(userId: string, skillIds: string[]) {
 					data: toCreate.map(skillId => ({ userId, skillId }))
 				})
 			}
-                }
+		}
 
-                return { success: true }
-        })
+		return { success: true }
+	})
 }
 
 export async function attachOneSkill(userId: string, skillId: string) {
-        const now = new Date()
+	const now = new Date()
 
-        const skill = await prismaClient.skill.findFirst({ where: { id: skillId, isDeleted: false } })
-        if (!skill)
-                throw new BadRequestException('Skill not found', ErrorCode.ITEM_NOT_FOUND)
+	const skill = await prismaClient.skill.findFirst({ where: { id: skillId, isDeleted: false } })
+	if (!skill) throw new BadRequestException('Skill not found', ErrorCode.ITEM_NOT_FOUND)
 
-        const [categoryIds, specialtyIds] = await Promise.all([
-                getActiveCategoryIds(userId),
-                getActiveSpecialtyIds(userId)
-        ])
+	const [categoryIds, specialtyIds] = await Promise.all([getActiveCategoryIds(userId), getActiveSpecialtyIds(userId)])
 
-        if (!categoryIds.length) {
-                throw new UnprocessableEntityException('Select categories first', ErrorCode.UNPROCESSABLE_ENTITY)
-        }
+	if (!categoryIds.length) {
+		throw new UnprocessableEntityException('Select categories first', ErrorCode.UNPROCESSABLE_ENTITY)
+	}
 
-        if (specialtyIds.length) {
-                const isValidForSpecialty = await prismaClient.specialtySkill.count({
-                        where: { specialtyId: { in: specialtyIds }, skillId, isDeleted: false }
-                })
-                if (!isValidForSpecialty)
-                        throw new UnprocessableEntityException(
-                                'Skill must belong to selected specialties',
-                                ErrorCode.UNPROCESSABLE_ENTITY
-                        )
-        } else {
-                const isValidForCategory = await prismaClient.categorySkill.count({
-                        where: { categoryId: { in: categoryIds }, skillId, isDeleted: false }
-                })
-                if (!isValidForCategory)
-                        throw new UnprocessableEntityException(
-                                'Skill must belong to selected categories',
-                                ErrorCode.UNPROCESSABLE_ENTITY
-                        )
-        }
+	if (specialtyIds.length) {
+		const isValidForSpecialty = await prismaClient.specialtySkill.count({
+			where: { specialtyId: { in: specialtyIds }, skillId, isDeleted: false }
+		})
+		if (!isValidForSpecialty)
+			throw new UnprocessableEntityException(
+				'Skill must belong to selected specialties',
+				ErrorCode.UNPROCESSABLE_ENTITY
+			)
+	} else {
+		const isValidForCategory = await prismaClient.categorySkill.count({
+			where: { categoryId: { in: categoryIds }, skillId, isDeleted: false }
+		})
+		if (!isValidForCategory)
+			throw new UnprocessableEntityException('Skill must belong to selected categories', ErrorCode.UNPROCESSABLE_ENTITY)
+	}
 
-        const existing = await prismaClient.freelancerSkillSelection.findFirst({
-                where: { userId, skillId },
-                select: { id: true, isDeleted: true }
-        })
+	const existing = await prismaClient.freelancerSkillSelection.findFirst({
+		where: { userId, skillId },
+		select: { id: true, isDeleted: true }
+	})
 
-        if (existing && !existing.isDeleted) {
-                return { success: true }
-        }
+	if (existing && !existing.isDeleted) {
+		return { success: true }
+	}
 
-        const activeCount = await prismaClient.freelancerSkillSelection.count({
-                where: { userId, isDeleted: false }
-        })
+	const activeCount = await prismaClient.freelancerSkillSelection.count({
+		where: { userId, isDeleted: false }
+	})
 
-        if (activeCount >= TAXONOMY_LIMITS.maxSkills && (!existing || existing.isDeleted))
-                throw new UnprocessableEntityException(
-                        `You can only attach up to ${TAXONOMY_LIMITS.maxSkills} skills`,
-                        ErrorCode.UNPROCESSABLE_ENTITY
-                )
+	if (activeCount >= TAXONOMY_LIMITS.maxSkills && (!existing || existing.isDeleted))
+		throw new UnprocessableEntityException(
+			`You can only attach up to ${TAXONOMY_LIMITS.maxSkills} skills`,
+			ErrorCode.UNPROCESSABLE_ENTITY
+		)
 
-        if (existing) {
-                await prismaClient.freelancerSkillSelection.update({
-                        where: { id: existing.id },
-                        data: { isDeleted: false, deletedAt: null, deletedBy: null, pickedAt: now }
-                })
-                return { success: true }
-        }
+	if (existing) {
+		await prismaClient.freelancerSkillSelection.update({
+			where: { id: existing.id },
+			data: { isDeleted: false, deletedAt: null, deletedBy: null, pickedAt: now }
+		})
+		return { success: true }
+	}
 
-        await prismaClient.freelancerSkillSelection.create({
-                data: { userId, skillId, pickedAt: now }
-        })
+	await prismaClient.freelancerSkillSelection.create({
+		data: { userId, skillId, pickedAt: now }
+	})
 
-        return { success: true }
+	return { success: true }
 }
 
 export async function detachOneSkill(userId: string, skillId: string) {
-        const existing = await prismaClient.freelancerSkillSelection.findFirst({
-                where: { userId, skillId, isDeleted: false },
-                select: { id: true }
-        })
+	const existing = await prismaClient.freelancerSkillSelection.findFirst({
+		where: { userId, skillId, isDeleted: false },
+		select: { id: true }
+	})
 
-        if (!existing)
-                throw new BadRequestException('Skill not attached to freelancer', ErrorCode.ITEM_NOT_FOUND)
+	if (!existing) throw new BadRequestException('Skill not attached to freelancer', ErrorCode.ITEM_NOT_FOUND)
 
-        await prismaClient.freelancerSkillSelection.update({
-                where: { id: existing.id },
-                data: { isDeleted: true, deletedAt: new Date(), deletedBy: userId }
-        })
+	await prismaClient.freelancerSkillSelection.update({
+		where: { id: existing.id },
+		data: { isDeleted: true, deletedAt: new Date(), deletedBy: userId }
+	})
 
-        return { success: true }
+	return { success: true }
 }
