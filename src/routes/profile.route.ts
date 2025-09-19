@@ -15,7 +15,13 @@ import {
 } from '~/controllers/freelancer/education.controller'
 import { getFreelancerProfile, updateFreelancerProfile } from '~/controllers/freelancer/root.controller'
 import { uploadImages } from '~/middlewares/multer'
-import { attachSkills, getCategoryAndSpecialty, getSkill } from '~/controllers/freelancer/taxonomy-selection.controller'
+import {
+        attachSkill,
+        attachSkills,
+        detachSkill,
+        getCategoryAndSpecialty,
+        getSkill
+} from '~/controllers/freelancer/taxonomy-selection.controller'
 
 const router: Router = Router()
 
@@ -38,5 +44,8 @@ router.put('/:userId/freelancer', authenticateMiddleware, errorHandler(updateFre
 router.get('/:id/cat-spe', errorHandler(getCategoryAndSpecialty))
 
 router.get('/:id/skill', errorHandler(getSkill))
+
+router.post('/:id/skill', authenticateMiddleware, errorHandler(attachSkill))
+router.delete('/:id/skill/:skillId', authenticateMiddleware, errorHandler(detachSkill))
 
 export default router
