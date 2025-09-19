@@ -42,18 +42,28 @@ export async function getActiveSpecialtyIds(userId: string) {
 	return rows.map(r => r.specialtyId)
 }
 
-export async function getAllCategoryAndSpecialty(userId: string) {
+export async function getAllCategory(userId: string) {
 	return prismaClient.category.findMany({
 		where: {
 			freelancerCategorySelection: {
-				every: {
+				some: {
 					userId,
-					isDeleted: true
+					isDeleted: false
 				}
 			}
-		},
-		include: {
-			specialties: true
+		}
+	})
+}
+
+export async function getAllSpecialty(userId: string) {
+	return prismaClient.specialty.findMany({
+		where: {
+			freelancerSpecialtySelection: {
+				some: {
+					userId,
+					isDeleted: false
+				}
+			}
 		}
 	})
 }
@@ -62,9 +72,9 @@ export async function getAllSkill(userId: string) {
 	return prismaClient.skill.findMany({
 		where: {
 			freelancerSkillSelection: {
-				every: {
+				some: {
 					userId,
-					isDeleted: true
+					isDeleted: false
 				}
 			}
 		}

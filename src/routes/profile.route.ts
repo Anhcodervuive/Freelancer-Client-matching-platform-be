@@ -16,11 +16,12 @@ import {
 import { getFreelancerProfile, updateFreelancerProfile } from '~/controllers/freelancer/root.controller'
 import { uploadImages } from '~/middlewares/multer'
 import {
-        attachSkill,
-        attachSkills,
-        detachSkill,
-        getCategoryAndSpecialty,
-        getSkill
+	attachSkill,
+	attachSkills,
+	detachSkill,
+	getCategory,
+	getSkill,
+	getSpecialty
 } from '~/controllers/freelancer/taxonomy-selection.controller'
 
 const router: Router = Router()
@@ -41,7 +42,8 @@ router.delete('/:userId/education/:educationId', authenticateMiddleware, errorHa
 router.get('/:userId/freelancer', authenticateMiddleware, errorHandler(getFreelancerProfile))
 router.put('/:userId/freelancer', authenticateMiddleware, errorHandler(updateFreelancerProfile))
 
-router.get('/:id/cat-spe', errorHandler(getCategoryAndSpecialty))
+router.get('/:id/category', errorHandler(getCategory))
+router.get('/:id/specialty', errorHandler(getSpecialty))
 
 router.get('/:id/skill', errorHandler(getSkill))
 
