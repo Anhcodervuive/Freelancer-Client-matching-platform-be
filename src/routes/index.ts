@@ -14,7 +14,7 @@ const rootRouter: Router = Router()
 
 rootRouter.use('/auth', authRouter)
 rootRouter.use('/onboarding', onboardingRoute)
-rootRouter.use('/me', profileRoute)
+rootRouter.use('/profile', profileRoute)
 rootRouter.use('/payment-method', paymentMethodRoute)
 rootRouter.use('/category', categoryRoute, categorySkillRoute)
 rootRouter.use('/specialty', specialtyRoute, specialtySkillRoute)

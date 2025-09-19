@@ -40,6 +40,33 @@ export async function getActiveSpecialtyIds(userId: string) {
 	return rows.map(r => r.specialtyId)
 }
 
+export async function getAllCategoryAndSpecialty(userId: string) {
+	return prismaClient.category.findMany({
+		where: {
+			freelancerCategorySelection: {
+				every: {
+					userId
+				}
+			}
+		},
+		include: {
+			specialties: true
+		}
+	})
+}
+
+export async function getAllSkill(userId: string) {
+	return prismaClient.skill.findMany({
+		where: {
+			freelancerSkillSelection: {
+				every: {
+					userId
+				}
+			}
+		}
+	})
+}
+
 /** STEP 1: soft-replace categories + specialties cùng lúc */
 export async function setCategoriesAndSpecialties(userId: string, categoryIds: string[], specialtyIds: string[]) {
 	const now = new Date()

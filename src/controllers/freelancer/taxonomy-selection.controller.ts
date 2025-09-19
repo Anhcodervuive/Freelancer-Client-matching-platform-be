@@ -1,11 +1,39 @@
 import { Request, Response } from 'express'
+import { StatusCodes } from 'http-status-codes'
+import { BadRequestException } from '~/exceptions/bad-request'
+import { ErrorCode } from '~/exceptions/root'
+import { UnprocessableEntityException } from '~/exceptions/validation'
 import { SetCatSpecSchema, SetSkillsSchema } from '~/schema/freelancer-taxonomy-selection'
 import {
 	assertCategoriesExist,
 	assertSpecialtiesInCategories,
 	setCategoriesAndSpecialties,
-	setSkills
-} from '~/services/freelancer/taxonomy-selection'
+	setSkills,
+	getAllCategoryAndSpecialty,
+	getAllSkill
+} from '~/services/freelancer/taxonomy-selection.service'
+
+export const getCategoryAndSpecialty = async (req: Request, res: Response) => {
+	const { id: userId } = req.params
+	if (!userId) {
+		throw new BadRequestException('Missing userId', ErrorCode.PARAM_QUERY_ERROR)
+	}
+
+	const result = await getAllCategoryAndSpecialty(userId!)
+
+	return res.status(StatusCodes.OK).json(result)
+}
+
+export const getSkill = async (req: Request, res: Response) => {
+	const { id: userId } = req.params
+	if (!userId) {
+		throw new BadRequestException('Missing userId', ErrorCode.PARAM_QUERY_ERROR)
+	}
+
+	const result = await getAllSkill(userId!)
+
+	return res.status(StatusCodes.OK).json(result)
+}
 
 export const attacCategoryAndSpecialty = async (req: Request, res: Response) => {
 	const userId = req.user?.id
