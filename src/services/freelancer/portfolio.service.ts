@@ -424,14 +424,23 @@ const hydratePortfolios = async (portfolios: PortfolioWithSkills[]): Promise<Por
         })
 }
 
-const listPortfolios = async (freelancerId: string, includePrivate: boolean): Promise<PortfolioView[]> => {
+const listPortfolios = async (
+        freelancerId: string,
+        includePrivate: boolean,
+        visibilityFilter?: PortfolioVisibility
+): Promise<PortfolioView[]> => {
         await ensureFreelancerExists(freelancerId)
 
+        const where: Prisma.PortfolioProjectWhereInput = { freelancerId }
+
+        if (visibilityFilter) {
+                where.visibility = visibilityFilter
+        } else if (!includePrivate) {
+                where.visibility = PortfolioVisibility.PUBLIC
+        }
+
         const portfolios = await prismaClient.portfolioProject.findMany({
-                where: {
-                        freelancerId,
-                        ...(includePrivate ? {} : { visibility: PortfolioVisibility.PUBLIC })
-                },
+                where,
                 orderBy: { createdAt: 'desc' },
                 include: portfolioInclude
         })

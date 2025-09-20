@@ -1,4 +1,5 @@
 import { type Express, Request, Response } from 'express'
+import { PortfolioVisibility } from '~/generated/prisma'
 import { StatusCodes } from 'http-status-codes'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
@@ -122,6 +123,25 @@ const transformPortfolioBody = (body: PortfolioFormBody) => ({
         skillIds: normalizeStringArray(body.skillIds)
 })
 
+const parseVisibilityFilter = (value: unknown): PortfolioVisibility | undefined => {
+        const str = asSingleString(value)
+        if (str === undefined) return undefined
+
+        const normalized = str.trim().toUpperCase()
+        if (!normalized) return undefined
+
+        switch (normalized) {
+                case PortfolioVisibility.PUBLIC:
+                        return PortfolioVisibility.PUBLIC
+                case PortfolioVisibility.PRIVATE:
+                        return PortfolioVisibility.PRIVATE
+                case PortfolioVisibility.DRAFT:
+                        return PortfolioVisibility.DRAFT
+                default:
+                        throw new BadRequestException('Trạng thái hiển thị không hợp lệ', ErrorCode.PARAM_QUERY_ERROR)
+        }
+}
+
 const extractPortfolioMedia = (req: Request): PortfolioMediaUploads => {
         const files = req.files
         const payload: PortfolioMediaUploads = { galleryFiles: [] }
@@ -154,7 +174,17 @@ export const listPortfolios = async (req: Request, res: Response) => {
         }
 
         const includePrivate = req.user?.id === freelancerId
-        const portfolios = await portfolioService.listPortfolios(freelancerId, includePrivate)
+        const visibilityFilter = parseVisibilityFilter(req.query.visibility)
+
+        if (!includePrivate && visibilityFilter && visibilityFilter !== PortfolioVisibility.PUBLIC) {
+                throw new UnauthorizedException('Bạn không có quyền xem portfolio ở trạng thái này', ErrorCode.USER_NOT_AUTHORITY)
+        }
+
+        const portfolios = await portfolioService.listPortfolios(
+                freelancerId,
+                includePrivate,
+                visibilityFilter
+        )
 
         return res.status(StatusCodes.OK).json(portfolios)
 }
