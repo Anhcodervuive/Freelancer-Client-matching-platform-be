@@ -19,15 +19,21 @@ export function makeMulter({ allowed, maxSizeMB, maxFiles }: MulterOpts) {
 
 // Preset: chỉ ảnh
 export const uploadImages = makeMulter({
-	allowed: [/^image\/(jpeg|png|webp|avif)$/],
-	maxSizeMB: 5,
-	maxFiles: 12
+        allowed: [/^image\/(jpeg|png|webp|avif)$/],
+        maxSizeMB: 5,
+        maxFiles: 12
+})
+
+export const uploadPortfolioMedia = makeMulter({
+        allowed: [/^image\//, /^video\//],
+        maxSizeMB: 50,
+        maxFiles: 15
 })
 
 // Preset: tài liệu chung (PDF/ZIP/DOCX/PNG/JPG…)
 export const uploadAnyFiles = makeMulter({
-	allowed: [
-		/^image\/(jpeg|png|webp|avif)$/,
+        allowed: [
+                /^image\/(jpeg|png|webp|avif)$/,
 		/^application\/(pdf|zip|x-zip-compressed|msword|vnd.openxmlformats-officedocument\.wordprocessingml\.document)$/
 	],
 	maxSizeMB: 20,

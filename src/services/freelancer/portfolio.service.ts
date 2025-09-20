@@ -1,11 +1,16 @@
+import type { Express } from 'express'
+import { CLOUDINARY_CONFIG_INFO } from '~/config/environment'
 import { prismaClient } from '~/config/prisma-client'
 import {
         AssetKind,
         AssetOwnerType,
+        AssetProvider,
         AssetRole,
+        AssetStatus,
         PortfolioVisibility,
         Prisma
 } from '~/generated/prisma'
+import { uploadBufferToCloudinary, destroyCloudinary } from '~/providers/cloudinaryProvider.provider'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
@@ -17,13 +22,42 @@ type TransactionClient = Parameters<
         Extract<Parameters<typeof prismaClient.$transaction>[0], (client: any) => unknown>
 >[0]
 
+export type PortfolioMediaUploads = {
+        coverFile?: Express.Multer.File
+        galleryFiles?: Express.Multer.File[]
+}
+
+type CloudinaryUploadResult = {
+        public_id: string
+        secure_url?: string
+        url?: string
+        bytes?: number
+        width?: number
+        height?: number
+        format?: string
+        resource_type?: string
+        folder?: string
+        duration?: number
+        asset_id?: string
+}
+
+type UploadedMedia = {
+        file: Express.Multer.File
+        upload: CloudinaryUploadResult
+}
+
+type UploadedPortfolioMedia = {
+        cover?: UploadedMedia
+        gallery: UploadedMedia[]
+}
+
 const portfolioInclude = {
         skills: {
                 include: {
                         skill: true
                 }
         }
-} satisfies Prisma.PortfolioProjectInclude
+} as const
 
 const uniquePreserveOrder = (ids: readonly string[]) => {
         const seen = new Set<string>()
@@ -36,9 +70,100 @@ const uniquePreserveOrder = (ids: readonly string[]) => {
         return result
 }
 
-type PortfolioWithSkills = Prisma.PortfolioProjectGetPayload<{
-        include: typeof portfolioInclude
-}>
+const determineAssetKind = (mime: string): AssetKind =>
+        mime.startsWith('image/') ? AssetKind.IMAGE : mime.startsWith('video/') ? AssetKind.VIDEO : AssetKind.FILE
+
+const portfolioFolderForFreelancer = (freelancerId: string) => {
+        const base = CLOUDINARY_CONFIG_INFO.PORTFOLIO_FOLDER || 'portfolio'
+        return [base, freelancerId].filter(Boolean).join('/')
+}
+
+const cleanupUploadedMedia = async (uploaded: UploadedPortfolioMedia) => {
+        const tasks: Promise<unknown>[] = []
+        if (uploaded.cover?.upload.public_id) {
+                tasks.push(destroyCloudinary(uploaded.cover.upload.public_id, uploaded.cover.file.mimetype))
+        }
+        for (const item of uploaded.gallery) {
+                if (item.upload.public_id) {
+                        tasks.push(destroyCloudinary(item.upload.public_id, item.file.mimetype))
+                }
+        }
+        if (tasks.length > 0) {
+                await Promise.allSettled(tasks)
+        }
+}
+
+const uploadPortfolioMediaFiles = async (
+        freelancerId: string,
+        media?: PortfolioMediaUploads
+): Promise<UploadedPortfolioMedia> => {
+        const folder = portfolioFolderForFreelancer(freelancerId)
+        const uploaded: UploadedPortfolioMedia = { gallery: [] }
+
+        if (!media) return uploaded
+
+        try {
+                if (media.coverFile) {
+                        uploaded.cover = {
+                                file: media.coverFile,
+                                upload: (await uploadBufferToCloudinary(media.coverFile.buffer, {
+                                        folder,
+                                        mime: media.coverFile.mimetype
+                                })) as CloudinaryUploadResult
+                        }
+                }
+
+                for (const file of media.galleryFiles ?? []) {
+                        uploaded.gallery.push({
+                                file,
+                                upload: (await uploadBufferToCloudinary(file.buffer, {
+                                        folder,
+                                        mime: file.mimetype
+                                })) as CloudinaryUploadResult
+                        })
+                }
+
+                return uploaded
+        } catch (error) {
+                await cleanupUploadedMedia(uploaded)
+                throw error
+        }
+}
+
+const createAssetFromUpload = async (
+        tx: TransactionClient,
+        item: UploadedMedia,
+        actorId: string
+): Promise<string> => {
+        const meta: Prisma.JsonObject = {
+                originalName: item.file.originalname
+        }
+        if (item.upload.format) meta.format = item.upload.format
+        if (item.upload.resource_type) meta.resourceType = item.upload.resource_type
+        if (item.upload.folder) meta.folder = item.upload.folder
+        if (item.upload.duration !== undefined) meta.duration = item.upload.duration
+        if (item.upload.asset_id) meta.assetId = item.upload.asset_id
+
+        const asset = await tx.asset.create({
+                data: {
+                        provider: AssetProvider.CLOUDINARY,
+                        kind: determineAssetKind(item.file.mimetype),
+                        publicId: item.upload.public_id,
+                        url: item.upload.secure_url ?? item.upload.url ?? null,
+                        mimeType: item.file.mimetype,
+                        bytes: item.upload.bytes ?? item.file.size ?? null,
+                        width: item.upload.width ?? null,
+                        height: item.upload.height ?? null,
+                        createdBy: actorId,
+                        status: AssetStatus.READY,
+                        meta
+                }
+        })
+
+        return asset.id
+}
+
+type PortfolioWithSkills = Prisma.PortfolioProjectGetPayload<{ include: typeof portfolioInclude }>
 
 type AssetLinkWithAsset = Prisma.AssetLinkGetPayload<{
         include: { asset: true }
@@ -267,10 +392,10 @@ const hydratePortfolios = async (portfolios: PortfolioWithSkills[]): Promise<Por
                         publishedAt: portfolio.publishedAt ?? null,
                         createdAt: portfolio.createdAt,
                         updatedAt: portfolio.updatedAt,
-                        skills: portfolio.skills.map(({ skill }) => ({
-                                id: skill.id,
-                                name: skill.name,
-                                slug: skill.slug
+                        skills: portfolio.skills.map(relation => ({
+                                id: relation.skill.id,
+                                name: relation.skill.name,
+                                slug: relation.skill.slug
                         })),
                         coverAsset: assets.cover,
                         galleryAssets: assets.gallery
@@ -308,7 +433,7 @@ const getPortfolioById = async (
         })
 
         if (!portfolio) {
-                        throw new NotFoundException('Portfolio không tồn tại', ErrorCode.ITEM_NOT_FOUND)
+                throw new NotFoundException('Portfolio không tồn tại', ErrorCode.ITEM_NOT_FOUND)
         }
 
         const [result] = await hydratePortfolios([portfolio])
@@ -321,17 +446,23 @@ const getPortfolioById = async (
 const createPortfolio = async (
         freelancerId: string,
         data: CreatePortfolioInput,
-        actorId: string
+        actorId: string,
+        media: PortfolioMediaUploads = {}
 ): Promise<PortfolioView> => {
         await ensureFreelancerExists(freelancerId)
 
         const skillIds = await validateSkillIds(data.skillIds)
-        const galleryAssetIds = data.galleryAssetIds ? uniquePreserveOrder(data.galleryAssetIds) : []
+        const hasGalleryIdsInPayload = data.galleryAssetIds !== undefined
+        const galleryAssetIds = hasGalleryIdsInPayload
+                ? uniquePreserveOrder(data.galleryAssetIds ?? [])
+                : []
         const assetIds = new Set<string>()
 
         if (data.coverAssetId) assetIds.add(data.coverAssetId)
         for (const assetId of galleryAssetIds) assetIds.add(assetId)
         await validateAssetIds(assetIds)
+
+        const uploads = await uploadPortfolioMediaFiles(freelancerId, media)
 
         const visibility = data.visibility ?? PortfolioVisibility.PUBLIC
         const explicitPublishedAt = data.publishedAt ?? null
@@ -342,47 +473,79 @@ const createPortfolio = async (
                         ? new Date()
                         : null
 
-        const created = await prismaClient.$transaction(async (tx: TransactionClient) => {
-                const createdPortfolio = await tx.portfolioProject.create({
-                        data: {
-                                freelancerId,
-                                title: data.title,
-                                role: data.role ?? null,
-                                description: data.description ?? null,
-                                projectUrl: data.projectUrl ?? null,
-                                repositoryUrl: data.repositoryUrl ?? null,
-                                visibility,
-                                startedAt: data.startedAt ?? null,
-                                completedAt: data.completedAt ?? null,
-                                publishedAt
+        try {
+                const created = await prismaClient.$transaction(async (tx: TransactionClient) => {
+                        const createdPortfolio = await tx.portfolioProject.create({
+                                data: {
+                                        freelancerId,
+                                        title: data.title,
+                                        role: data.role ?? null,
+                                        description: data.description ?? null,
+                                        projectUrl: data.projectUrl ?? null,
+                                        repositoryUrl: data.repositoryUrl ?? null,
+                                        visibility,
+                                        startedAt: data.startedAt ?? null,
+                                        completedAt: data.completedAt ?? null,
+                                        publishedAt
+                                }
+                        })
+
+                        if (skillIds.length > 0) {
+                                await tx.portfolioSkill.createMany({
+                                        data: skillIds.map(skillId => ({ portfolioId: createdPortfolio.id, skillId }))
+                                })
                         }
+
+                        let coverAssetIdFromUploads: string | undefined
+                        if (uploads.cover) {
+                                coverAssetIdFromUploads = await createAssetFromUpload(tx, uploads.cover, actorId)
+                        }
+
+                        const newGalleryAssetIds: string[] = []
+                        for (const item of uploads.gallery) {
+                                const id = await createAssetFromUpload(tx, item, actorId)
+                                newGalleryAssetIds.push(id)
+                        }
+
+                        const assetPayload: { coverAssetId?: string | null; galleryAssetIds?: readonly string[] } = {}
+
+                        if (uploads.cover && coverAssetIdFromUploads) {
+                                assetPayload.coverAssetId = coverAssetIdFromUploads
+                        } else if (data.coverAssetId !== undefined) {
+                                assetPayload.coverAssetId = data.coverAssetId
+                        }
+
+                        if (uploads.gallery.length > 0 || hasGalleryIdsInPayload) {
+                                const baseGallery = hasGalleryIdsInPayload ? [...galleryAssetIds] : []
+                                const combined = uniquePreserveOrder([...baseGallery, ...newGalleryAssetIds])
+                                const coverIdForFilter = uploads.cover
+                                        ? coverAssetIdFromUploads ?? undefined
+                                        : typeof data.coverAssetId === 'string'
+                                        ? data.coverAssetId
+                                        : undefined
+                                assetPayload.galleryAssetIds = coverIdForFilter
+                                        ? combined.filter(id => id !== coverIdForFilter)
+                                        : combined
+                        }
+
+                        await syncPortfolioAssets(tx, createdPortfolio.id, assetPayload, actorId)
+
+                        return createdPortfolio
                 })
 
-                if (skillIds.length > 0) {
-                        await tx.portfolioSkill.createMany({
-                                data: skillIds.map(skillId => ({ portfolioId: createdPortfolio.id, skillId }))
-                        })
-                }
-
-                const assetPayload: { coverAssetId?: string | null; galleryAssetIds?: readonly string[] } = {}
-                if (data.coverAssetId) {
-                        assetPayload.coverAssetId = data.coverAssetId
-                }
-                assetPayload.galleryAssetIds = galleryAssetIds
-
-                await syncPortfolioAssets(tx, createdPortfolio.id, assetPayload, actorId)
-
-                return createdPortfolio
-        })
-
-        return getPortfolioById(freelancerId, created.id, true)
+                return getPortfolioById(freelancerId, created.id, true)
+        } catch (error) {
+                await cleanupUploadedMedia(uploads)
+                throw error
+        }
 }
 
 const updatePortfolio = async (
         freelancerId: string,
         portfolioId: string,
         data: UpdatePortfolioInput,
-        actorId: string
+        actorId: string,
+        media: PortfolioMediaUploads = {}
 ): Promise<PortfolioView> => {
         const existing = await prismaClient.portfolioProject.findFirst({
                 where: { id: portfolioId, freelancerId },
@@ -394,11 +557,13 @@ const updatePortfolio = async (
         }
 
         const skillIds = data.skillIds !== undefined ? await validateSkillIds(data.skillIds) : undefined
-        const galleryAssetIds =
-                data.galleryAssetIds !== undefined ? uniquePreserveOrder(data.galleryAssetIds) : undefined
+        const hasGalleryIdsInPayload = data.galleryAssetIds !== undefined
+        const galleryAssetIds = hasGalleryIdsInPayload
+                ? uniquePreserveOrder(data.galleryAssetIds ?? [])
+                : undefined
 
         const assetIds = new Set<string>()
-        if (data.coverAssetId) assetIds.add(data.coverAssetId)
+        if (typeof data.coverAssetId === 'string') assetIds.add(data.coverAssetId)
         if (galleryAssetIds) {
                 for (const assetId of galleryAssetIds) assetIds.add(assetId)
         }
@@ -440,28 +605,94 @@ const updatePortfolio = async (
                 updateData.publishedAt = nextPublishedAt
         }
 
-        await prismaClient.$transaction(async (tx: TransactionClient) => {
-                await tx.portfolioProject.update({
-                        where: { id: existing.id },
-                        data: updateData
+        const uploads = await uploadPortfolioMediaFiles(freelancerId, media)
+
+        try {
+                await prismaClient.$transaction(async (tx: TransactionClient) => {
+                        await tx.portfolioProject.update({
+                                where: { id: existing.id },
+                                data: updateData
+                        })
+
+                        if (skillIds !== undefined) {
+                                await setPortfolioSkills(tx, existing.id, skillIds)
+                        }
+
+                        let coverAssetIdFromUploads: string | undefined
+                        if (uploads.cover) {
+                                coverAssetIdFromUploads = await createAssetFromUpload(tx, uploads.cover, actorId)
+                        }
+
+                        const newGalleryAssetIds: string[] = []
+                        for (const item of uploads.gallery) {
+                                const id = await createAssetFromUpload(tx, item, actorId)
+                                newGalleryAssetIds.push(id)
+                        }
+
+                        const shouldUpdateCover = uploads.cover !== undefined || data.coverAssetId !== undefined
+                        const shouldUpdateGallery = uploads.gallery.length > 0 || hasGalleryIdsInPayload
+
+                        const assetPayload: { coverAssetId?: string | null; galleryAssetIds?: readonly string[] } = {}
+
+                        if (shouldUpdateCover) {
+                                if (uploads.cover && coverAssetIdFromUploads) {
+                                        assetPayload.coverAssetId = coverAssetIdFromUploads
+                                } else {
+                                        assetPayload.coverAssetId = data.coverAssetId ?? null
+                                }
+                        }
+
+                        if (shouldUpdateGallery) {
+                                let baseGallery: string[]
+                                if (hasGalleryIdsInPayload) {
+                                        baseGallery = [...(galleryAssetIds ?? [])]
+                                } else {
+                                        const existingGallery = await tx.assetLink.findMany({
+                                                where: {
+                                                        ownerType: OWNER_TYPE,
+                                                        ownerId: existing.id,
+                                                        role: AssetRole.GALLERY
+                                                },
+                                                orderBy: { position: 'asc' },
+                                                select: { assetId: true }
+                                        })
+                                        baseGallery = existingGallery.map(link => link.assetId)
+                                }
+
+                                baseGallery.push(...newGalleryAssetIds)
+                                let coverIdForFilter: string | undefined
+                                if (uploads.cover) {
+                                        coverIdForFilter = coverAssetIdFromUploads ?? undefined
+                                } else if (typeof data.coverAssetId === 'string') {
+                                        coverIdForFilter = data.coverAssetId
+                                } else {
+                                        const existingCover = await tx.assetLink.findFirst({
+                                                where: {
+                                                        ownerType: OWNER_TYPE,
+                                                        ownerId: existing.id,
+                                                        role: AssetRole.COVER
+                                                },
+                                                select: { assetId: true }
+                                        })
+                                        if (existingCover?.assetId) {
+                                                coverIdForFilter = existingCover.assetId
+                                        }
+                                }
+
+                                const combined = uniquePreserveOrder(baseGallery)
+                                assetPayload.galleryAssetIds = coverIdForFilter
+                                        ? combined.filter(id => id !== coverIdForFilter)
+                                        : combined
+                        }
+
+                        await syncPortfolioAssets(tx, existing.id, assetPayload, actorId)
                 })
 
-                if (skillIds !== undefined) {
-                        await setPortfolioSkills(tx, existing.id, skillIds)
-                }
-
-                const assetPayload: { coverAssetId?: string | null; galleryAssetIds?: readonly string[] } = {}
-                if (data.coverAssetId !== undefined) {
-                        assetPayload.coverAssetId = data.coverAssetId
-                }
-                if (galleryAssetIds !== undefined) {
-                        assetPayload.galleryAssetIds = galleryAssetIds
-                }
-
-                await syncPortfolioAssets(tx, existing.id, assetPayload, actorId)
-        })
-
-        return getPortfolioById(freelancerId, portfolioId, true)
+                return getPortfolioById(freelancerId, portfolioId, true)
+        } catch (error) {
+                await cleanupUploadedMedia(uploads)
+                throw error
+        }
 }
 
 const deletePortfolio = async (freelancerId: string, portfolioId: string, actorId: string): Promise<void> => {
