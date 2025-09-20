@@ -9,6 +9,7 @@ import categorySkillRoute from './category-skill.routes'
 import specialtyRoute from './specialties.route'
 import specialtySkillRoute from './specialty-skill.routes'
 import skillRoute from './skill.route'
+import portfolioRoute from './portfolio.route'
 
 const rootRouter: Router = Router()
 
@@ -19,5 +20,6 @@ rootRouter.use('/payment-method', paymentMethodRoute)
 rootRouter.use('/category', categoryRoute, categorySkillRoute)
 rootRouter.use('/specialty', specialtyRoute, specialtySkillRoute)
 rootRouter.use('/skill', skillRoute)
+rootRouter.use('/portfolio', portfolioRoute)
 
 export default rootRouter

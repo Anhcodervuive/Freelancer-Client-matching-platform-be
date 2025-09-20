@@ -34,13 +34,14 @@ export const GOOGLE = {
 }
 
 export const CLOUDINARY_CONFIG_INFO = {
-	CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
-	API_KEY: process.env.CLOUDINARY_API_KEY,
-	API_SECRET: process.env.CLOUDINARY_API_SECRET,
+        CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
+        API_KEY: process.env.CLOUDINARY_API_KEY,
+        API_SECRET: process.env.CLOUDINARY_API_SECRET,
 
-	BASE_FOLDER: 'lvtn',
+        BASE_FOLDER: 'lvtn',
 
-	PROFILE_FOLDER: 'user'
+        PROFILE_FOLDER: 'user',
+        PORTFOLIO_FOLDER: 'portfolio'
 }
 
 export const STRIPE_CONFIG_INFO = {
