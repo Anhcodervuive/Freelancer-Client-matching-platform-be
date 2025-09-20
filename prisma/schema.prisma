@@ -124,11 +124,61 @@
     freelancerCategorySelection FreelancerCategorySelection[]
     freelancerSpecialtySelection FreelancerSpecialtySelection[]
     freelancerSkillSelection FreelancerSkillSelection[]
+    portfolios PortfolioProject[]
 
     createdAt    DateTime  @default(now()) @map("created_at")
     updatedAt    DateTime  @updatedAt      @map("updated_at")
 
     @@map("freelancer")
+  }
+
+  enum PortfolioVisibility {
+    PUBLIC
+    PRIVATE
+    DRAFT
+  }
+
+  model PortfolioProject {
+    id            String              @id @default(cuid())
+    freelancerId  String              @map("freelancer_id")
+    freelancer    Freelancer          @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+    title         String              @db.VarChar(255)
+    role          String?             @db.VarChar(255)
+    description   String?             @db.MediumText
+    projectUrl    String?             @map("project_url")
+    repositoryUrl String?             @map("repository_url")
+    visibility    PortfolioVisibility @default(PUBLIC)
+
+    startedAt   DateTime? @map("started_at")
+    completedAt DateTime? @map("completed_at")
+    publishedAt DateTime? @map("published_at")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt      @map("updated_at")
+
+    isDeleted Boolean  @default(false) @map("is_deleted")
+    deletedAt DateTime? @map("deleted_at")
+    deletedBy String?   @map("deleted_by")
+
+    skills PortfolioSkill[]
+
+    @@index([freelancerId, isDeleted])
+    @@map("portfolio_project")
+  }
+
+  model PortfolioSkill {
+    portfolioId String @map("portfolio_id")
+    skillId     String @map("skill_id")
+    note        String? @db.VarChar(255)
+    createdAt   DateTime @default(now()) @map("created_at")
+
+    portfolio PortfolioProject @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+    skill     Skill            @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+    @@id([portfolioId, skillId])
+    @@index([skillId])
+    @@map("portfolio_skill")
   }
 
   model Education {
@@ -242,6 +292,7 @@
     USER
     JOB
     MESSAGE
+    PORTFOLIO
   }
 
   model AssetLink {
@@ -575,6 +626,7 @@ model Skill {
   specialties SpecialtySkill[]
 
   freelancerSkillSelection FreelancerSkillSelection[]
+  portfolioSkills PortfolioSkill[]
 
   @@index([name, isDeleted])
   @@index([slug, isDeleted])

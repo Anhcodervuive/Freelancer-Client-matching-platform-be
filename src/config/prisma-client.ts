@@ -15,7 +15,8 @@ const SOFT_MODELS = new Set<string>([
 	'SpecialtySkill',
 	'FreelancerCategorySelection',
 	'FreelancerSpecialtySelection',
-	'FreelancerSkillSelection'
+        'FreelancerSkillSelection',
+        'PortfolioProject'
 ])
 // helper: tên property delegate trên PrismaClient là lowerCamelCase
 const toDelegate = (model: string) => (model && model.length > 0 ? model[0]?.toLowerCase() + model.slice(1) : '')
