@@ -51,6 +51,13 @@ type UploadedPortfolioMedia = {
         gallery: UploadedMedia[]
 }
 
+type AssetRemovalCandidate = {
+        assetId: string
+        provider: AssetProvider | null
+        publicId: string | null
+        mimeType: string | null
+}
+
 const portfolioInclude = {
         skills: {
                 include: {
@@ -88,6 +95,20 @@ const cleanupUploadedMedia = async (uploaded: UploadedPortfolioMedia) => {
                         tasks.push(destroyCloudinary(item.upload.public_id, item.file.mimetype))
                 }
         }
+        if (tasks.length > 0) {
+                await Promise.allSettled(tasks)
+        }
+}
+
+const cleanupRemovedAssets = async (assets: readonly AssetRemovalCandidate[]) => {
+        const tasks: Promise<unknown>[] = []
+
+        for (const asset of assets) {
+                if (asset.provider === AssetProvider.CLOUDINARY && asset.publicId) {
+                        tasks.push(destroyCloudinary(asset.publicId, asset.mimeType ?? undefined))
+                }
+        }
+
         if (tasks.length > 0) {
                 await Promise.allSettled(tasks)
         }
@@ -556,6 +577,14 @@ const updatePortfolio = async (
                 throw new NotFoundException('Portfolio không tồn tại', ErrorCode.ITEM_NOT_FOUND)
         }
 
+        const existingAssetLinks = await prismaClient.assetLink.findMany({
+                where: {
+                        ownerType: OWNER_TYPE,
+                        ownerId: existing.id
+                },
+                include: { asset: true }
+        })
+
         const skillIds = data.skillIds !== undefined ? await validateSkillIds(data.skillIds) : undefined
         const hasGalleryIdsInPayload = data.galleryAssetIds !== undefined
         const galleryAssetIds = hasGalleryIdsInPayload
@@ -606,6 +635,8 @@ const updatePortfolio = async (
         }
 
         const uploads = await uploadPortfolioMediaFiles(freelancerId, media)
+
+        let assetsPendingRemoval: AssetRemovalCandidate[] = []
 
         try {
                 await prismaClient.$transaction(async (tx: TransactionClient) => {
@@ -685,14 +716,78 @@ const updatePortfolio = async (
                                         : combined
                         }
 
+                        const finalAssetIds = new Set<string>()
+
+                        const existingCoverLink = existingAssetLinks.find(link => link.role === AssetRole.COVER)
+                        const existingGalleryLinks = existingAssetLinks.filter(link => link.role === AssetRole.GALLERY)
+
+                        if (shouldUpdateCover) {
+                                if (assetPayload.coverAssetId) {
+                                        finalAssetIds.add(assetPayload.coverAssetId)
+                                }
+                        } else if (existingCoverLink) {
+                                finalAssetIds.add(existingCoverLink.assetId)
+                        }
+
+                        if (shouldUpdateGallery) {
+                                for (const assetId of assetPayload.galleryAssetIds ?? []) {
+                                        finalAssetIds.add(assetId)
+                                }
+                        } else {
+                                for (const link of existingGalleryLinks) {
+                                        finalAssetIds.add(link.assetId)
+                                }
+                        }
+
+                        for (const link of existingAssetLinks) {
+                                if (link.role !== AssetRole.COVER && link.role !== AssetRole.GALLERY) {
+                                        finalAssetIds.add(link.assetId)
+                                }
+                        }
+
+                        assetsPendingRemoval = existingAssetLinks
+                                .filter(link => !finalAssetIds.has(link.assetId))
+                                .map(link => ({
+                                        assetId: link.assetId,
+                                        provider: link.asset.provider ?? null,
+                                        publicId: link.asset.publicId ?? null,
+                                        mimeType: link.asset.mimeType ?? null
+                                }))
+
                         await syncPortfolioAssets(tx, existing.id, assetPayload, actorId)
+
+                        if (assetsPendingRemoval.length > 0) {
+                                await tx.asset.deleteMany({
+                                        where: {
+                                                id: { in: assetsPendingRemoval.map(asset => asset.assetId) },
+                                                links: { none: {} }
+                                        }
+                                })
+                        }
                 })
 
-                return getPortfolioById(freelancerId, portfolioId, true)
         } catch (error) {
                 await cleanupUploadedMedia(uploads)
                 throw error
         }
+
+        if (assetsPendingRemoval.length > 0) {
+                const remainingAssets = await prismaClient.asset.findMany({
+                        where: { id: { in: assetsPendingRemoval.map(asset => asset.assetId) } },
+                        select: { id: true }
+                })
+
+                if (remainingAssets.length > 0) {
+                        const remainingIds = new Set(remainingAssets.map(asset => asset.id))
+                        assetsPendingRemoval = assetsPendingRemoval.filter(asset => !remainingIds.has(asset.assetId))
+                }
+
+                if (assetsPendingRemoval.length > 0) {
+                        await cleanupRemovedAssets(assetsPendingRemoval)
+                }
+        }
+
+        return getPortfolioById(freelancerId, portfolioId, true)
 }
 
 const deletePortfolio = async (freelancerId: string, portfolioId: string, actorId: string): Promise<void> => {
