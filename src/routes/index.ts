@@ -10,6 +10,7 @@ import specialtyRoute from './specialties.route'
 import specialtySkillRoute from './specialty-skill.routes'
 import skillRoute from './skill.route'
 import portfolioRoute from './portfolio.route'
+import freelancerConnectAccountRoute from './freelancer-connect-account.route'
 
 const rootRouter: Router = Router()
 
@@ -21,5 +22,6 @@ rootRouter.use('/category', categoryRoute, categorySkillRoute)
 rootRouter.use('/specialty', specialtyRoute, specialtySkillRoute)
 rootRouter.use('/skill', skillRoute)
 rootRouter.use('/portfolio', portfolioRoute)
+rootRouter.use('/freelancer/connect-account', freelancerConnectAccountRoute)
 
 export default rootRouter
