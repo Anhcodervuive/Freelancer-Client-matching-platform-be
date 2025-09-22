@@ -9,44 +9,50 @@ import type { ConnectAccountLinkInput, ConnectAccountLoginLinkInput } from '~/sc
 
 const stripe = new Stripe(STRIPE_CONFIG_INFO.API_KEY!)
 
-// We want every URL we build from the configured client origin to be deterministic,
-// therefore the trailing slash is stripped exactly once.
-const CLIENT_BASE_URL = (CLIENT.URL ?? 'http://localhost:5173/me/freelancer/profile').replace(/\/$/, '')
-const DEFAULT_RETURN_URL = `${CLIENT_BASE_URL}/settings/payouts`
-const DEFAULT_REFRESH_URL = `${CLIENT_BASE_URL}/settings/payouts/refresh`
+const stripTrailingSlash = (value: string) => value.replace(/\/$/, '')
+
+// Stripe requires absolute URLs in several endpoints. The helpers below try to
+// parse the configured client URL once so that we can derive consistent
+// defaults and gracefully fall back when the environment only provides a local
+// development host.
+const parseClientUrl = (rawUrl: string | undefined) => {
+	if (!rawUrl) {
+		return null
+	}
+
+	try {
+		return new URL(rawUrl)
+	} catch (error) {
+		return null
+	}
+}
+
+const rawClientUrl = CLIENT.URL?.trim()
+const parsedClientUrl = parseClientUrl(rawClientUrl)
+const CLIENT_BASE_URL = parsedClientUrl
+	? stripTrailingSlash(`${parsedClientUrl.origin}${parsedClientUrl.pathname}`)
+	: undefined
+
+const isLocalHostname = (hostname: string) =>
+	['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(hostname.toLowerCase())
+
+// Express accounts demand a publicly reachable HTTPS URL for the business
+// profile. Localhost or HTTP values cause Stripe to reject the request, so we
+// skip sending the property unless the configured client URL is production
+// ready.
+const CLIENT_BUSINESS_PROFILE_URL =
+	parsedClientUrl && parsedClientUrl.protocol === 'https:' && !isLocalHostname(parsedClientUrl.hostname)
+		? CLIENT_BASE_URL
+		: undefined
+
+const DEFAULT_RETURN_URL = CLIENT_BASE_URL ? `${CLIENT_BASE_URL}/settings/payouts` : undefined
+const DEFAULT_REFRESH_URL = CLIENT_BASE_URL ? `${CLIENT_BASE_URL}/settings/payouts/refresh` : undefined
 
 type AccountLinkMode = 'onboarding' | 'update'
 
 type EnsureAccountOptions = {
 	createIfMissing?: boolean
-}
-
-/**
- * Stripe requires an ISO 3166-1 alpha-2 country code when creating a Connect account.
- * This helper validates the freelancer profile to ensure that we never send a hard-coded
- * default country. Doing so keeps the payout account compliant with the user's actual
- * location and follows the business request from the product team.
- */
-const resolveFreelancerCountry = (freelancer: { profile: { country: string | null } | null }): string => {
-	const rawCountry = freelancer.profile?.country?.trim()
-
-	if (!rawCountry) {
-		throw new BadRequestException(
-			'Freelancer profile is missing a payout country. Please update your profile before creating a payout method.',
-			ErrorCode.PARAM_QUERY_ERROR
-		)
-	}
-
-	const normalized = rawCountry.toUpperCase()
-
-	if (!/^[A-Z]{2}$/.test(normalized)) {
-		throw new BadRequestException(
-			'Freelancer payout country must be a valid ISO 3166-1 alpha-2 code (for example: US, VN).',
-			ErrorCode.PARAM_QUERY_ERROR
-		)
-	}
-
-	return normalized
+	requestedCountry?: string | null
 }
 
 // Helper to convert Stripe enums into our uppercase representation so that the
@@ -86,7 +92,6 @@ const mapStripeAccountToConnectAccountData = (account: Stripe.Account) => {
 
 const handleStripeError = (error: unknown): never => {
 	if (error instanceof Stripe.errors.StripeError) {
-		console.log(error, 'stripeeeeeeeee!!!!!!!!')
 		throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
 	}
 	throw error
@@ -135,21 +140,30 @@ const ensureFreelancerContext = async (userId: string) => {
  * information in our database. We deliberately require a country code from the
  * caller so that we do not rely on any implicit defaults.
  */
-const createStripeExpressAccount = async (params: { userId: string; email: string }): Promise<Stripe.Account> => {
+const createStripeExpressAccount = async (params: {
+	userId: string
+	email: string
+	country: string
+}): Promise<Stripe.Account> => {
 	try {
-		console.log(CLIENT_BASE_URL)
+		const businessProfile: Stripe.AccountCreateParams.BusinessProfile = {
+			product_description: 'Freelance payouts on the platform'
+		}
+
+		if (CLIENT_BUSINESS_PROFILE_URL) {
+			businessProfile.url = CLIENT_BUSINESS_PROFILE_URL
+		}
+
 		const account = await stripe.accounts.create({
 			type: 'express',
 			email: params.email,
+			country: params.country,
 			business_type: 'individual',
 			capabilities: {
 				transfers: { requested: true },
 				card_payments: { requested: true }
 			},
-			business_profile: {
-				url: CLIENT_BASE_URL,
-				product_description: 'Freelance payouts on the platform'
-			},
+			business_profile: businessProfile,
 			metadata: {
 				userId: params.userId
 			}
@@ -163,8 +177,9 @@ const createStripeExpressAccount = async (params: { userId: string; email: strin
 
 /**
  * Fetches (and optionally creates) the Stripe Connect account for the freelancer.
- * Whenever we have to create a new account, we make sure the freelancer supplied a
- * valid country code instead of inventing a default value in the backend.
+ * Whenever we have to create a new account, we make sure the request carries a
+ * valid country code (either explicitly via the onboarding payload or implicitly
+ * from the saved profile) so we never invent backend defaults.
  */
 const ensureStripeAccount = async (userId: string, options?: EnsureAccountOptions) => {
 	const { user, freelancer } = await ensureFreelancerContext(userId)
@@ -178,9 +193,12 @@ const ensureStripeAccount = async (userId: string, options?: EnsureAccountOption
 			return { user, freelancer, account: null, accountRecord: null }
 		}
 
+		const countryCode = options?.requestedCountry
+
 		const createdAccount = await createStripeExpressAccount({
 			userId,
-			email: user.email
+			email: user.email,
+			country: countryCode!
 		})
 
 		accountRecord = await prismaClient.freelancerConnectAccount.create({
@@ -220,11 +238,17 @@ const getConnectAccount = async (userId: string) => {
 
 /**
  * Produces an onboarding or update link so the freelancer can complete any pending
- * requirements on Stripe. We create the account lazily if needed and keep a copy of
- * the refreshed account state for the dashboard.
+ * requirements on Stripe. We create the account lazily if needed, honoring the
+ * requested country override, and keep a copy of the refreshed account state for
+ * the dashboard.
  */
 const createAccountLink = async (userId: string, input: ConnectAccountLinkInput) => {
-	const result = await ensureStripeAccount(userId, { createIfMissing: true })
+	const requestedCountry = input.country ?? null
+
+	const result = await ensureStripeAccount(userId, {
+		createIfMissing: true,
+		requestedCountry
+	})
 
 	const { account, accountRecord } = result
 
@@ -236,10 +260,20 @@ const createAccountLink = async (userId: string, input: ConnectAccountLinkInput)
 	const linkType: Stripe.AccountLinkCreateParams.Type =
 		accountRecord.detailsSubmitted && desiredMode === 'update' ? 'account_update' : 'account_onboarding'
 
+	const returnUrl = input.returnUrl ?? DEFAULT_RETURN_URL
+	const refreshUrl = input.refreshUrl ?? DEFAULT_REFRESH_URL
+
+	if (!returnUrl || !refreshUrl) {
+		throw new InternalServerException(
+			'Stripe account links require absolute return and refresh URLs. Provide them in the request body or set CLIENT_URL to a public https domain.',
+			ErrorCode.INTERNAL_SERVER_ERROR
+		)
+	}
+
 	const params: Stripe.AccountLinkCreateParams = {
 		account: account.id,
-		return_url: input.returnUrl ?? DEFAULT_RETURN_URL,
-		refresh_url: input.refreshUrl ?? DEFAULT_REFRESH_URL,
+		return_url: returnUrl,
+		refresh_url: refreshUrl,
 		type: linkType
 	}
 
