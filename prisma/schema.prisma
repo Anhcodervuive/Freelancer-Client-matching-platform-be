@@ -150,6 +150,10 @@
     payoutsEnabled   Boolean @default(false) @map("payouts_enabled")
     chargesEnabled   Boolean @default(false) @map("charges_enabled")
 
+    country           String? @map("country")
+    defaultCurrency   String? @map("default_currency")
+    externalAccountSummary Json? @map("external_account_summary")
+
     requirementsDue          Json? @map("requirements_due")
     requirementsCurrentlyDue Json? @map("requirements_currently_due")
     requirementsPastDue      Json? @map("requirements_past_due")

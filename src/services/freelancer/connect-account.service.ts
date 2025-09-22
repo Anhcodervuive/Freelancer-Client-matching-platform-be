@@ -76,12 +76,37 @@ const mapAccountType = (type: Stripe.Account.Type | null | undefined): 'EXPRESS'
  */
 const mapStripeAccountToConnectAccountData = (account: Stripe.Account) => {
 	const requirements = account.requirements
+
+	const firstExternalAccount = account.external_accounts?.data?.[0]
+	let sanitizedExternalAccount: Record<string, string> | null = null
+
+	if (firstExternalAccount?.object === 'bank_account') {
+		const details = firstExternalAccount as Stripe.BankAccount
+		const summary: Record<string, string> = {}
+
+		if (details.bank_name) {
+			summary.bank_name = details.bank_name
+		}
+
+		if (details.last4) {
+			summary.last4 = details.last4
+		}
+
+		if (details.account_holder_type) {
+			summary.account_holder_type = details.account_holder_type
+		}
+
+		sanitizedExternalAccount = Object.keys(summary).length > 0 ? summary : null
+	}
 	return {
 		stripeAccountId: account.id,
 		accountType: mapAccountType(account.type),
 		detailsSubmitted: account.details_submitted ?? false,
 		payoutsEnabled: account.payouts_enabled ?? false,
 		chargesEnabled: account.charges_enabled ?? false,
+		country: account.country ?? '',
+		defaultCurrency: account.default_currency ?? '',
+		externalAccountSummary: sanitizedExternalAccount ?? '',
 		requirementsDue: requirements?.eventually_due ?? [],
 		requirementsCurrentlyDue: requirements?.currently_due ?? [],
 		requirementsPastDue: requirements?.past_due ?? [],
