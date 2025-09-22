@@ -5,23 +5,20 @@ import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { InternalServerException } from '~/exceptions/internal-server'
 import { ErrorCode } from '~/exceptions/root'
-import type {
-        ConnectAccountLinkInput,
-        ConnectAccountLoginLinkInput,
-} from '~/schema/freelancer-connect-account.schema'
+import type { ConnectAccountLinkInput, ConnectAccountLoginLinkInput } from '~/schema/freelancer-connect-account.schema'
 
 const stripe = new Stripe(STRIPE_CONFIG_INFO.API_KEY!)
 
 // We want every URL we build from the configured client origin to be deterministic,
 // therefore the trailing slash is stripped exactly once.
-const CLIENT_BASE_URL = (CLIENT.URL ?? 'http://localhost:5173').replace(/\/$/, '')
+const CLIENT_BASE_URL = (CLIENT.URL ?? 'http://localhost:5173/me/freelancer/profile').replace(/\/$/, '')
 const DEFAULT_RETURN_URL = `${CLIENT_BASE_URL}/settings/payouts`
 const DEFAULT_REFRESH_URL = `${CLIENT_BASE_URL}/settings/payouts/refresh`
 
 type AccountLinkMode = 'onboarding' | 'update'
 
 type EnsureAccountOptions = {
-        createIfMissing?: boolean
+	createIfMissing?: boolean
 }
 
 /**
@@ -30,42 +27,40 @@ type EnsureAccountOptions = {
  * default country. Doing so keeps the payout account compliant with the user's actual
  * location and follows the business request from the product team.
  */
-const resolveFreelancerCountry = (freelancer: {
-        profile: { country: string | null } | null
-}): string => {
-        const rawCountry = freelancer.profile?.country?.trim()
+const resolveFreelancerCountry = (freelancer: { profile: { country: string | null } | null }): string => {
+	const rawCountry = freelancer.profile?.country?.trim()
 
-        if (!rawCountry) {
-                throw new BadRequestException(
-                        'Freelancer profile is missing a payout country. Please update your profile before creating a payout method.',
-                        ErrorCode.PARAM_QUERY_ERROR,
-                )
-        }
+	if (!rawCountry) {
+		throw new BadRequestException(
+			'Freelancer profile is missing a payout country. Please update your profile before creating a payout method.',
+			ErrorCode.PARAM_QUERY_ERROR
+		)
+	}
 
-        const normalized = rawCountry.toUpperCase()
+	const normalized = rawCountry.toUpperCase()
 
-        if (!/^[A-Z]{2}$/.test(normalized)) {
-                throw new BadRequestException(
-                        'Freelancer payout country must be a valid ISO 3166-1 alpha-2 code (for example: US, VN).',
-                        ErrorCode.PARAM_QUERY_ERROR,
-                )
-        }
+	if (!/^[A-Z]{2}$/.test(normalized)) {
+		throw new BadRequestException(
+			'Freelancer payout country must be a valid ISO 3166-1 alpha-2 code (for example: US, VN).',
+			ErrorCode.PARAM_QUERY_ERROR
+		)
+	}
 
-        return normalized
+	return normalized
 }
 
 // Helper to convert Stripe enums into our uppercase representation so that the
 // API response stays consistent with other payment resources.
 const mapAccountType = (type: Stripe.Account.Type | null | undefined): 'EXPRESS' | 'STANDARD' | 'CUSTOM' => {
-        switch (type) {
-                case 'standard':
-                        return 'STANDARD'
-                case 'custom':
-                        return 'CUSTOM'
-                case 'express':
-                default:
-                        return 'EXPRESS'
-        }
+	switch (type) {
+		case 'standard':
+			return 'STANDARD'
+		case 'custom':
+			return 'CUSTOM'
+		case 'express':
+		default:
+			return 'EXPRESS'
+	}
 }
 
 /**
@@ -74,26 +69,27 @@ const mapAccountType = (type: Stripe.Account.Type | null | undefined): 'EXPRESS'
  * side effects, which makes it easier to unit test in the future.
  */
 const mapStripeAccountToConnectAccountData = (account: Stripe.Account) => {
-        const requirements = account.requirements
-        return {
-                stripeAccountId: account.id,
-                accountType: mapAccountType(account.type),
-                detailsSubmitted: account.details_submitted ?? false,
-                payoutsEnabled: account.payouts_enabled ?? false,
-                chargesEnabled: account.charges_enabled ?? false,
-                requirementsDue: requirements?.eventually_due ?? [],
-                requirementsCurrentlyDue: requirements?.currently_due ?? [],
-                requirementsPastDue: requirements?.past_due ?? [],
-                disabledReason: requirements?.disabled_reason ?? null,
-                disabledAt: requirements?.current_deadline ? new Date(requirements.current_deadline * 1000) : null,
-        }
+	const requirements = account.requirements
+	return {
+		stripeAccountId: account.id,
+		accountType: mapAccountType(account.type),
+		detailsSubmitted: account.details_submitted ?? false,
+		payoutsEnabled: account.payouts_enabled ?? false,
+		chargesEnabled: account.charges_enabled ?? false,
+		requirementsDue: requirements?.eventually_due ?? [],
+		requirementsCurrentlyDue: requirements?.currently_due ?? [],
+		requirementsPastDue: requirements?.past_due ?? [],
+		disabledReason: requirements?.disabled_reason ?? null,
+		disabledAt: requirements?.current_deadline ? new Date(requirements.current_deadline * 1000) : null
+	}
 }
 
 const handleStripeError = (error: unknown): never => {
-        if (error instanceof Stripe.errors.StripeError) {
-                throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
-        }
-        throw error
+	if (error instanceof Stripe.errors.StripeError) {
+		console.log(error, 'stripeeeeeeeee!!!!!!!!')
+		throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
+	}
+	throw error
 }
 
 /**
@@ -102,36 +98,36 @@ const handleStripeError = (error: unknown): never => {
  * method they are trying to manage.
  */
 const ensureFreelancerContext = async (userId: string) => {
-        const [user, freelancer] = await Promise.all([
-                prismaClient.user.findUnique({
-                        where: { id: userId },
-                        select: { id: true, email: true, role: true },
-                }),
-                prismaClient.freelancer.findUnique({
-                        where: { userId },
-                        include: {
-                                profile: {
-                                        select: {
-                                                country: true,
-                                        },
-                                },
-                        },
-                }),
-        ])
+	const [user, freelancer] = await Promise.all([
+		prismaClient.user.findUnique({
+			where: { id: userId },
+			select: { id: true, email: true, role: true }
+		}),
+		prismaClient.freelancer.findUnique({
+			where: { userId },
+			include: {
+				profile: {
+					select: {
+						country: true
+					}
+				}
+			}
+		})
+	])
 
-        if (!user) {
-                throw new BadRequestException('User not found', ErrorCode.USER_NOT_FOUND)
-        }
+	if (!user) {
+		throw new BadRequestException('User not found', ErrorCode.USER_NOT_FOUND)
+	}
 
-        if (!freelancer) {
-                throw new BadRequestException('Freelancer profile not found', ErrorCode.USER_NOT_AUTHORITY)
-        }
+	if (!freelancer) {
+		throw new BadRequestException('Freelancer profile not found', ErrorCode.USER_NOT_AUTHORITY)
+	}
 
-        if (user.role !== 'FREELANCER') {
-                throw new BadRequestException('Only freelancers can manage payout methods', ErrorCode.USER_NOT_AUTHORITY)
-        }
+	if (user.role !== 'FREELANCER') {
+		throw new BadRequestException('Only freelancers can manage payout methods', ErrorCode.USER_NOT_AUTHORITY)
+	}
 
-        return { user, freelancer }
+	return { user, freelancer }
 }
 
 /**
@@ -139,34 +135,30 @@ const ensureFreelancerContext = async (userId: string) => {
  * information in our database. We deliberately require a country code from the
  * caller so that we do not rely on any implicit defaults.
  */
-const createStripeExpressAccount = async (params: {
-        userId: string
-        email: string
-        country: string
-}): Promise<Stripe.Account> => {
-        try {
-                const account = await stripe.accounts.create({
-                        type: 'express',
-                        email: params.email,
-                        country: params.country,
-                        business_type: 'individual',
-                        capabilities: {
-                                transfers: { requested: true },
-                                card_payments: { requested: true },
-                        },
-                        business_profile: {
-                                url: CLIENT_BASE_URL,
-                                product_description: 'Freelance payouts on the platform',
-                        },
-                        metadata: {
-                                userId: params.userId,
-                        },
-                })
+const createStripeExpressAccount = async (params: { userId: string; email: string }): Promise<Stripe.Account> => {
+	try {
+		console.log(CLIENT_BASE_URL)
+		const account = await stripe.accounts.create({
+			type: 'express',
+			email: params.email,
+			business_type: 'individual',
+			capabilities: {
+				transfers: { requested: true },
+				card_payments: { requested: true }
+			},
+			business_profile: {
+				url: CLIENT_BASE_URL,
+				product_description: 'Freelance payouts on the platform'
+			},
+			metadata: {
+				userId: params.userId
+			}
+		})
 
-                return account as Stripe.Account
-        } catch (error) {
-                return handleStripeError(error)
-        }
+		return account as Stripe.Account
+	} catch (error) {
+		return handleStripeError(error)
+	}
 }
 
 /**
@@ -175,46 +167,43 @@ const createStripeExpressAccount = async (params: {
  * valid country code instead of inventing a default value in the backend.
  */
 const ensureStripeAccount = async (userId: string, options?: EnsureAccountOptions) => {
-        const { user, freelancer } = await ensureFreelancerContext(userId)
+	const { user, freelancer } = await ensureFreelancerContext(userId)
 
-        let accountRecord = await prismaClient.freelancerConnectAccount.findUnique({
-                where: { freelancerId: userId },
-        })
+	let accountRecord = await prismaClient.freelancerConnectAccount.findUnique({
+		where: { freelancerId: userId }
+	})
 
-        if (!accountRecord) {
-                if (!options?.createIfMissing) {
-                        return { user, freelancer, account: null, accountRecord: null }
-                }
+	if (!accountRecord) {
+		if (!options?.createIfMissing) {
+			return { user, freelancer, account: null, accountRecord: null }
+		}
 
-                const countryCode = resolveFreelancerCountry(freelancer)
+		const createdAccount = await createStripeExpressAccount({
+			userId,
+			email: user.email
+		})
 
-                const createdAccount = await createStripeExpressAccount({
-                        userId,
-                        email: user.email,
-                        country: countryCode,
-                })
+		accountRecord = await prismaClient.freelancerConnectAccount.create({
+			data: {
+				freelancerId: userId,
+				...mapStripeAccountToConnectAccountData(createdAccount)
+			}
+		})
 
-                accountRecord = await prismaClient.freelancerConnectAccount.create({
-                        data: {
-                                freelancerId: userId,
-                                ...mapStripeAccountToConnectAccountData(createdAccount),
-                        },
-                })
+		return { user, freelancer, account: createdAccount, accountRecord }
+	}
 
-                return { user, freelancer, account: createdAccount, accountRecord }
-        }
+	// Always refresh the remote account so that our stored requirements stay in sync
+	// with Stripe. If the account was deleted externally Stripe will surface an
+	// error that bubbles up via the shared handler.
+	const account = await stripe.accounts.retrieve(accountRecord.stripeAccountId)
 
-        // Always refresh the remote account so that our stored requirements stay in sync
-        // with Stripe. If the account was deleted externally Stripe will surface an
-        // error that bubbles up via the shared handler.
-        const account = await stripe.accounts.retrieve(accountRecord.stripeAccountId)
+	accountRecord = await prismaClient.freelancerConnectAccount.update({
+		where: { freelancerId: userId },
+		data: mapStripeAccountToConnectAccountData(account)
+	})
 
-        accountRecord = await prismaClient.freelancerConnectAccount.update({
-                where: { freelancerId: userId },
-                data: mapStripeAccountToConnectAccountData(account),
-        })
-
-        return { user, freelancer, account, accountRecord }
+	return { user, freelancer, account, accountRecord }
 }
 
 /**
@@ -222,11 +211,11 @@ const ensureStripeAccount = async (userId: string, options?: EnsureAccountOption
  * started onboarding we return null so the client can show an empty state.
  */
 const getConnectAccount = async (userId: string) => {
-        const result = await ensureStripeAccount(userId, { createIfMissing: false })
-        if (!result.accountRecord) {
-                return null
-        }
-        return result.accountRecord
+	const result = await ensureStripeAccount(userId, { createIfMissing: false })
+	if (!result.accountRecord) {
+		return null
+	}
+	return result.accountRecord
 }
 
 /**
@@ -235,46 +224,43 @@ const getConnectAccount = async (userId: string) => {
  * the refreshed account state for the dashboard.
  */
 const createAccountLink = async (userId: string, input: ConnectAccountLinkInput) => {
-        const result = await ensureStripeAccount(userId, { createIfMissing: true })
+	const result = await ensureStripeAccount(userId, { createIfMissing: true })
 
-        const { account, accountRecord } = result
+	const { account, accountRecord } = result
 
-        if (!account || !accountRecord) {
-                throw new InternalServerException(
-                        'Failed to prepare Stripe Connect account',
-                        ErrorCode.INTERNAL_SERVER_ERROR,
-                )
-        }
+	if (!account || !accountRecord) {
+		throw new InternalServerException('Failed to prepare Stripe Connect account', ErrorCode.INTERNAL_SERVER_ERROR)
+	}
 
-        const desiredMode: AccountLinkMode = (input.mode ?? 'onboarding') as AccountLinkMode
-        const linkType: Stripe.AccountLinkCreateParams.Type =
-                accountRecord.detailsSubmitted && desiredMode === 'update' ? 'account_update' : 'account_onboarding'
+	const desiredMode: AccountLinkMode = (input.mode ?? 'onboarding') as AccountLinkMode
+	const linkType: Stripe.AccountLinkCreateParams.Type =
+		accountRecord.detailsSubmitted && desiredMode === 'update' ? 'account_update' : 'account_onboarding'
 
-        const params: Stripe.AccountLinkCreateParams = {
-                account: account.id,
-                return_url: input.returnUrl ?? DEFAULT_RETURN_URL,
-                refresh_url: input.refreshUrl ?? DEFAULT_REFRESH_URL,
-                type: linkType,
-        }
+	const params: Stripe.AccountLinkCreateParams = {
+		account: account.id,
+		return_url: input.returnUrl ?? DEFAULT_RETURN_URL,
+		refresh_url: input.refreshUrl ?? DEFAULT_REFRESH_URL,
+		type: linkType
+	}
 
-        if (params.type === 'account_onboarding') {
-                // Collect all requirements that Stripe expects eventually so the user
-                // can finish onboarding in a single session whenever possible.
-                params.collect = 'eventually_due'
-        }
+	if (params.type === 'account_onboarding') {
+		// Collect all requirements that Stripe expects eventually so the user
+		// can finish onboarding in a single session whenever possible.
+		params.collect = 'eventually_due'
+	}
 
-        try {
-                const accountLink = await stripe.accountLinks.create(params)
+	try {
+		const accountLink = await stripe.accountLinks.create(params)
 
-                return {
-                        url: accountLink.url,
-                        expiresAt: new Date(accountLink.expires_at * 1000).toISOString(),
-                        linkType: params.type,
-                        connectAccount: accountRecord,
-                }
-        } catch (error) {
-                handleStripeError(error)
-        }
+		return {
+			url: accountLink.url,
+			expiresAt: new Date(accountLink.expires_at * 1000).toISOString(),
+			linkType: params.type,
+			connectAccount: accountRecord
+		}
+	} catch (error) {
+		handleStripeError(error)
+	}
 }
 
 /**
@@ -283,33 +269,33 @@ const createAccountLink = async (userId: string, input: ConnectAccountLinkInput)
  * only meaningful once onboarding has already been completed at least once.
  */
 const createLoginLink = async (userId: string, input: ConnectAccountLoginLinkInput) => {
-        const result = await ensureStripeAccount(userId, { createIfMissing: false })
+	const result = await ensureStripeAccount(userId, { createIfMissing: false })
 
-        const { account, accountRecord } = result
+	const { account, accountRecord } = result
 
-        if (!account || !accountRecord) {
-                throw new BadRequestException('Stripe Connect account not found', ErrorCode.ITEM_NOT_FOUND)
-        }
+	if (!account || !accountRecord) {
+		throw new BadRequestException('Stripe Connect account not found', ErrorCode.ITEM_NOT_FOUND)
+	}
 
-        try {
-                const params: Stripe.AccountCreateLoginLinkParams & { redirect_url?: string } = {}
-                if (input.redirectUrl) {
-                        params.redirect_url = input.redirectUrl
-                }
+	try {
+		const params: Stripe.AccountCreateLoginLinkParams & { redirect_url?: string } = {}
+		if (input.redirectUrl) {
+			params.redirect_url = input.redirectUrl
+		}
 
-                const loginLink = await stripe.accounts.createLoginLink(account.id, params)
+		const loginLink = await stripe.accounts.createLoginLink(account.id, params)
 
-                return {
-                        url: loginLink.url,
-                        connectAccount: accountRecord,
-                }
-        } catch (error) {
-                handleStripeError(error)
-        }
+		return {
+			url: loginLink.url,
+			connectAccount: accountRecord
+		}
+	} catch (error) {
+		handleStripeError(error)
+	}
 }
 
 export default {
-        getConnectAccount,
-        createAccountLink,
-        createLoginLink,
+	getConnectAccount,
+	createAccountLink,
+	createLoginLink
 }
