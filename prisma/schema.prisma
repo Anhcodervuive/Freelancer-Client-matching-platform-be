@@ -119,6 +119,7 @@
     // Quan hệ ngược
     educations   Education[]
     languages    FreelancerLanguage[] // ✅ Thêm dòng này
+    connectAccount FreelancerConnectAccount?
     contracts Contract[]
     
     freelancerCategorySelection FreelancerCategorySelection[]
@@ -130,6 +131,36 @@
     updatedAt    DateTime  @updatedAt      @map("updated_at")
 
     @@map("freelancer")
+  }
+
+  enum StripeConnectAccountType {
+    EXPRESS
+    STANDARD
+    CUSTOM
+  }
+
+  model FreelancerConnectAccount {
+    freelancerId String @id @map("freelancer_id")
+    freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+    stripeAccountId String @unique @map("stripe_account_id") // acct_xxx
+    accountType     StripeConnectAccountType @default(EXPRESS) @map("account_type")
+
+    detailsSubmitted Boolean @default(false) @map("details_submitted")
+    payoutsEnabled   Boolean @default(false) @map("payouts_enabled")
+    chargesEnabled   Boolean @default(false) @map("charges_enabled")
+
+    requirementsDue          Json? @map("requirements_due")
+    requirementsCurrentlyDue Json? @map("requirements_currently_due")
+    requirementsPastDue      Json? @map("requirements_past_due")
+
+    disabledReason String?   @map("disabled_reason")
+    disabledAt     DateTime? @map("disabled_at")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    @@map("freelancer_connect_account")
   }
 
   enum PortfolioVisibility {
@@ -408,9 +439,15 @@
     refunds          Refund[]
   }
 
+  enum PaymentType {
+    ESCROW_MILESTONE
+    PLATFORM_SERVICE
+  }
+
   model Payment {
     id               String   @id @default(cuid())
     escrowId         String?  @map("escrow_id")
+    type             PaymentType @default(ESCROW_MILESTONE) @map("type")
     amount           Decimal  @db.Decimal(12,2)
     currency         String
     status           PaymentStatus
