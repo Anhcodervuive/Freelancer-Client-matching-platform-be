@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getMyProfile, updateMyProfile, uploadAvatar } from '~/controllers/profile.controller'
+import { getProfile, updateMyProfile, uploadAvatar } from '~/controllers/profile.controller'
 import {
 	addOneFreelancerLanguage,
 	getAllFreelancerLanguages,
@@ -26,7 +26,7 @@ import {
 
 const router: Router = Router()
 
-router.get('/:id', authenticateMiddleware, errorHandler(getMyProfile))
+router.get('/:id', authenticateMiddleware, errorHandler(getProfile))
 router.put('', authenticateMiddleware, errorHandler(updateMyProfile))
 router.put('/upload-avatar', authenticateMiddleware, uploadImages.single('avatar'), errorHandler(uploadAvatar))
 

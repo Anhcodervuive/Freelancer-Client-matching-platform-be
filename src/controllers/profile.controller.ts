@@ -7,13 +7,13 @@ import { UpdateProfileSchema } from '~/schema/profile.schema'
 import profileService from '~/services/profile.service'
 import assetService from '~/services/asset.service'
 
-export const getMyProfile = async (req: Request, res: Response) => {
+export const getProfile = async (req: Request, res: Response) => {
 	const { id: userId } = req.params
 	if (!userId) throw new BadRequestException('Unauthorized', ErrorCode.UNAUTHORIED)
 
 	const profile = await profileService.getOrCreateMyProfile(userId)
 	const avatarUrl = await assetService.getProfileAvatarUrl(userId)
-	return res.status(StatusCodes.OK).json({ ...profile, avatarUrl })
+	return res.status(StatusCodes.OK).json({ ...profile, avatar: avatarUrl })
 }
 
 export const updateMyProfile = async (req: Request, res: Response) => {
