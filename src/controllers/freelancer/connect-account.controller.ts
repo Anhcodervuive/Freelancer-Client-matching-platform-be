@@ -23,7 +23,8 @@ export const getConnectAccount = async (req: Request, res: Response) => {
  * POST /freelancer/connect-account/link
  * Initiates or resumes onboarding by creating an account link that the frontend
  * can redirect the freelancer to. Optional return and refresh URLs let the client
- * customize the navigation flow.
+ * customize the navigation flow, while the optional country code allows the UI to
+ * capture the freelancer's payout country before starting onboarding.
  */
 export const createConnectAccountLink = async (req: Request, res: Response) => {
         const userId = req.user?.id

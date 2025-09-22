@@ -61,27 +61,16 @@ type AccountLinkMode = 'onboarding' | 'update'
 
 type EnsureAccountOptions = {
         createIfMissing?: boolean
+        requestedCountry?: string | null
 }
 
 /**
- * Stripe requires an ISO 3166-1 alpha-2 country code when creating a Connect account.
- * This helper validates the freelancer profile to ensure that we never send a hard-coded
- * default country. Doing so keeps the payout account compliant with the user's actual
- * location and follows the business request from the product team.
+ * Normalizes the incoming country code and validates the format according to the
+ * ISO 3166-1 alpha-2 standard. We reuse this helper for both persisted profile
+ * values and the new runtime override coming from the onboarding request.
  */
-const resolveFreelancerCountry = (freelancer: {
-        profile: { country: string | null } | null
-}): string => {
-        const rawCountry = freelancer.profile?.country?.trim()
-
-        if (!rawCountry) {
-                throw new BadRequestException(
-                        'Freelancer profile is missing a payout country. Please update your profile before creating a payout method.',
-                        ErrorCode.PARAM_QUERY_ERROR,
-                )
-        }
-
-        const normalized = rawCountry.toUpperCase()
+const normalizeCountryCode = (country: string): string => {
+        const normalized = country.trim().toUpperCase()
 
         if (!/^[A-Z]{2}$/.test(normalized)) {
                 throw new BadRequestException(
@@ -91,6 +80,30 @@ const resolveFreelancerCountry = (freelancer: {
         }
 
         return normalized
+}
+
+/**
+ * Stripe requires an ISO 3166-1 alpha-2 country code when creating a Connect
+ * account. We accept an explicit country override from the onboarding payload so
+ * freelancers can pick their payout region right before starting the Stripe
+ * flow. When no override is provided we fall back to the stored profile value.
+ */
+const resolveAccountCountry = (
+        freelancer: {
+                profile: { country: string | null } | null
+        },
+        requestedCountry?: string | null,
+): string => {
+        const rawCountry = requestedCountry?.trim() || freelancer.profile?.country?.trim()
+
+        if (!rawCountry) {
+                throw new BadRequestException(
+                        'Freelancer payout country is required. Choose a country during onboarding or update your profile before creating a payout method.',
+                        ErrorCode.PARAM_QUERY_ERROR,
+                )
+        }
+
+        return normalizeCountryCode(rawCountry)
 }
 
 // Helper to convert Stripe enums into our uppercase representation so that the
@@ -215,8 +228,9 @@ const createStripeExpressAccount = async (params: {
 
 /**
  * Fetches (and optionally creates) the Stripe Connect account for the freelancer.
- * Whenever we have to create a new account, we make sure the freelancer supplied a
- * valid country code instead of inventing a default value in the backend.
+ * Whenever we have to create a new account, we make sure the request carries a
+ * valid country code (either explicitly via the onboarding payload or implicitly
+ * from the saved profile) so we never invent backend defaults.
  */
 const ensureStripeAccount = async (userId: string, options?: EnsureAccountOptions) => {
         const { user, freelancer } = await ensureFreelancerContext(userId)
@@ -230,13 +244,30 @@ const ensureStripeAccount = async (userId: string, options?: EnsureAccountOption
                         return { user, freelancer, account: null, accountRecord: null }
                 }
 
-                const countryCode = resolveFreelancerCountry(freelancer)
+                const countryCode = resolveAccountCountry(freelancer, options?.requestedCountry)
 
                 const createdAccount = await createStripeExpressAccount({
                         userId,
                         email: user.email,
                         country: countryCode,
                 })
+
+                if (options?.requestedCountry) {
+                        const existingProfileCountry = freelancer.profile?.country
+                                ? normalizeCountryCode(freelancer.profile.country)
+                                : null
+
+                        if (existingProfileCountry !== countryCode) {
+                                await prismaClient.profile.update({
+                                        where: { userId },
+                                        data: { country: countryCode },
+                                })
+
+                                if (freelancer.profile) {
+                                        freelancer.profile.country = countryCode
+                                }
+                        }
+                }
 
                 accountRecord = await prismaClient.freelancerConnectAccount.create({
                         data: {
@@ -275,11 +306,17 @@ const getConnectAccount = async (userId: string) => {
 
 /**
  * Produces an onboarding or update link so the freelancer can complete any pending
- * requirements on Stripe. We create the account lazily if needed and keep a copy of
- * the refreshed account state for the dashboard.
+ * requirements on Stripe. We create the account lazily if needed, honoring the
+ * requested country override, and keep a copy of the refreshed account state for
+ * the dashboard.
  */
 const createAccountLink = async (userId: string, input: ConnectAccountLinkInput) => {
-        const result = await ensureStripeAccount(userId, { createIfMissing: true })
+        const requestedCountry = input.country ?? null
+
+        const result = await ensureStripeAccount(userId, {
+                createIfMissing: true,
+                requestedCountry,
+        })
 
         const { account, accountRecord } = result
 
@@ -288,6 +325,17 @@ const createAccountLink = async (userId: string, input: ConnectAccountLinkInput)
                         'Failed to prepare Stripe Connect account',
                         ErrorCode.INTERNAL_SERVER_ERROR,
                 )
+        }
+
+        if (requestedCountry && account.country) {
+                const accountCountry = normalizeCountryCode(account.country)
+
+                if (accountCountry !== requestedCountry) {
+                        throw new BadRequestException(
+                                `Stripe Connect account already exists for country ${accountCountry}. Please contact support to reset the payout account before choosing a new country.`,
+                                ErrorCode.PARAM_QUERY_ERROR,
+                        )
+                }
         }
 
         const desiredMode: AccountLinkMode = (input.mode ?? 'onboarding') as AccountLinkMode
