@@ -39,11 +39,26 @@ export const createConnectAccountLink = async (req: Request, res: Response) => {
  * Express dashboard without leaving our product experience.
  */
 export const createConnectAccountLoginLink = async (req: Request, res: Response) => {
-	const userId = req.user?.id
+        const userId = req.user?.id
 
-	const payload = ConnectAccountLoginLinkSchema.parse(req.body)
+        const payload = ConnectAccountLoginLinkSchema.parse(req.body)
 
-	const result = await freelancerConnectAccountService.createLoginLink(userId!, payload)
+        const result = await freelancerConnectAccountService.createLoginLink(userId!, payload)
 
-	return res.status(StatusCodes.OK).json(result)
+        return res.status(StatusCodes.OK).json(result)
+}
+
+/**
+ * DELETE /freelancer/connect-account
+ * Removes the stored Stripe Connect account for the authenticated freelancer
+ * and disconnects it from Stripe.
+ */
+export const deleteConnectAccount = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+
+        await freelancerConnectAccountService.deleteConnectAccount(userId!)
+
+        return res.status(StatusCodes.OK).json({
+                message: 'Stripe Connect account deleted'
+        })
 }

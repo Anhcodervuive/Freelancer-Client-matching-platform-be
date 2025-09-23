@@ -3,6 +3,7 @@ import { Router } from 'express'
 import {
         createConnectAccountLink,
         createConnectAccountLoginLink,
+        deleteConnectAccount,
         getConnectAccount,
 } from '~/controllers/freelancer/connect-account.controller'
 import authenticateMiddleware from '~/middlewares/authentication'
@@ -16,5 +17,6 @@ const router = Router()
 router.get('/', authenticateMiddleware, errorHandler(getConnectAccount))
 router.post('/link', authenticateMiddleware, errorHandler(createConnectAccountLink))
 router.post('/login-link', authenticateMiddleware, errorHandler(createConnectAccountLoginLink))
+router.delete('/', authenticateMiddleware, errorHandler(deleteConnectAccount))
 
 export default router
