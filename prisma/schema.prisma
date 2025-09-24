@@ -1,689 +1,912 @@
-  // This is your Prisma schema file,
-  // learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-  // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-  // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-  generator client {
-    provider = "prisma-client-js"
-    output   = "../src/generated/prisma"
-  }
-
-  datasource db {
-    provider = "mysql"
-    url      = env("DATABASE_URL")
-  }
-
-  enum Role {
-    CLIENT
-    FREELANCER
-    ADMIN
-  }
-
-  model User {
-    id              String    @id @default(uuid())
-    email           String    @unique
-    googleId        String?   @unique @map("google_id")
-
-    // ĐÃ LOẠI BỎ: first_name, last_name, avatar -> chuyển sang Profile
-
-    password        String?
-    emailVerifiedAt DateTime? @map("email_verified_at")
-    createdAt       DateTime  @default(now()) @map("created_at")
-    updatedAt       DateTime  @updatedAt @map("updated_at")
-    deletedAt       DateTime? @map("deleted_at")
-    isActive        Boolean   @default(true) @map("is_active")
-
-    role Role?
-
-    // 1-1
-    profile         Profile?
-
-    emailVerifyTokens EmailVerifyToken[]
-
-    @@index([email])
-
-    @@map("user")
-  }
-
-  model Profile {
-    // 1-1 với User
-    userId      String   @id @map("user_id")
-    user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-    // Trường hồ sơ
-    firstName   String?  @map("first_name")
-    lastName    String?  @map("last_name")
-    phoneNumber String?  @map("phone_number")
-
-    country String? 
-    city String?
-    district String?
-    address String?
-    stripeCustomerId  String?  @unique @map("stripe_customer_id")
-
-    freelancer Freelancer?
-    client Client?
-    paymentMethodRef PaymentMethodRef[]
-
-    createdAt   DateTime @default(now()) @map("created_at")
-    updatedAt   DateTime @updatedAt @map("updated_at")
-
-    @@map("profile")
-  }
-
-  model EmailVerifyToken {
-    id        Int      @id @default(autoincrement())
-    userId    String
-    token     String   @unique
-    expiresAt DateTime
-    createdAt DateTime @default(now())
-
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-    @@map("email_verify_token")
-  }
-
-  enum LanguageProficiency {
-    BASIC            // biết cơ bản
-    CONVERSATIONAL   // giao tiếp
-    FLUENT           // lưu loát
-    NATIVE           // bản ngữ
-  }
-
-  model FreelancerLanguage {
-    // KHÓA TỔNG HỢP: freelancerId + languageCode
-    freelancerId String   @map("freelancer_id")
-    languageCode String   @db.VarChar(10)
-    proficiency  LanguageProficiency
-
-    freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
-
-    createdAt    DateTime @default(now()) @map("created_at")
-    updatedAt    DateTime @updatedAt      @map("updated_at")
-
-    @@id([freelancerId, languageCode])
-    @@index([languageCode], name: "idx_language_code")
-    @@map("freelancer_language")
-  }
-
-
-  model Freelancer {
-    userId       String    @id @map("user_id")
-    profile      Profile   @relation(fields: [userId], references: [userId], onDelete: Cascade)
-
-    title        String?   @db.VarChar(255)
-    bio         String?   @db.MediumText
-    links       Json?    // ví dụ: ["https://github.com/..."]
-    
-    // Quan hệ ngược
-    educations   Education[]
-    languages    FreelancerLanguage[] // ✅ Thêm dòng này
-    connectAccount FreelancerConnectAccount?
-    contracts Contract[]
-    
-    freelancerCategorySelection FreelancerCategorySelection[]
-    freelancerSpecialtySelection FreelancerSpecialtySelection[]
-    freelancerSkillSelection FreelancerSkillSelection[]
-    portfolios PortfolioProject[]
-
-    createdAt    DateTime  @default(now()) @map("created_at")
-    updatedAt    DateTime  @updatedAt      @map("updated_at")
-
-    @@map("freelancer")
-  }
-
-  enum StripeConnectAccountType {
-    EXPRESS
-    STANDARD
-    CUSTOM
-  }
-
-  model FreelancerConnectAccount {
-    freelancerId String @id @map("freelancer_id")
-    freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
-
-    stripeAccountId String @unique @map("stripe_account_id") // acct_xxx
-    accountType     StripeConnectAccountType @default(EXPRESS) @map("account_type")
-
-    detailsSubmitted Boolean @default(false) @map("details_submitted")
-    payoutsEnabled   Boolean @default(false) @map("payouts_enabled")
-    chargesEnabled   Boolean @default(false) @map("charges_enabled")
-
-    country           String? @map("country")
-    defaultCurrency   String? @map("default_currency")
-    externalAccountSummary Json? @map("external_account_summary")
-
-    requirementsDue          Json? @map("requirements_due")
-    requirementsCurrentlyDue Json? @map("requirements_currently_due")
-    requirementsPastDue      Json? @map("requirements_past_due")
-
-    disabledReason String?   @map("disabled_reason")
-    disabledAt     DateTime? @map("disabled_at")
-
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
-
-    @@map("freelancer_connect_account")
-  }
-
-  enum PortfolioVisibility {
-    PUBLIC
-    PRIVATE
-    DRAFT
-  }
-
-  model PortfolioProject {
-    id            String              @id @default(cuid())
-    freelancerId  String              @map("freelancer_id")
-    freelancer    Freelancer          @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
-
-    title         String              @db.VarChar(255)
-    role          String?             @db.VarChar(255)
-    description   String?             @db.MediumText
-    projectUrl    String?             @map("project_url")
-    repositoryUrl String?             @map("repository_url")
-    visibility    PortfolioVisibility @default(PUBLIC)
-
-    startedAt   DateTime? @map("started_at")
-    completedAt DateTime? @map("completed_at")
-    publishedAt DateTime? @map("published_at")
-
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt      @map("updated_at")
-
-    isDeleted Boolean  @default(false) @map("is_deleted")
-    deletedAt DateTime? @map("deleted_at")
-    deletedBy String?   @map("deleted_by")
-
-    skills PortfolioSkill[]
-
-    @@index([freelancerId, isDeleted])
-    @@map("portfolio_project")
-  }
-
-  model PortfolioSkill {
-    portfolioId String @map("portfolio_id")
-    skillId     String @map("skill_id")
-    note        String? @db.VarChar(255)
-    createdAt   DateTime @default(now()) @map("created_at")
-
-    portfolio PortfolioProject @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-    skill     Skill            @relation(fields: [skillId], references: [id], onDelete: Restrict)
-
-    @@id([portfolioId, skillId])
-    @@index([skillId])
-    @@map("portfolio_skill")
-  }
-
-  model Education {
-    id           String   @id @default(cuid())
-
-    freelancerId String   @map("freelancer_id")
-    freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
-
-    schoolName   String   @db.VarChar(255) @map("school_name")
-    degreeTitle  String   @db.VarChar(255) @map("degree_title")
-    fieldOfStudy String?  @db.VarChar(255) @map("field_of_study")
-    startYear    Int?     @map("start_year")
-    endYear      Int?     @map("end_year")
-
-    createdAt    DateTime @default(now()) @map("created_at")
-    updatedAt    DateTime @updatedAt      @map("updated_at")
-
-    @@index([freelancerId, startYear])
-    @@map("education")
-  }
-
-  enum CompanySize {
-    JUST_ME        // It's just me
-    TWO_TO_NINE    // 2-9 employees
-    TEN_TO_NINETY  // 10-99 employees
-    HUNDRED_TO_K   // 100-1,000 employees
-    MORE_THAN_K    // More than 1,000 employees
-  }
-
-  model Client {
-    // Dùng profile_user_id làm PK để đảm bảo 1–1 tuyệt đối với Profile
-    userId String   @id @map("profile_user_id")
-    profile       Profile  @relation( fields: [userId], references: [userId], onDelete: Cascade)
-
-    companyName   String?    @map("company_name")
-    websiteUrl    String?   @map("website_url")
-    size          CompanySize? @map("size")
-    description   String?   @map("description")
-    
-    contracts Contract[]
-
-    createdAt     DateTime  @default(now()) @map("created_at")
-    updatedAt     DateTime  @updatedAt @map("updated_at")
-
-    @@map("client")
-  }
-
-  enum AssetProvider {
-    CLOUDINARY 
-    S3 
-    GCS 
-    R2 
-    MINIO 
-  }
-  enum AssetKind {
-    IMAGE 
-    VIDEO 
-    FILE 
-  }
-  enum AssetVisibility { 
-    PUBLIC 
-    PRIVATE 
-    AUTHENTICATED 
-  }
-  enum AssetStatus { 
-    PENDING 
-    READY 
-    INFECTED 
-    DELETED 
-  }
-
-  model Asset {
-    id         String          @id @default(cuid())
-    provider   AssetProvider?
-    kind       AssetKind
-    publicId   String?         @unique @map("public_id")   // Cloudinary…
-    bucket     String?                                      // S3/R2
-    storageKey String?         @unique                      // object key (path) trên S3/R2
-    url        String?                                       // có thể không lưu nếu build từ provider
-    mimeType   String?
-    bytes      Int?
-    width      Int?
-    height     Int?
-    checksum   String?          @map("checksum_sha256")     // để dedupe/toàn vẹn
-    visibility AssetVisibility  @default(PUBLIC)
-    status     AssetStatus      @default(PENDING)
-    createdBy  String?                                          // userId tạo
-    meta       Json?            // {originalName, pageCount, duration, exif, ...}
-    parentId   String?          // biến thể/thumbnail/source
-    parent     Asset?           @relation("AssetVariants", fields: [parentId], references: [id])
-    variants   Asset[]          @relation("AssetVariants")
-    createdAt  DateTime         @default(now())
-
-    links      AssetLink[]
-
-    @@index([provider, bucket, storageKey])
-    @@index([status])
-    @@map("asset")
-  }
-
-  enum AssetRole { 
-    AVATAR
-    COVER 
-    GALLERY 
-    ATTACHMENT 
-    BANNER 
-    OTHER
-  }
-
-  enum AssetOwnerType {
-    USER
-    JOB
-    MESSAGE
-    PORTFOLIO
-  }
-
-  model AssetLink {
-    id         String    @id @default(cuid())
-    ownerType  AssetOwnerType    // 'USER' | 'FREELANCER' | 'JOB' | 'MESSAGE' | ...
-    ownerId    String
-    role       AssetRole
-    position   Int       @default(0)          // 0 cho single; >0 cho gallery
-    label      String?                         // tên hiển thị
-    caption    String?                         // mô tả
-    isPrimary  Boolean   @default(false)
-    createdBy  String?                         // người gán
-    assetId    String
-    asset      Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
-    createdAt  DateTime  @default(now())
-
-    @@index([ownerType, ownerId, role])
-    @@unique([ownerType, ownerId, role, position])
-    @@map("asset_link")
-  }
-
-  // ---------- Enums ----------
-  enum MilestoneStatus { 
-    OPEN 
-    SUBMITTED 
-    APPROVED 
-    RELEASED 
-    CANCELED 
-  }
-
-  enum EscrowStatus { 
-    UNFUNDED 
-    FUNDED 
-    PARTIALLY_RELEASED 
-    RELEASED
-    PARTIALLY_REFUNDED
-    REFUNDED
-    DISPUTED // bật nếu có khiếu nại
-  }
-
-  enum PaymentStatus { 
-    REQUIRES_PAYMENT 
-    SUCCEEDED_REFUNDED 
-    FAILED 
-  }
-  enum TransferStatus { 
-    PENDING_SUCCEEDED 
-    FAILED_REVERSED 
-  }
-  enum RefundStatus { 
-    PENDING_SUCCEEDED 
-    FAILED 
-  }
-  enum AccountType { 
-    INDIVIDUAL 
-    COMPANY 
-  }
-
-  // Chỉ dùng fixed-price → mỗi contract có nhiều milestone
-  model Contract {
-    id           String   @id @default(cuid())
-    clientId     String    @map("client_id")
-    freelancerId String    @map("freelancer_id")
-    title        String
-    currency     String   // "usd", ...
-    createdAt    DateTime @default(now()) @map("created_at")
-    updatedAt    DateTime @updatedAt  @map("updated_at")
-
-    client       Client     @relation(fields: [clientId], references: [userId])
-    freelancer   Freelancer     @relation(fields: [freelancerId], references: [userId])
-    milestones   Milestone[]
-  }
-
-  model Milestone {
-    id          String         @id @default(cuid())
-    contractId  String         @map("contract_id")
-    title       String
-    amount      Decimal        @db.Decimal(12,2)
-    currency    String
-    status      MilestoneStatus @default(OPEN)
-    escrowId    String         @map("escrow_id")
-    updatedAt   DateTime       @updatedAt @map("updated_at")
-
-    contract    Contract       @relation(fields: [contractId], references: [id])
-    escrow      Escrow?        @relation(fields: [escrowId], references: [id])
-
-    @@unique([escrowId])
-  }
-
-  // ---------- Payments / Escrow ----------
-  model Escrow {
-    id               String   @id @default(cuid())
-    currency         String
-    amountFunded     Decimal  @db.Decimal(12,2) @default(0) @map("amount_funded")
-    amountReleased   Decimal  @db.Decimal(12,2) @default(0) @map("amount_released")
-    amountRefunded   Decimal  @db.Decimal(12,2) @default(0) @map("amount_refunded")
-    status           EscrowStatus @default(UNFUNDED)
-
-     // Phí & thuế (lũy kế)
-    platformFeeTotal   Decimal @db.Decimal(12,2) @default(0) @map("flatform_fee_total") // tổng platform fee trên milestone
-    processingFeeTotal Decimal @db.Decimal(12,2) @default(0) @map("processing_fee_total")// tổng phí Stripe thực chi
-    taxWithholdingTotal Decimal @db.Decimal(12,2) @default(0) @map("tax_with_holding_total")// nếu có khấu trừ thuế
-
-    createdAt        DateTime @default(now()) @map("created_at")
-    updatedAt        DateTime @updatedAt  @map("updated_at")
-
-    milestone        Milestone?
-    dispute          Dispute?
-    payments         Payment[]
-
-
-    transfers        Transfer[]
-    refunds          Refund[]
-  }
-
-  enum PaymentType {
-    ESCROW_MILESTONE
-    PLATFORM_SERVICE
-  }
-
-  model Payment {
-    id               String   @id @default(cuid())
-    escrowId         String?  @map("escrow_id")
-    type             PaymentType @default(ESCROW_MILESTONE) @map("type")
-    amount           Decimal  @db.Decimal(12,2)
-    currency         String
-    status           PaymentStatus
-    // Stripe refs
-    paymentIntentId  String   @unique @map("payment_intent_id")  // pi_xxx
-    chargeId         String?  @map("charge_id")        // ch_xxx (set qua webhook)
-    cardBrand      String? // ENUM -> ~1 byte
-    cardLast4      String?    @db.Char(4)
-    cardExpMonth   Int?       @db.UnsignedTinyInt
-    cardExpYear    Int?       @db.UnsignedSmallInt
-    cardFingerprint String?   @db.Char(32) // optional
-    // Idempotency
-    idemKey          String?  @unique @map("idem_key")
-    createdAt        DateTime @default(now()) @map("created_at")
-    updatedAt        DateTime @updatedAt  @map("updated_at")
-
-    escrow           Escrow?   @relation(fields: [escrowId], references: [id])
-    refund           Refund?
-    @@index([escrowId])
-  }
-
-  model Transfer {
-    id                    String   @id @default(cuid())
-    escrowId              String   @map("escrow_id")
-    amount                Decimal  @db.Decimal(12,2)
-    currency              String
-    status                TransferStatus
-    // Stripe refs
-    transferId            String?  @unique @map("tranfer_id")  // tr_xxx
-    destinationAccountId  String   @map("destination_account_id")         // acct_xxx (freelancer)
-    // Idempotency
-    idemKey               String?  @unique  @map("idem_key")
-    createdAt             DateTime @default(now()) @map("created_at")
-    updatedAt             DateTime @updatedAt @map("updated_at")
-
-    escrow                Escrow   @relation(fields: [escrowId], references: [id])
-
-    @@index([escrowId])
-  }
-
-  model Refund {
-    id              String   @id @default(cuid())
-    escrowId        String   @map("escrow_id")
-    paymentId       String   @map("payment_id")
-    amount          Decimal  @db.Decimal(12,2)
-    currency        String
-    status          RefundStatus
-    // Stripe refs
-    stripeRefundId  String?  @unique @map("stripe_refund_id")// re_xxx
-    // Idempotency
-    idemKey         String?  @unique @map("idem_key")
-    createdAt       DateTime @default(now()) @map("created_at")
-    updatedAt       DateTime @updatedAt @map("updated_at")
-
-    escrow          Escrow   @relation(fields: [escrowId], references: [id])
-    payment         Payment?  @relation(fields: [paymentId], references: [id])
-    @@index([escrowId])
-    @@index([paymentId])
-    @@unique([paymentId])
-  }
-
-  enum DisputeStatus {
-    OPEN            // vừa mở
-    NEGOTIATION     // (tùy dùng hay không) đang thương lượng
-    AWAITING_ARBITRATION_FEES
-    ARBITRATION     // đã thu phí, chờ quyết
-    RESOLVED_RELEASE_ALL
-    RESOLVED_REFUND_ALL
-    RESOLVED_SPLIT
-    CANCELED        // rút dispute/không hợp lệ
-    EXPIRED         // quá hạn không phản hồi
-  }
-
-  model Dispute {
-  id            String   @id @default(cuid())
-  escrowId      String   @unique
-  openedById    String
-  status        DisputeStatus @default(OPEN)
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLIENT
+  FREELANCER
+  ADMIN
+}
+
+model User {
+  id       String  @id @default(uuid())
+  email    String  @unique
+  googleId String? @unique @map("google_id")
+
+  // ĐÃ LOẠI BỎ: first_name, last_name, avatar -> chuyển sang Profile
+
+  password        String?
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+  isActive        Boolean   @default(true) @map("is_active")
+
+  role Role?
+
+  // 1-1
+  profile Profile?
+
+  emailVerifyTokens EmailVerifyToken[]
+  jobActivityLogs   JobActivityLog[]
+
+  @@index([email])
+  @@map("user")
+}
+
+model Profile {
+  // 1-1 với User
+  userId String @id @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Trường hồ sơ
+  firstName   String? @map("first_name")
+  lastName    String? @map("last_name")
+  phoneNumber String? @map("phone_number")
+
+  country          String?
+  city             String?
+  district         String?
+  address          String?
+  stripeCustomerId String? @unique @map("stripe_customer_id")
+
+  freelancer       Freelancer?
+  client           Client?
+  paymentMethodRef PaymentMethodRef[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("profile")
+}
+
+model EmailVerifyToken {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verify_token")
+}
+
+enum LanguageProficiency {
+  BASIC // biết cơ bản
+  CONVERSATIONAL // giao tiếp
+  FLUENT // lưu loát
+  NATIVE // bản ngữ
+}
+
+model FreelancerLanguage {
+  // KHÓA TỔNG HỢP: freelancerId + languageCode
+  freelancerId String              @map("freelancer_id")
+  languageCode String              @db.VarChar(10)
+  proficiency  LanguageProficiency
+
+  freelancer Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@id([freelancerId, languageCode])
+  @@index([languageCode], name: "idx_language_code")
+  @@map("freelancer_language")
+}
+
+model Freelancer {
+  userId  String  @id @map("user_id")
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  title String? @db.VarChar(255)
+  bio   String? @db.MediumText
+  links Json? // ví dụ: ["https://github.com/..."]
+
+  // Quan hệ ngược
+  educations     Education[]
+  languages      FreelancerLanguage[] // ✅ Thêm dòng này
+  connectAccount FreelancerConnectAccount?
+  contracts      Contract[]
+
+  freelancerCategorySelection  FreelancerCategorySelection[]
+  freelancerSpecialtySelection FreelancerSpecialtySelection[]
+  freelancerSkillSelection     FreelancerSkillSelection[]
+  portfolios                   PortfolioProject[]
+  jobProposals                 JobProposal[]
+  jobInvitations               JobInvitation[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("freelancer")
+}
+
+enum StripeConnectAccountType {
+  EXPRESS
+  STANDARD
+  CUSTOM
+}
+
+model FreelancerConnectAccount {
+  freelancerId String     @id @map("freelancer_id")
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+  stripeAccountId String                   @unique @map("stripe_account_id") // acct_xxx
+  accountType     StripeConnectAccountType @default(EXPRESS) @map("account_type")
+
+  detailsSubmitted Boolean @default(false) @map("details_submitted")
+  payoutsEnabled   Boolean @default(false) @map("payouts_enabled")
+  chargesEnabled   Boolean @default(false) @map("charges_enabled")
+
+  country                String? @map("country")
+  defaultCurrency        String? @map("default_currency")
+  externalAccountSummary Json?   @map("external_account_summary")
+
+  requirementsDue          Json? @map("requirements_due")
+  requirementsCurrentlyDue Json? @map("requirements_currently_due")
+  requirementsPastDue      Json? @map("requirements_past_due")
+
+  disabledReason String?   @map("disabled_reason")
+  disabledAt     DateTime? @map("disabled_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("freelancer_connect_account")
+}
+
+enum PortfolioVisibility {
+  PUBLIC
+  PRIVATE
+  DRAFT
+}
+
+model PortfolioProject {
+  id           String     @id @default(cuid())
+  freelancerId String     @map("freelancer_id")
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+  title         String              @db.VarChar(255)
+  role          String?             @db.VarChar(255)
+  description   String?             @db.MediumText
+  projectUrl    String?             @map("project_url")
+  repositoryUrl String?             @map("repository_url")
+  visibility    PortfolioVisibility @default(PUBLIC)
+
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  publishedAt DateTime? @map("published_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  skills PortfolioSkill[]
+
+  @@index([freelancerId, isDeleted])
+  @@map("portfolio_project")
+}
+
+model PortfolioSkill {
+  portfolioId String   @map("portfolio_id")
+  skillId     String   @map("skill_id")
+  note        String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  portfolio PortfolioProject @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  skill     Skill            @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@id([portfolioId, skillId])
+  @@index([skillId])
+  @@map("portfolio_skill")
+}
+
+model Education {
+  id String @id @default(cuid())
+
+  freelancerId String     @map("freelancer_id")
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+  schoolName   String  @map("school_name") @db.VarChar(255)
+  degreeTitle  String  @map("degree_title") @db.VarChar(255)
+  fieldOfStudy String? @map("field_of_study") @db.VarChar(255)
+  startYear    Int?    @map("start_year")
+  endYear      Int?    @map("end_year")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([freelancerId, startYear])
+  @@map("education")
+}
+
+enum CompanySize {
+  JUST_ME // It's just me
+  TWO_TO_NINE // 2-9 employees
+  TEN_TO_NINETY // 10-99 employees
+  HUNDRED_TO_K // 100-1,000 employees
+  MORE_THAN_K // More than 1,000 employees
+}
+
+model Client {
+  // Dùng profile_user_id làm PK để đảm bảo 1–1 tuyệt đối với Profile
+  userId  String  @id @map("profile_user_id")
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  companyName String?      @map("company_name")
+  websiteUrl  String?      @map("website_url")
+  size        CompanySize? @map("size")
+  description String?      @map("description")
+
+  jobPosts       JobPost[]
+  jobInvitations JobInvitation[]
+  contracts      Contract[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("client")
+}
+
+enum AssetProvider {
+  CLOUDINARY
+  S3
+  GCS
+  R2
+  MINIO
+}
+
+enum AssetKind {
+  IMAGE
+  VIDEO
+  FILE
+}
+
+enum AssetVisibility {
+  PUBLIC
+  PRIVATE
+  AUTHENTICATED
+}
+
+enum AssetStatus {
+  PENDING
+  READY
+  INFECTED
+  DELETED
+}
+
+model Asset {
+  id         String          @id @default(cuid())
+  provider   AssetProvider?
+  kind       AssetKind
+  publicId   String?         @unique @map("public_id") // Cloudinary…
+  bucket     String? // S3/R2
+  storageKey String?         @unique // object key (path) trên S3/R2
+  url        String? // có thể không lưu nếu build từ provider
+  mimeType   String?
+  bytes      Int?
+  width      Int?
+  height     Int?
+  checksum   String?         @map("checksum_sha256") // để dedupe/toàn vẹn
+  visibility AssetVisibility @default(PUBLIC)
+  status     AssetStatus     @default(PENDING)
+  createdBy  String? // userId tạo
+  meta       Json? // {originalName, pageCount, duration, exif, ...}
+  parentId   String? // biến thể/thumbnail/source
+  parent     Asset?          @relation("AssetVariants", fields: [parentId], references: [id])
+  variants   Asset[]         @relation("AssetVariants")
+  createdAt  DateTime        @default(now())
+
+  links AssetLink[]
+
+  @@index([provider, bucket, storageKey])
+  @@index([status])
+  @@map("asset")
+}
+
+enum AssetRole {
+  AVATAR
+  COVER
+  GALLERY
+  ATTACHMENT
+  BANNER
+  OTHER
+}
+
+enum AssetOwnerType {
+  USER
+  JOB
+  MESSAGE
+  PORTFOLIO
+}
+
+model AssetLink {
+  id        String         @id @default(cuid())
+  ownerType AssetOwnerType // 'USER' | 'FREELANCER' | 'JOB' | 'MESSAGE' | ...
+  ownerId   String
+  role      AssetRole
+  position  Int            @default(0) // 0 cho single; >0 cho gallery
+  label     String? // tên hiển thị
+  caption   String? // mô tả
+  isPrimary Boolean        @default(false)
+  createdBy String? // người gán
+  assetId   String
+  asset     Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+
+  @@unique([ownerType, ownerId, role, position])
+  @@index([ownerType, ownerId, role])
+  @@map("asset_link")
+}
+
+// ---------- Job Marketplace ----------
+enum JobPaymentMode {
+  FIXED_SINGLE
+  FIXED_MILESTONE
+}
+
+enum JobDurationCommitment {
+  LESS_THAN_ONE_MONTH
+  ONE_TO_THREE_MONTHS
+  THREE_TO_SIX_MONTHS
+  MORE_THAN_SIX_MONTHS
+}
+
+enum JobExperienceLevel {
+  ENTRY
+  INTERMEDIATE
+  EXPERT
+}
+
+enum JobVisibility {
+  PUBLIC
+  INVITE_ONLY
+  PRIVATE
+}
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  CLOSED
+}
+
+enum JobLocationType {
+  REMOTE
+  CLIENT_LOCATION_ONLY
+  ON_SITE
+}
+
+enum JobProposalStatus {
+  SUBMITTED
+  SHORTLISTED
+  INTERVIEWING
+  HIRED
+  DECLINED
+  WITHDRAWN
+}
+
+enum JobInvitationStatus {
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+model JobPost {
+  id                 String                 @id @default(cuid())
+  clientId           String                 @map("client_id")
+  specialtyId        String                 @map("specialty_id")
+  title              String                 @db.VarChar(255)
+  description        String                 @db.MediumText
+  paymentMode        JobPaymentMode         @map("payment_mode")
+  budgetAmount       Decimal?               @map("budget_amount") @db.Decimal(12, 2)
+  budgetCurrency     String?                @map("budget_currency")
+  duration           JobDurationCommitment? @map("duration")
+  experienceLevel    JobExperienceLevel     @map("experience_level")
+  locationType       JobLocationType        @default(REMOTE) @map("location_type")
+  preferredLocations Json?                  @map("preferred_locations")
+  customTerms        Json?                  @map("custom_terms")
+  visibility         JobVisibility          @default(PUBLIC)
+  status             JobStatus              @default(DRAFT)
+  publishedAt        DateTime?              @map("published_at")
+  closedAt           DateTime?              @map("closed_at")
+  proposalsCount     Int                    @default(0) @map("proposals_count")
+  viewsCount         Int                    @default(0) @map("views_count")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+
+  client    Client    @relation(fields: [clientId], references: [userId], onDelete: Cascade)
+  specialty Specialty @relation(fields: [specialtyId], references: [id], onDelete: Restrict)
+
+  languages          JobLanguageRequirement[]
+  requiredSkills     JobRequiredSkill[]
+  screeningQuestions JobScreeningQuestion[]
+  proposals          JobProposal[]
+  invitations        JobInvitation[]
+  activityLogs       JobActivityLog[]
+  contracts          Contract[]
+
+  @@index([clientId, status])
+  @@index([specialtyId, status])
+  @@index([status, visibility])
+  @@map("job_post")
+}
+
+model JobLanguageRequirement {
+  jobId        String              @map("job_id")
+  languageCode String              @map("language_code") @db.VarChar(10)
+  proficiency  LanguageProficiency @default(CONVERSATIONAL)
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  job JobPost @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, languageCode])
+  @@map("job_language_requirement")
+}
+
+model JobRequiredSkill {
+  jobId       String   @map("job_id")
+  skillId     String   @map("skill_id")
+  orderHint   Int?     @map("order_hint")
+  isPreferred Boolean  @default(false) @map("is_preferred")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  job   JobPost @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  skill Skill   @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@id([jobId, skillId])
+  @@index([skillId])
+  @@map("job_required_skill")
+}
+
+model JobScreeningQuestion {
+  id         String   @id @default(cuid())
+  jobId      String   @map("job_id")
+  question   String   @db.VarChar(500)
+  orderIndex Int      @default(0) @map("order_index")
+  isRequired Boolean  @default(true) @map("is_required")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  job JobPost @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, orderIndex])
+  @@map("job_screening_question")
+}
+
+model JobInvitation {
+  id           String              @id @default(cuid())
+  jobId        String              @map("job_id")
+  clientId     String              @map("client_id")
+  freelancerId String              @map("freelancer_id")
+  message      String?             @db.MediumText
+  status       JobInvitationStatus @default(SENT)
+  sentAt       DateTime            @default(now()) @map("sent_at")
+  respondedAt  DateTime?           @map("responded_at")
+  expiresAt    DateTime?           @map("expires_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  job        JobPost      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  client     Client       @relation(fields: [clientId], references: [userId], onDelete: Cascade)
+  freelancer Freelancer   @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+  proposal   JobProposal? @relation("InvitationProposal")
+
+  @@unique([jobId, freelancerId])
+  @@index([freelancerId, status])
+  @@map("job_invitation")
+}
+
+model JobProposal {
+  id                String                 @id @default(cuid())
+  jobId             String                 @map("job_id")
+  freelancerId      String                 @map("freelancer_id")
+  invitationId      String?                @map("invitation_id")
+  coverLetter       String?                @map("cover_letter") @db.MediumText
+  bidAmount         Decimal?               @map("bid_amount") @db.Decimal(12, 2)
+  bidCurrency       String?                @map("bid_currency")
+  estimatedDuration JobDurationCommitment? @map("estimated_duration")
+  status            JobProposalStatus      @default(SUBMITTED)
+  submittedAt       DateTime               @default(now()) @map("submitted_at")
+  withdrawnAt       DateTime?              @map("withdrawn_at")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  job        JobPost        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  freelancer Freelancer     @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+  invitation JobInvitation? @relation("InvitationProposal", fields: [invitationId], references: [id], onDelete: SetNull)
+  contract   Contract?      @relation("ContractProposal")
+
+  @@unique([jobId, freelancerId])
+  @@unique([invitationId])
+  @@index([jobId, status])
+  @@index([freelancerId, status])
+  @@map("job_proposal")
+}
+
+model JobActivityLog {
+  id        String   @id @default(cuid())
+  jobId     String   @map("job_id")
+  actorId   String?  @map("actor_id")
+  actorRole Role?    @map("actor_role")
+  action    String   @db.VarChar(100)
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  job   JobPost @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  actor User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([jobId, createdAt])
+  @@map("job_activity_log")
+}
+
+// ---------- Enums ----------
+enum MilestoneStatus {
+  OPEN
+  SUBMITTED
+  APPROVED
+  RELEASED
+  CANCELED
+}
+
+enum EscrowStatus {
+  UNFUNDED
+  FUNDED
+  PARTIALLY_RELEASED
+  RELEASED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  DISPUTED // bật nếu có khiếu nại
+}
+
+enum PaymentStatus {
+  REQUIRES_PAYMENT
+  SUCCEEDED_REFUNDED
+  FAILED
+}
+
+enum TransferStatus {
+  PENDING_SUCCEEDED
+  FAILED_REVERSED
+}
+
+enum RefundStatus {
+  PENDING_SUCCEEDED
+  FAILED
+}
+
+enum AccountType {
+  INDIVIDUAL
+  COMPANY
+}
+
+// Chỉ dùng fixed-price → mỗi contract có nhiều milestone
+model Contract {
+  id           String   @id @default(cuid())
+  clientId     String   @map("client_id")
+  freelancerId String   @map("freelancer_id")
+  jobPostId    String?  @map("job_post_id")
+  proposalId   String?  @unique @map("proposal_id")
+  title        String
+  currency     String // "usd", ...
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  client     Client       @relation(fields: [clientId], references: [userId])
+  freelancer Freelancer   @relation(fields: [freelancerId], references: [userId])
+  jobPost    JobPost?     @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
+  proposal   JobProposal? @relation("ContractProposal", fields: [proposalId], references: [id], onDelete: SetNull)
+  milestones Milestone[]
+
+  @@index([jobPostId])
+}
+
+model Milestone {
+  id         String          @id @default(cuid())
+  contractId String          @map("contract_id")
+  title      String
+  amount     Decimal         @db.Decimal(12, 2)
+  currency   String
+  status     MilestoneStatus @default(OPEN)
+  escrowId   String          @map("escrow_id")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+
+  contract Contract @relation(fields: [contractId], references: [id])
+  escrow   Escrow?  @relation(fields: [escrowId], references: [id])
+
+  @@unique([escrowId])
+}
+
+// ---------- Payments / Escrow ----------
+model Escrow {
+  id             String       @id @default(cuid())
+  currency       String
+  amountFunded   Decimal      @default(0) @map("amount_funded") @db.Decimal(12, 2)
+  amountReleased Decimal      @default(0) @map("amount_released") @db.Decimal(12, 2)
+  amountRefunded Decimal      @default(0) @map("amount_refunded") @db.Decimal(12, 2)
+  status         EscrowStatus @default(UNFUNDED)
+
+  // Phí & thuế (lũy kế)
+  platformFeeTotal    Decimal @default(0) @map("flatform_fee_total") @db.Decimal(12, 2) // tổng platform fee trên milestone
+  processingFeeTotal  Decimal @default(0) @map("processing_fee_total") @db.Decimal(12, 2) // tổng phí Stripe thực chi
+  taxWithholdingTotal Decimal @default(0) @map("tax_with_holding_total") @db.Decimal(12, 2) // nếu có khấu trừ thuế
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  milestone Milestone?
+  dispute   Dispute?
+  payments  Payment[]
+
+  transfers Transfer[]
+  refunds   Refund[]
+}
+
+enum PaymentType {
+  ESCROW_MILESTONE
+  PLATFORM_SERVICE
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  escrowId        String?       @map("escrow_id")
+  type            PaymentType   @default(ESCROW_MILESTONE) @map("type")
+  amount          Decimal       @db.Decimal(12, 2)
+  currency        String
+  status          PaymentStatus
+  // Stripe refs
+  paymentIntentId String        @unique @map("payment_intent_id") // pi_xxx
+  chargeId        String?       @map("charge_id") // ch_xxx (set qua webhook)
+  cardBrand       String? // ENUM -> ~1 byte
+  cardLast4       String?       @db.Char(4)
+  cardExpMonth    Int?          @db.UnsignedTinyInt
+  cardExpYear     Int?          @db.UnsignedSmallInt
+  cardFingerprint String?       @db.Char(32) // optional
+  // Idempotency
+  idemKey         String?       @unique @map("idem_key")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  escrow Escrow? @relation(fields: [escrowId], references: [id])
+  refund Refund?
+
+  @@index([escrowId])
+}
+
+model Transfer {
+  id                   String         @id @default(cuid())
+  escrowId             String         @map("escrow_id")
+  amount               Decimal        @db.Decimal(12, 2)
+  currency             String
+  status               TransferStatus
+  // Stripe refs
+  transferId           String?        @unique @map("tranfer_id") // tr_xxx
+  destinationAccountId String         @map("destination_account_id") // acct_xxx (freelancer)
+  // Idempotency
+  idemKey              String?        @unique @map("idem_key")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  escrow Escrow @relation(fields: [escrowId], references: [id])
+
+  @@index([escrowId])
+}
+
+model Refund {
+  id             String       @id @default(cuid())
+  escrowId       String       @map("escrow_id")
+  paymentId      String       @map("payment_id")
+  amount         Decimal      @db.Decimal(12, 2)
+  currency       String
+  status         RefundStatus
+  // Stripe refs
+  stripeRefundId String?      @unique @map("stripe_refund_id") // re_xxx
+  // Idempotency
+  idemKey        String?      @unique @map("idem_key")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  escrow  Escrow   @relation(fields: [escrowId], references: [id])
+  payment Payment? @relation(fields: [paymentId], references: [id])
+
+  @@unique([paymentId])
+  @@index([escrowId])
+  @@index([paymentId])
+}
+
+enum DisputeStatus {
+  OPEN // vừa mở
+  NEGOTIATION // (tùy dùng hay không) đang thương lượng
+  AWAITING_ARBITRATION_FEES
+  ARBITRATION // đã thu phí, chờ quyết
+  RESOLVED_RELEASE_ALL
+  RESOLVED_REFUND_ALL
+  RESOLVED_SPLIT
+  CANCELED // rút dispute/không hợp lệ
+  EXPIRED // quá hạn không phản hồi
+}
+
+model Dispute {
+  id         String        @id @default(cuid())
+  escrowId   String        @unique
+  openedById String
+  status     DisputeStatus @default(OPEN)
 
   // đề xuất cuối cùng (để 2 bên nhìn & đồng ý)
-  proposedRelease Decimal @db.Decimal(12,2) @default(0) @map("proposed_release")  // trả freelancer
-  proposedRefund  Decimal @db.Decimal(12,2) @default(0) @map("proposed_refund")  // trả client
+  proposedRelease Decimal @default(0) @map("proposed_release") @db.Decimal(12, 2) // trả freelancer
+  proposedRefund  Decimal @default(0) @map("proposed_refund") @db.Decimal(12, 2) // trả client
 
   // phí trọng tài (demo: flat $20 mỗi bên)
-  arbFeePerParty Decimal @db.Decimal(12,2) @default(20) @map("arb_fee_per_party")
+  arbFeePerParty       Decimal @default(20) @map("arb_fee_per_party") @db.Decimal(12, 2)
   clientArbFeePaid     Boolean @default(false) @map("client_arb_fee_paid")
   freelancerArbFeePaid Boolean @default(false) @map("freelancer_arb_fee_paid")
 
   // hạn phản hồi/đóng phí
-  responseDeadline DateTime?  @map("response_deadline")
+  responseDeadline    DateTime? @map("response_deadline")
   arbitrationDeadline DateTime? @map("arbitration_deadline")
 
   // kết quả chốt (nếu RESOLVED_*)
-  decidedRelease Decimal @db.Decimal(12,2) @default(0) @map("decided_release")
-  decidedRefund  Decimal @db.Decimal(12,2) @default(0) @map("decided_refund")
+  decidedRelease Decimal @default(0) @map("decided_release") @db.Decimal(12, 2)
+  decidedRefund  Decimal @default(0) @map("decided_refund") @db.Decimal(12, 2)
   decidedById    String? @map("decided_by_id")
 
-  note        String?
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  escrow Escrow @relation(fields: [escrowId], references: [id])
+}
+
+// ---------- Cards / Methods (cache nhẹ cho UI) ----------
+model PaymentMethodRef {
+  id               String   @id @default(cuid())
+  profileId        String   @map("profile_id")
+  stripeCustomerId String   @map("stripe_customer_id") // cus_xxx
+  paymentMethodId  String   @map("payment_method_id") // pm_xxx
+  firstName        String   @map("first_name")
+  lastName         String   @map("last_name")
+  brand            String?
+  last4            String?
+  expMonth         Int?     @map("exp_month")
+  expYear          Int?     @map("exp_year")
+  isDefault        Boolean  @default(false) @map("is_default")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Billing address
+  billingCountry String? @map("billing_country")
+  billingCity    String? @map("billing_city")
+  billingLine1   String? @map("billing_line1")
+  billingLine2   String? @map("billing_line2")
+  billingPostal  String? @map("billing_postal")
+
+  profile Profile @relation(fields: [profileId], references: [userId])
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
+  @@unique([stripeCustomerId, paymentMethodId])
+  @@index([profileId])
+}
+
+// ---------- Ops / Webhooks ----------
+model WebhookEventLog {
+  id        String   @id @default(cuid())
+  eventId   String   @unique @map("event_id") // evt_xxx
+  type      String
+  raw       Json
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+}
+
+/// Step 2/10: Top-level category (e.g., IT & Networking, Design & Creative, ...)
+model Category {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  isActive    Boolean  @default(true) @map("is_active")
+  description String?  @db.MediumText
+  sortOrder   Int      @default(0) @map("sort_order")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  escrow      Escrow   @relation(fields: [escrowId], references: [id])
-}
-
-  // ---------- Cards / Methods (cache nhẹ cho UI) ----------
-  model PaymentMethodRef {
-    id               String   @id @default(cuid())
-    profileId        String   @map("profile_id")
-    stripeCustomerId String   @map("stripe_customer_id")// cus_xxx
-    paymentMethodId  String   @map("payment_method_id")// pm_xxx
-    firstName        String   @map("first_name")
-    lastName         String   @map("last_name")
-    brand            String?
-    last4            String?
-    expMonth         Int?     @map("exp_month")
-    expYear          Int?     @map("exp_year")
-    isDefault        Boolean  @default(false) @map("is_default")
-    createdAt        DateTime @default(now()) @map("created_at")
-    updatedAt        DateTime @updatedAt  @map("updated_at")
-
-    // Billing address
-    billingCountry   String? @map("billing_country")
-    billingCity      String? @map("billing_city")
-    billingLine1     String? @map("billing_line1")
-    billingLine2     String? @map("billing_line2")
-    billingPostal    String? @map("billing_postal")
-
-    profile             Profile     @relation(fields: [profileId], references: [userId])
-    
-    isDeleted Boolean  @map("is_deleted") @default(false)
-    deletedAt DateTime? @map("deleted_at")
-    deletedBy String? @map("deleted_by")
-    @@index([profileId])
-    @@unique([stripeCustomerId, paymentMethodId])
-  }
-
-  // ---------- Ops / Webhooks ----------
-  model WebhookEventLog {
-    id         String   @id @default(cuid())
-    eventId    String   @unique @map("event_id")  // evt_xxx
-    type       String   
-    raw        Json
-    processed  Boolean  @default(false) 
-    createdAt  DateTime @default(now()) @map("created_at")
-  }
-
-
-  /// Step 2/10: Top-level category (e.g., IT & Networking, Design & Creative, ...)
-model Category {
-  id        String   @id @default(cuid())
-  slug      String   @unique
-  name      String
-  isActive  Boolean  @default(true)   @map("is_active")
-  description String? @db.MediumText
-  sortOrder Int      @default(0)      @map("sort_order")
-  createdAt DateTime @default(now())  @map("created_at")
-  updatedAt DateTime @updatedAt     @map("updated_at")
-
-  isDeleted Boolean  @map("is_deleted")  @default(false)
+  isDeleted Boolean   @default(false) @map("is_deleted")
   deletedAt DateTime? @map("deleted_at")
-  deletedBy String? @map("deleted_by")
+  deletedBy String?   @map("deleted_by")
 
-  @@index([name, slug])
-
-  specialties Specialty[]
+  specialties     Specialty[]
   // Optional mapping to suggest skills when user picks this category
   suggestedSkills CategorySkill[]
 
   freelancerCategorySelection FreelancerCategorySelection[]
+
+  @@index([name, slug])
 }
 
 /// Subcategory / Specialty inside a category (e.g., "Network & System Administration")
 model Specialty {
-  id          String    @id @default(cuid())
-  categoryId  String    @map("category_id")
-  slug        String    @unique
+  id          String   @id @default(cuid())
+  categoryId  String   @map("category_id")
+  slug        String   @unique
   name        String
-  description String? @db.MediumText
-  isActive    Boolean   @default(true)  @map("is_active")
-  sortOrder   Int       @default(0)   @map("sort_order")
-  createdAt   DateTime  @default(now())   @map("created_at")
-  updatedAt   DateTime  @updatedAt    @map("updated_at")
+  description String?  @db.MediumText
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  isDeleted Boolean  @map("is_deleted")  @default(false)
+  isDeleted Boolean   @default(false) @map("is_deleted")
   deletedAt DateTime? @map("deleted_at")
-  deletedBy String? @map("deleted_by")
+  deletedBy String?   @map("deleted_by")
 
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@index([categoryId])  
+  category                     Category                       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   // Optional mapping to suggest skills for this specialty
-  suggestedSkills SpecialtySkill[]
+  suggestedSkills              SpecialtySkill[]
   freelancerSpecialtySelection FreelancerSpecialtySelection[]
-}
+  jobPosts                     JobPost[]
 
+  @@index([categoryId])
+}
 
 /// Atomic skill (e.g., React, Kubernetes, Prisma, Penetration Testing, …)
 model Skill {
-  id        String   @id @default(cuid())
-  slug      String   @unique
-  name      String
-  description String? @db.MediumText
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?  @db.MediumText
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  isDeleted Boolean  @map("is_deleted")  @default(false)
+  isDeleted Boolean   @default(false) @map("is_deleted")
   deletedAt DateTime? @map("deleted_at")
-  deletedBy String? @map("deleted_by")
+  deletedBy String?   @map("deleted_by")
 
   // Backrefs
-  categories CategorySkill[]
+  categories  CategorySkill[]
   specialties SpecialtySkill[]
 
   freelancerSkillSelection FreelancerSkillSelection[]
-  portfolioSkills PortfolioSkill[]
+  portfolioSkills          PortfolioSkill[]
+  jobRequiredSkills        JobRequiredSkill[]
 
   @@index([name, isDeleted])
   @@index([slug, isDeleted])
 }
 
-/* ----------------------  TAXONOMY → SKILL SUGGESTION  --------------------- */
+/**
+ * ----------------------  TAXONOMY → SKILL SUGGESTION  ---------------------
+ */
 
 /// (Optional) Which skills are relevant to a category
 model CategorySkill {
   categoryId String @map("category_id")
   skillId    String @map("skill_id")
-  weight     Int      @default(50) // 0–100: mức độ gợi ý/độ liên quan
-  
-  isDeleted Boolean  @map("is_deleted")  @default(false)
+  weight     Int    @default(50) // 0–100: mức độ gợi ý/độ liên quan
+
+  isDeleted Boolean   @default(false) @map("is_deleted")
   deletedAt DateTime? @map("deleted_at")
-  deletedBy String? @map("deleted_by")
+  deletedBy String?   @map("deleted_by")
 
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   skill    Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
@@ -695,23 +918,25 @@ model CategorySkill {
 
 /// (Optional) Which skills are relevant to a specialty
 model SpecialtySkill {
-  specialtyId String  @map("specialty_id")
-  skillId     String  @map("skill_id")
-  weight      Int      @default(70) // gợi ý mạnh hơn category
+  specialtyId String @map("specialty_id")
+  skillId     String @map("skill_id")
+  weight      Int    @default(70) // gợi ý mạnh hơn category
 
   specialty Specialty @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
   skill     Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
-  isDeleted Boolean  @map("is_deleted")  @default(false)
+  isDeleted Boolean   @default(false) @map("is_deleted")
   deletedAt DateTime? @map("deleted_at")
-  deletedBy String? @map("deleted_by")
+  deletedBy String?   @map("deleted_by")
 
   @@id([specialtyId, skillId])
   @@index([skillId])
   @@map("specialty_skill")
 }
 
-/* ----------------------------  USER SELECTIONS  --------------------------- */
+/**
+ * ----------------------------  USER SELECTIONS  ---------------------------
+ */
 
 model FreelancerCategorySelection {
   id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
@@ -719,34 +944,32 @@ model FreelancerCategorySelection {
   categoryId String   @map("category_id")
   pickedAt   DateTime @default(now()) @map("picked_at")
 
-  isDeleted Boolean  @map("is_deleted")  @default(false)
-  deletedAt  DateTime?               @map("deleted_at")
-  deletedBy  String?                 @map("deleted_by")
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
 
   freelancer Freelancer @relation(fields: [userId], references: [userId], onDelete: Cascade)
   category   Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   // Dashboard/analytics theo category
   @@index([categoryId, isDeleted])
-
   // Nếu thường sort theo thời điểm chọn cho 1 user:
   @@index([userId, isDeleted, pickedAt])
   @@map("freelancer_category_selection")
 }
 
-
 model FreelancerSpecialtySelection {
   id          String   @id @default(cuid())
-  userId   String
+  userId      String
   specialtyId String
   pickedAt    DateTime @default(now())
 
-  isDeleted Boolean  @map("is_deleted")  @default(false)
-  deletedAt  DateTime?
-  deletedBy  String?
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  deletedAt DateTime?
+  deletedBy String?
 
-  freelancer   Freelancer @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  specialty Specialty         @relation(fields: [specialtyId], references: [id], onDelete: Restrict)
+  freelancer Freelancer @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  specialty  Specialty  @relation(fields: [specialtyId], references: [id], onDelete: Restrict)
 
   // chỉ 1 bản ghi active / (profile, specialty)
   @@index([userId, isDeleted])
@@ -755,21 +978,20 @@ model FreelancerSpecialtySelection {
 }
 
 model FreelancerSkillSelection {
-  id        String    @id @default(cuid())
-  userId String
+  id        String   @id @default(cuid())
+  userId    String
   skillId   String
   orderHint Int?
-  pickedAt  DateTime  @default(now())
+  pickedAt  DateTime @default(now())
 
-  isDeleted Boolean  @map("is_deleted")  @default(false)
+  isDeleted Boolean   @default(false) @map("is_deleted")
   deletedAt DateTime?
   deletedBy String?
 
   freelancer Freelancer @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  skill   Skill            @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  skill      Skill      @relation(fields: [skillId], references: [id], onDelete: Restrict)
 
   @@index([userId, isDeleted])
   @@index([skillId, isDeleted])
-
   @@map("freelancer_skill_selection")
 }
