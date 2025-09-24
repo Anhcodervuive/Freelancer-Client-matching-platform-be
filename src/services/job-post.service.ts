@@ -1,6 +1,11 @@
+import type { Express } from 'express'
+
 import {
+        AssetKind,
         AssetOwnerType,
+        AssetProvider,
         AssetRole,
+        AssetStatus,
         JobExperienceLevel,
         JobLocationType,
         JobPaymentMode,
@@ -16,11 +21,16 @@ import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
+import { CLOUDINARY_CONFIG_INFO } from '~/config/environment'
 import {
         CreateJobPostInput,
         JobPostFilterInput,
         UpdateJobPostInput
 } from '~/schema/job-post.schema'
+import {
+        destroyCloudinary,
+        uploadBufferToCloudinary
+} from '~/providers/cloudinaryProvider.provider'
 
 type TransactionClient = Parameters<
         Extract<Parameters<typeof prismaClient.$transaction>[0], (client: any) => unknown>
@@ -169,6 +179,112 @@ const normalizeLanguages = (languages: readonly NormalizedLanguage[]): Normalize
         }
 
         return normalized
+}
+
+type UploadedAttachment = {
+        file: Express.Multer.File
+        upload: Awaited<ReturnType<typeof uploadBufferToCloudinary>>
+}
+
+const determineAssetKind = (mime: string): AssetKind =>
+        mime.startsWith('image/') ? AssetKind.IMAGE : mime.startsWith('video/') ? AssetKind.VIDEO : AssetKind.FILE
+
+const jobAttachmentFolderForUser = (userId: string) => {
+        const base = CLOUDINARY_CONFIG_INFO.JOB_ATTACHMENT_FOLDER || 'job-posts'
+        return [base, userId].filter(Boolean).join('/')
+}
+
+const cleanupUploadedAttachments = async (uploads: readonly UploadedAttachment[]) => {
+        if (uploads.length === 0) return
+
+        const tasks: Promise<unknown>[] = []
+
+        for (const item of uploads) {
+                const publicId = item.upload?.public_id
+                if (typeof publicId !== 'string' || publicId.length === 0) continue
+                tasks.push(destroyCloudinary(publicId, item.file.mimetype).catch(() => undefined))
+        }
+
+        if (tasks.length > 0) {
+                await Promise.allSettled(tasks)
+        }
+}
+
+const uploadAttachmentFiles = async (
+        userId: string,
+        files: readonly Express.Multer.File[] | undefined
+): Promise<UploadedAttachment[]> => {
+        if (!files || files.length === 0) return []
+
+        const folder = jobAttachmentFolderForUser(userId)
+        const uploads: UploadedAttachment[] = []
+
+        try {
+                for (const file of files) {
+                        const upload = await uploadBufferToCloudinary(file.buffer, {
+                                folder,
+                                mime: file.mimetype
+                        })
+                        uploads.push({ file, upload })
+                }
+
+                return uploads
+        } catch (error) {
+                await cleanupUploadedAttachments(uploads)
+                throw error
+        }
+}
+
+const persistAttachmentUploads = async (
+        tx: TransactionClient,
+        uploads: readonly UploadedAttachment[],
+        actorId: string
+): Promise<string[]> => {
+        if (uploads.length === 0) return []
+
+        const assetIds: string[] = []
+
+        for (const item of uploads) {
+                const meta: Prisma.JsonObject = { originalName: item.file.originalname }
+                if (item.upload?.format) meta.format = item.upload.format
+                if (item.upload?.resource_type) meta.resourceType = item.upload.resource_type
+                if (item.upload?.folder) meta.folder = item.upload.folder
+                if (item.upload?.duration !== undefined) meta.duration = item.upload.duration
+                if (item.upload?.asset_id) meta.assetId = item.upload.asset_id
+
+                const asset = await tx.asset.create({
+                        data: {
+                                provider: AssetProvider.CLOUDINARY,
+                                kind: determineAssetKind(item.file.mimetype),
+                                publicId: item.upload?.public_id ?? null,
+                                url: item.upload?.secure_url ?? item.upload?.url ?? null,
+                                mimeType: item.file.mimetype,
+                                bytes: item.upload?.bytes ?? item.file.size ?? null,
+                                width: item.upload?.width ?? null,
+                                height: item.upload?.height ?? null,
+                                createdBy: actorId,
+                                status: AssetStatus.READY,
+                                meta
+                        }
+                })
+
+                assetIds.push(asset.id)
+        }
+
+        return assetIds
+}
+
+const fetchCurrentAttachmentAssetIds = async (tx: TransactionClient, jobId: string): Promise<string[]> => {
+        const links = await tx.assetLink.findMany({
+                where: {
+                        ownerType: OWNER_TYPE,
+                        ownerId: jobId,
+                        role: AssetRole.ATTACHMENT
+                },
+                orderBy: { position: Prisma.SortOrder.asc }
+        })
+
+        return links.map(link => link.assetId)
 }
 
 const syncJobLanguages = async (tx: TransactionClient, jobId: string, languages: readonly NormalizedLanguage[]) => {
@@ -581,7 +697,11 @@ const serializeJobPostSummary = (job: JobPostSummaryPayload) => {
         }
 }
 
-const createJobPost = async (clientUserId: string, input: CreateJobPostInput) => {
+const createJobPost = async (
+        clientUserId: string,
+        input: CreateJobPostInput,
+        options?: { attachmentFiles?: readonly Express.Multer.File[] }
+) => {
         await ensureClientProfile(clientUserId)
         await ensureSpecialtyExists(input.specialtyId)
 
@@ -590,65 +710,83 @@ const createJobPost = async (clientUserId: string, input: CreateJobPostInput) =>
 
         const attachmentAssetIds = input.attachments ? uniquePreserveOrder(input.attachments) : []
         await validateAssetIds(attachmentAssetIds)
+        const uploadedAttachments = await uploadAttachmentFiles(clientUserId, options?.attachmentFiles)
 
         const languages = normalizeLanguages(input.languages)
 
         const status = input.status ?? JobStatus.DRAFT
         const now = new Date()
 
-        const job = await prismaClient.$transaction(async tx => {
-                const createData: Prisma.JobPostUncheckedCreateInput = {
-                        clientId: clientUserId,
-                        specialtyId: input.specialtyId,
-                        title: input.title,
-                        description: input.description,
-                        paymentMode: input.paymentMode,
-                        formVersion: input.formVersion ?? JobPostFormVersion.VERSION_1,
-                        experienceLevel: input.experienceLevel,
-                        visibility: input.visibility ?? JobVisibility.PUBLIC,
-                        status,
-                        ...(input.duration ? { duration: input.duration } : {}),
-                        ...(input.locationType ? { locationType: input.locationType } : {}),
-                        ...(input.budgetAmount !== undefined
-                                ? { budgetAmount: input.budgetAmount === null ? null : input.budgetAmount }
-                                : {}),
-                        ...(input.budgetCurrency !== undefined ? { budgetCurrency: input.budgetCurrency } : {}),
-                        ...(input.preferredLocations !== undefined
-                                ? { preferredLocations: input.preferredLocations as Prisma.InputJsonValue }
-                                : {}),
-                        ...(input.customTerms !== undefined
-                                ? { customTerms: input.customTerms as Prisma.InputJsonValue }
-                                : {}),
-                        ...(status === JobStatus.PUBLISHED ? { publishedAt: now } : {}),
-                        ...(status === JobStatus.CLOSED ? { closedAt: now } : {})
-                }
+        try {
+                const job = await prismaClient.$transaction(async tx => {
+                        const createData: Prisma.JobPostUncheckedCreateInput = {
+                                clientId: clientUserId,
+                                specialtyId: input.specialtyId,
+                                title: input.title,
+                                description: input.description,
+                                paymentMode: input.paymentMode,
+                                formVersion: input.formVersion ?? JobPostFormVersion.VERSION_1,
+                                experienceLevel: input.experienceLevel,
+                                visibility: input.visibility ?? JobVisibility.PUBLIC,
+                                status,
+                                ...(input.duration ? { duration: input.duration } : {}),
+                                ...(input.locationType ? { locationType: input.locationType } : {}),
+                                ...(input.budgetAmount !== undefined
+                                        ? { budgetAmount: input.budgetAmount === null ? null : input.budgetAmount }
+                                        : {}),
+                                ...(input.budgetCurrency !== undefined ? { budgetCurrency: input.budgetCurrency } : {}),
+                                ...(input.preferredLocations !== undefined
+                                        ? { preferredLocations: input.preferredLocations as Prisma.InputJsonValue }
+                                        : {}),
+                                ...(input.customTerms !== undefined
+                                        ? { customTerms: input.customTerms as Prisma.InputJsonValue }
+                                        : {}),
+                                ...(status === JobStatus.PUBLISHED ? { publishedAt: now } : {}),
+                                ...(status === JobStatus.CLOSED ? { closedAt: now } : {})
+                        }
 
-                const created = await tx.jobPost.create({
-                        data: createData
+                        const created = await tx.jobPost.create({
+                                data: createData
+                        })
+
+                        await syncJobLanguages(tx, created.id, languages)
+                        await syncJobSkills(tx, created.id, normalizedSkills)
+                        await syncScreeningQuestions(
+                                tx,
+                                created.id,
+                                input.screeningQuestions.map(question => ({
+                                        question: question.question.trim(),
+                                        isRequired: question.isRequired
+                                }))
+                        )
+
+                        let attachmentsToPersist = [...attachmentAssetIds]
+
+                        if (uploadedAttachments.length > 0) {
+                                const newAssetIds = await persistAttachmentUploads(tx, uploadedAttachments, clientUserId)
+                                attachmentsToPersist = [...attachmentsToPersist, ...newAssetIds]
+                        }
+
+                        if (attachmentsToPersist.length > 0) {
+                                await syncJobAttachments(tx, created.id, attachmentsToPersist, clientUserId)
+                        }
+
+                        return created
                 })
 
-                await syncJobLanguages(tx, created.id, languages)
-                await syncJobSkills(tx, created.id, normalizedSkills)
-                await syncScreeningQuestions(
-                        tx,
-                        created.id,
-                        input.screeningQuestions.map(question => ({
-                                question: question.question.trim(),
-                                isRequired: question.isRequired
-                        }))
-                )
-
-                if (attachmentAssetIds.length > 0) {
-                        await syncJobAttachments(tx, created.id, attachmentAssetIds, clientUserId)
-                }
-
-                return created
-        })
-
-        return getJobPostById(job.id, clientUserId)
+                return getJobPostById(job.id, clientUserId)
+        } catch (error) {
+                await cleanupUploadedAttachments(uploadedAttachments)
+                throw error
+        }
 }
 
-const updateJobPost = async (jobId: string, clientUserId: string, input: UpdateJobPostInput) => {
+const updateJobPost = async (
+        jobId: string,
+        clientUserId: string,
+        input: UpdateJobPostInput,
+        options?: { attachmentFiles?: readonly Express.Multer.File[] }
+) => {
         await ensureClientProfile(clientUserId)
 
         const job = await prismaClient.jobPost.findUnique({
@@ -668,10 +806,13 @@ const updateJobPost = async (jobId: string, clientUserId: string, input: UpdateJ
                 await validateSkillIds(normalizedSkills)
         }
 
-        const attachments = input.attachments ? uniquePreserveOrder(input.attachments) : undefined
-        if (attachments) {
-                await validateAssetIds(attachments)
+        const attachmentsFromBody =
+                input.attachments !== undefined ? uniquePreserveOrder(input.attachments) : undefined
+        if (attachmentsFromBody !== undefined) {
+                await validateAssetIds(attachmentsFromBody)
         }
+
+        const uploadedAttachments = await uploadAttachmentFiles(clientUserId, options?.attachmentFiles)
 
         const languages = input.languages ? normalizeLanguages(input.languages) : undefined
 
@@ -724,37 +865,56 @@ const updateJobPost = async (jobId: string, clientUserId: string, input: UpdateJ
                 }
         }
 
-        await prismaClient.$transaction(async tx => {
-                if (Object.keys(data).length > 0) {
-                        await tx.jobPost.update({
-                                where: { id: jobId },
-                                data
-                        })
-                }
+        try {
+                await prismaClient.$transaction(async tx => {
+                        if (Object.keys(data).length > 0) {
+                                await tx.jobPost.update({
+                                        where: { id: jobId },
+                                        data
+                                })
+                        }
 
-                if (languages) {
-                        await syncJobLanguages(tx, jobId, languages)
-                }
+                        if (languages) {
+                                await syncJobLanguages(tx, jobId, languages)
+                        }
 
-                if (normalizedSkills) {
-                        await syncJobSkills(tx, jobId, normalizedSkills)
-                }
+                        if (normalizedSkills) {
+                                await syncJobSkills(tx, jobId, normalizedSkills)
+                        }
 
-                if (input.screeningQuestions) {
-                        await syncScreeningQuestions(
-                                tx,
-                                jobId,
-                                input.screeningQuestions.map(question => ({
-                                        question: question.question.trim(),
-                                        isRequired: question.isRequired
-                                }))
-                        )
-                }
+                        if (input.screeningQuestions) {
+                                await syncScreeningQuestions(
+                                        tx,
+                                        jobId,
+                                        input.screeningQuestions.map(question => ({
+                                                question: question.question.trim(),
+                                                isRequired: question.isRequired
+                                        }))
+                                )
+                        }
 
-                if (attachments) {
-                        await syncJobAttachments(tx, jobId, attachments, clientUserId)
-                }
-        })
+                        let attachmentsToPersist =
+                                attachmentsFromBody !== undefined ? [...attachmentsFromBody] : undefined
+
+                        if (uploadedAttachments.length > 0) {
+                                const base =
+                                        attachmentsToPersist ?? (await fetchCurrentAttachmentAssetIds(tx, jobId))
+                                const newAssetIds = await persistAttachmentUploads(
+                                        tx,
+                                        uploadedAttachments,
+                                        clientUserId
+                                )
+                                attachmentsToPersist = [...base, ...newAssetIds]
+                        }
+
+                        if (attachmentsToPersist !== undefined) {
+                                await syncJobAttachments(tx, jobId, attachmentsToPersist, clientUserId)
+                        }
+                })
+        } catch (error) {
+                await cleanupUploadedAttachments(uploadedAttachments)
+                throw error
+        }
 
         return getJobPostById(jobId, clientUserId)
 }
