@@ -410,6 +410,12 @@ enum JobLocationType {
   ON_SITE
 }
 
+enum JobPostFormVersion {
+  VERSION_1
+  VERSION_2
+  VERSION_3
+}
+
 enum JobProposalStatus {
   SUBMITTED
   SHORTLISTED
@@ -442,6 +448,7 @@ model JobPost {
   customTerms        Json?                  @map("custom_terms")
   visibility         JobVisibility          @default(PUBLIC)
   status             JobStatus              @default(DRAFT)
+  formVersion        JobPostFormVersion     @default(VERSION_1) @map("form_version")
   publishedAt        DateTime?              @map("published_at")
   closedAt           DateTime?              @map("closed_at")
   proposalsCount     Int                    @default(0) @map("proposals_count")

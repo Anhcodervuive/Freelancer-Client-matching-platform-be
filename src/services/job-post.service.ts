@@ -4,6 +4,7 @@ import {
         JobExperienceLevel,
         JobLocationType,
         JobPaymentMode,
+        JobPostFormVersion,
         JobStatus,
         JobVisibility,
         LanguageProficiency,
@@ -317,6 +318,7 @@ const buildJobPostWhere = (params: {
         search?: string
         statuses?: JobStatus[]
         paymentModes?: JobPaymentMode[]
+        formVersions?: JobPostFormVersion[]
         experienceLevels?: JobExperienceLevel[]
         locationTypes?: JobLocationType[]
         visibility?: JobVisibility
@@ -360,6 +362,13 @@ const buildJobPostWhere = (params: {
         if (params.paymentModes && params.paymentModes.length > 0) {
                 where.paymentMode =
                         params.paymentModes.length === 1 ? params.paymentModes[0]! : { in: params.paymentModes }
+        }
+
+        if (params.formVersions && params.formVersions.length > 0) {
+                where.formVersion =
+                        params.formVersions.length === 1
+                                ? params.formVersions[0]!
+                                : { in: params.formVersions }
         }
 
         if (params.experienceLevels && params.experienceLevels.length > 0) {
@@ -485,6 +494,7 @@ const serializeJobPost = (job: JobPostWithRelations) => {
         return {
                 id: job.id,
                 clientId: job.clientId,
+                formVersion: job.formVersion,
                 specialty: {
                         id: job.specialty.id,
                         name: job.specialty.name,
@@ -537,6 +547,7 @@ const serializeJobPostSummary = (job: JobPostSummaryPayload) => {
         return {
                 id: job.id,
                 clientId: job.clientId,
+                formVersion: job.formVersion,
                 specialty: {
                         id: job.specialty.id,
                         name: job.specialty.name,
@@ -592,6 +603,7 @@ const createJobPost = async (clientUserId: string, input: CreateJobPostInput) =>
                         title: input.title,
                         description: input.description,
                         paymentMode: input.paymentMode,
+                        formVersion: input.formVersion ?? JobPostFormVersion.VERSION_1,
                         experienceLevel: input.experienceLevel,
                         visibility: input.visibility ?? JobVisibility.PUBLIC,
                         status,
@@ -669,6 +681,7 @@ const updateJobPost = async (jobId: string, clientUserId: string, input: UpdateJ
         if (input.title) data.title = input.title
         if (input.description) data.description = input.description
         if (input.paymentMode) data.paymentMode = input.paymentMode
+        if (input.formVersion !== undefined) data.formVersion = input.formVersion
 
         if (input.budgetAmount !== undefined) {
                 data.budgetAmount = input.budgetAmount === null ? null : input.budgetAmount
@@ -816,7 +829,12 @@ const listJobPosts = async (filters: JobPostFilterInput, viewerId?: string) => {
                 ? uniquePreserveOrder(filters.languageCodes.map(code => code.toUpperCase()))
                 : undefined
         const skillIds = filters.skillIds ? uniquePreserveOrder(filters.skillIds) : undefined
-        const paymentModes = filters.paymentModes ? uniquePreserveOrder(filters.paymentModes) as JobPaymentMode[] : undefined
+        const paymentModes = filters.paymentModes
+                ? (uniquePreserveOrder(filters.paymentModes) as JobPaymentMode[])
+                : undefined
+        const formVersions = filters.formVersions
+                ? (uniquePreserveOrder(filters.formVersions) as JobPostFormVersion[])
+                : undefined
         const experienceLevels = filters.experienceLevels
                 ? uniquePreserveOrder(filters.experienceLevels) as JobExperienceLevel[]
                 : undefined
@@ -828,6 +846,7 @@ const listJobPosts = async (filters: JobPostFilterInput, viewerId?: string) => {
                 ...(filters.search ? { search: filters.search } : {}),
                 ...(statuses ? { statuses } : {}),
                 ...(paymentModes ? { paymentModes } : {}),
+                ...(formVersions ? { formVersions } : {}),
                 ...(experienceLevels ? { experienceLevels } : {}),
                 ...(locationTypes ? { locationTypes } : {}),
                 ...(filters.visibility ? { visibility: filters.visibility } : {}),

@@ -5,6 +5,7 @@ import {
         JobExperienceLevel,
         JobLocationType,
         JobPaymentMode,
+        JobPostFormVersion,
         JobStatus,
         JobVisibility,
         LanguageProficiency
@@ -82,6 +83,7 @@ export const CreateJobPostSchema = z
                 title: z.string().min(5).max(255),
                 description: z.string().min(20),
                 paymentMode: z.nativeEnum(JobPaymentMode),
+                formVersion: z.nativeEnum(JobPostFormVersion).default(JobPostFormVersion.VERSION_1),
                 budgetAmount: nullableBudgetSchema,
                 budgetCurrency: currencySchema.optional(),
                 duration: z.nativeEnum(JobDurationCommitment).optional(),
@@ -104,6 +106,7 @@ export const UpdateJobPostSchema = z
                 title: z.string().min(5).max(255).optional(),
                 description: z.string().min(20).optional(),
                 paymentMode: z.nativeEnum(JobPaymentMode).optional(),
+                formVersion: z.nativeEnum(JobPostFormVersion).optional(),
                 budgetAmount: nullableBudgetSchema,
                 budgetCurrency: z.union([currencySchema, z.null()]).optional(),
                 duration: z.union([z.nativeEnum(JobDurationCommitment), z.null()]).optional(),
@@ -188,6 +191,12 @@ export const JobPostFilterSchema = z
                         .preprocess(parseStringArray, z.array(z.nativeEnum(JobVisibility)).optional())
                         .optional()
                         .transform(value => (Array.isArray(value) ? value[0] : value)),
+                formVersions: z
+                        .preprocess(
+                                parseStringArray,
+                                z.array(z.nativeEnum(JobPostFormVersion)).optional()
+                        )
+                        .optional(),
                 specialtyId: z.string().min(1).optional(),
                 categoryId: z.string().min(1).optional(),
                 languageCodes: z
