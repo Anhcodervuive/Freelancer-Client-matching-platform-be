@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import path from 'node:path'
 import type { Express } from 'express'
 
 import {
@@ -21,16 +23,14 @@ import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
-import { CLOUDINARY_CONFIG_INFO } from '~/config/environment'
+import { R2_CONFIG } from '~/config/environment'
 import {
         CreateJobPostInput,
         JobPostFilterInput,
         UpdateJobPostInput
 } from '~/schema/job-post.schema'
-import {
-        destroyCloudinary,
-        uploadBufferToCloudinary
-} from '~/providers/cloudinaryProvider.provider'
+import { destroyCloudinary } from '~/providers/cloudinaryProvider.provider'
+import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 
 type TransactionClient = Parameters<
         Extract<Parameters<typeof prismaClient.$transaction>[0], (client: any) => unknown>
@@ -183,31 +183,53 @@ const normalizeLanguages = (languages: readonly NormalizedLanguage[]): Normalize
 
 type UploadedAttachment = {
         file: Express.Multer.File
-        upload: Awaited<ReturnType<typeof uploadBufferToCloudinary>>
+        object: Awaited<ReturnType<typeof uploadBufferToR2>>
+}
+
+type AssetCleanupTarget = {
+        provider: AssetProvider | null
+        publicId: string | null
+        bucket: string | null
+        storageKey: string | null
+        mimeType: string | null
 }
 
 const determineAssetKind = (mime: string): AssetKind =>
         mime.startsWith('image/') ? AssetKind.IMAGE : mime.startsWith('video/') ? AssetKind.VIDEO : AssetKind.FILE
 
 const jobAttachmentFolderForUser = (userId: string) => {
-        const base = CLOUDINARY_CONFIG_INFO.JOB_ATTACHMENT_FOLDER || 'job-posts'
+        const base = R2_CONFIG.JOB_ATTACHMENT_PREFIX || 'job-posts'
         return [base, userId].filter(Boolean).join('/')
+}
+
+const slugifyFileName = (name: string) => {
+        const normalized = name
+                .normalize('NFKD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-zA-Z0-9]+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '')
+                .toLowerCase()
+        return normalized.length > 0 ? normalized : 'file'
+}
+
+const buildAttachmentKey = (userId: string, originalName: string) => {
+        const folder = jobAttachmentFolderForUser(userId)
+        const ext = path.extname(originalName)
+        const base = path.basename(originalName, ext)
+        const safeBase = slugifyFileName(base)
+        const extension = ext ? ext.toLowerCase() : ''
+        return [folder, `${safeBase}-${randomUUID()}${extension}`].filter(Boolean).join('/')
 }
 
 const cleanupUploadedAttachments = async (uploads: readonly UploadedAttachment[]) => {
         if (uploads.length === 0) return
 
-        const tasks: Promise<unknown>[] = []
+        const tasks = uploads.map(item =>
+                deleteR2Object(item.object.bucket, item.object.key).catch(() => undefined)
+        )
 
-        for (const item of uploads) {
-                const publicId = item.upload?.public_id
-                if (typeof publicId !== 'string' || publicId.length === 0) continue
-                tasks.push(destroyCloudinary(publicId, item.file.mimetype).catch(() => undefined))
-        }
-
-        if (tasks.length > 0) {
-                await Promise.allSettled(tasks)
-        }
+        await Promise.allSettled(tasks)
 }
 
 const uploadAttachmentFiles = async (
@@ -216,16 +238,16 @@ const uploadAttachmentFiles = async (
 ): Promise<UploadedAttachment[]> => {
         if (!files || files.length === 0) return []
 
-        const folder = jobAttachmentFolderForUser(userId)
         const uploads: UploadedAttachment[] = []
 
         try {
                 for (const file of files) {
-                        const upload = await uploadBufferToCloudinary(file.buffer, {
-                                folder,
-                                mime: file.mimetype
+                        const key = buildAttachmentKey(userId, file.originalname)
+                        const object = await uploadBufferToR2(file.buffer, {
+                                key,
+                                contentType: file.mimetype
                         })
-                        uploads.push({ file, upload })
+                        uploads.push({ file, object })
                 }
 
                 return uploads
@@ -246,22 +268,16 @@ const persistAttachmentUploads = async (
 
         for (const item of uploads) {
                 const meta: Prisma.JsonObject = { originalName: item.file.originalname }
-                if (item.upload?.format) meta.format = item.upload.format
-                if (item.upload?.resource_type) meta.resourceType = item.upload.resource_type
-                if (item.upload?.folder) meta.folder = item.upload.folder
-                if (item.upload?.duration !== undefined) meta.duration = item.upload.duration
-                if (item.upload?.asset_id) meta.assetId = item.upload.asset_id
 
                 const asset = await tx.asset.create({
                         data: {
-                                provider: AssetProvider.CLOUDINARY,
+                                provider: AssetProvider.R2,
                                 kind: determineAssetKind(item.file.mimetype),
-                                publicId: item.upload?.public_id ?? null,
-                                url: item.upload?.secure_url ?? item.upload?.url ?? null,
+                                bucket: item.object.bucket,
+                                storageKey: item.object.key,
+                                url: item.object.url,
                                 mimeType: item.file.mimetype,
-                                bytes: item.upload?.bytes ?? item.file.size ?? null,
-                                width: item.upload?.width ?? null,
-                                height: item.upload?.height ?? null,
+                                bytes: item.file.size ?? null,
                                 createdBy: actorId,
                                 status: AssetStatus.READY,
                                 meta
@@ -272,6 +288,29 @@ const persistAttachmentUploads = async (
         }
 
         return assetIds
+}
+
+const cleanupRemovedAssetObjects = async (targets: readonly AssetCleanupTarget[]) => {
+        if (targets.length === 0) return
+
+        const tasks = targets.map(target => {
+                switch (target.provider) {
+                        case AssetProvider.R2:
+                                if (target.bucket && target.storageKey) {
+                                        return deleteR2Object(target.bucket, target.storageKey)
+                                }
+                                return Promise.resolve()
+                        case AssetProvider.CLOUDINARY:
+                                if (target.publicId) {
+                                        return destroyCloudinary(target.publicId, target.mimeType ?? undefined)
+                                }
+                                return Promise.resolve()
+                        default:
+                                return Promise.resolve()
+                }
+        })
+
+        await Promise.allSettled(tasks)
 }
 
 const fetchCurrentAttachmentAssetIds = async (tx: TransactionClient, jobId: string): Promise<string[]> => {
@@ -352,9 +391,18 @@ const syncJobAttachments = async (
         tx: TransactionClient,
         jobId: string,
         assetIds: readonly string[],
-        actorId: string
+        actorId: string,
+        removalQueue: AssetCleanupTarget[]
 ) => {
         const uniqueAssetIds = uniquePreserveOrder(assetIds)
+
+        const existingLinks = await tx.assetLink.findMany({
+                where: {
+                        ownerType: OWNER_TYPE,
+                        ownerId: jobId,
+                        role: AssetRole.ATTACHMENT
+                }
+        })
 
         if (uniqueAssetIds.length === 0) {
                 await tx.jobPostAttachment.deleteMany({ where: { jobId } })
@@ -365,6 +413,27 @@ const syncJobAttachments = async (
                                 role: AssetRole.ATTACHMENT
                         }
                 })
+
+                const processedAssetIds = new Set<string>()
+                for (const link of existingLinks) {
+                        if (processedAssetIds.has(link.assetId)) continue
+                        processedAssetIds.add(link.assetId)
+                        const remaining = await tx.assetLink.count({ where: { assetId: link.assetId } })
+                        if (remaining === 0) {
+                                const asset = await tx.asset.delete({
+                                        where: { id: link.assetId },
+                                        select: {
+                                                provider: true,
+                                                publicId: true,
+                                                bucket: true,
+                                                storageKey: true,
+                                                mimeType: true
+                                        }
+                                })
+                                removalQueue.push(asset)
+                        }
+                }
+
                 return
         }
 
@@ -381,14 +450,6 @@ const syncJobAttachments = async (
                         ownerId: jobId,
                         role: AssetRole.ATTACHMENT,
                         assetId: { notIn: uniqueAssetIds }
-                }
-        })
-
-        const existingLinks = await tx.assetLink.findMany({
-                where: {
-                        ownerType: OWNER_TYPE,
-                        ownerId: jobId,
-                        role: AssetRole.ATTACHMENT
                 }
         })
 
@@ -427,6 +488,30 @@ const syncJobAttachments = async (
                                 addedBy: actorId
                         }
                 })
+        }
+
+        const removedAssetIds = existingLinks
+                .map(link => link.assetId)
+                .filter(assetId => !uniqueAssetIds.includes(assetId))
+
+        const processedRemovals = new Set<string>()
+        for (const assetId of removedAssetIds) {
+                if (processedRemovals.has(assetId)) continue
+                processedRemovals.add(assetId)
+                const remaining = await tx.assetLink.count({ where: { assetId } })
+                if (remaining === 0) {
+                        const asset = await tx.asset.delete({
+                                where: { id: assetId },
+                                select: {
+                                        provider: true,
+                                        publicId: true,
+                                        bucket: true,
+                                        storageKey: true,
+                                        mimeType: true
+                                }
+                        })
+                        removalQueue.push(asset)
+                }
         }
 }
 
@@ -717,6 +802,8 @@ const createJobPost = async (
         const status = input.status ?? JobStatus.DRAFT
         const now = new Date()
 
+        const assetsToCleanup: AssetCleanupTarget[] = []
+
         try {
                 const job = await prismaClient.$transaction(async tx => {
                         const createData: Prisma.JobPostUncheckedCreateInput = {
@@ -768,11 +855,19 @@ const createJobPost = async (
                         }
 
                         if (attachmentsToPersist.length > 0) {
-                                await syncJobAttachments(tx, created.id, attachmentsToPersist, clientUserId)
+                                await syncJobAttachments(
+                                        tx,
+                                        created.id,
+                                        attachmentsToPersist,
+                                        clientUserId,
+                                        assetsToCleanup
+                                )
                         }
 
                         return created
                 })
+
+                await cleanupRemovedAssetObjects(assetsToCleanup)
 
                 return getJobPostById(job.id, clientUserId)
         } catch (error) {
@@ -865,6 +960,8 @@ const updateJobPost = async (
                 }
         }
 
+        const assetsToCleanup: AssetCleanupTarget[] = []
+
         try {
                 await prismaClient.$transaction(async tx => {
                         if (Object.keys(data).length > 0) {
@@ -908,13 +1005,21 @@ const updateJobPost = async (
                         }
 
                         if (attachmentsToPersist !== undefined) {
-                                await syncJobAttachments(tx, jobId, attachmentsToPersist, clientUserId)
+                                await syncJobAttachments(
+                                        tx,
+                                        jobId,
+                                        attachmentsToPersist,
+                                        clientUserId,
+                                        assetsToCleanup
+                                )
                         }
                 })
         } catch (error) {
                 await cleanupUploadedAttachments(uploadedAttachments)
                 throw error
         }
+
+        await cleanupRemovedAssetObjects(assetsToCleanup)
 
         return getJobPostById(jobId, clientUserId)
 }
@@ -1057,7 +1162,60 @@ const deleteJobPost = async (jobId: string, clientUserId: string) => {
                 throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
         }
 
-        await prismaClient.jobPost.softDelete({ id: jobId }, clientUserId)
+        const assetsToCleanup: AssetCleanupTarget[] = []
+
+        await prismaClient.$transaction(async tx => {
+                const attachmentLinks = await tx.assetLink.findMany({
+                        where: {
+                                ownerType: OWNER_TYPE,
+                                ownerId: jobId,
+                                role: AssetRole.ATTACHMENT
+                        }
+                })
+
+                if (attachmentLinks.length > 0) {
+                        await tx.jobPostAttachment.deleteMany({ where: { jobId } })
+                        await tx.assetLink.deleteMany({
+                                where: {
+                                        ownerType: OWNER_TYPE,
+                                        ownerId: jobId,
+                                        role: AssetRole.ATTACHMENT
+                                }
+                        })
+
+                        const processed = new Set<string>()
+                        for (const link of attachmentLinks) {
+                                if (processed.has(link.assetId)) continue
+                                processed.add(link.assetId)
+
+                                const remaining = await tx.assetLink.count({ where: { assetId: link.assetId } })
+                                if (remaining === 0) {
+                                        const asset = await tx.asset.delete({
+                                                where: { id: link.assetId },
+                                                select: {
+                                                        provider: true,
+                                                        publicId: true,
+                                                        bucket: true,
+                                                        storageKey: true,
+                                                        mimeType: true
+                                                }
+                                        })
+                                        assetsToCleanup.push(asset)
+                                }
+                        }
+                }
+
+                await tx.jobPost.update({
+                        where: { id: jobId },
+                        data: {
+                                isDeleted: true,
+                                deletedAt: new Date(),
+                                deletedBy: clientUserId
+                        }
+                })
+        })
+
+        await cleanupRemovedAssetObjects(assetsToCleanup)
 }
 
 export default {
