@@ -135,16 +135,23 @@ const signRequest = (params: SignedRequestParams) => {
 }
 
 const buildObjectUrl = (bucket: string, key: string) => {
+        const encodedKey = encodeS3Key(key)
         const custom = R2_CONFIG.PUBLIC_BASE_URL?.replace(/\/$/, '')
         if (custom) {
-                return `${custom}/${key}`
+                return `${custom}/${encodedKey}`
+        }
+
+        if (R2_CONFIG.ACCOUNT_ID) {
+                const publicOrigin = `https://pub-${R2_CONFIG.ACCOUNT_ID}.r2.dev`
+                return `${publicOrigin}/${encodeRfc3986(bucket)}/${encodedKey}`
         }
 
         const endpoint = getEndpoint()
         if (endpoint.endsWith(`/${bucket}`)) {
-                return `${endpoint}/${key}`
+                return `${endpoint}/${encodedKey}`
         }
-        return `${endpoint}/${bucket}/${key}`
+
+        return `${endpoint}/${encodeRfc3986(bucket)}/${encodedKey}`
 }
 
 export type R2UploadResult = {
