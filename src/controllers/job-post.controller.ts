@@ -1,3 +1,4 @@
+import type { Express } from 'express'
 import { Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
 
@@ -11,6 +12,22 @@ import {
 } from '~/schema/job-post.schema'
 import jobPostService from '~/services/job-post.service'
 
+const extractAttachmentFiles = (files: Request['files']): Express.Multer.File[] => {
+        if (!files) return []
+        if (Array.isArray(files)) {
+                return files as Express.Multer.File[]
+        }
+
+        const map = files as Record<string, Express.Multer.File[] | undefined>
+        const fromField = map.attachments
+
+        if (!fromField || fromField.length === 0) {
+                return []
+        }
+
+        return fromField
+}
+
 export const createJobPost = async (req: Request, res: Response) => {
         const userId = req.user?.id
 
@@ -19,7 +36,8 @@ export const createJobPost = async (req: Request, res: Response) => {
         }
 
         const payload = CreateJobPostSchema.parse(req.body)
-        const jobPost = await jobPostService.createJobPost(userId, payload)
+        const attachmentFiles = extractAttachmentFiles(req.files)
+        const jobPost = await jobPostService.createJobPost(userId, payload, { attachmentFiles })
 
         return res.status(StatusCodes.CREATED).json(jobPost)
 }
@@ -37,7 +55,8 @@ export const updateJobPost = async (req: Request, res: Response) => {
         }
 
         const payload = UpdateJobPostSchema.parse(req.body)
-        const jobPost = await jobPostService.updateJobPost(id, userId, payload)
+        const attachmentFiles = extractAttachmentFiles(req.files)
+        const jobPost = await jobPostService.updateJobPost(id, userId, payload, { attachmentFiles })
 
         return res.status(StatusCodes.OK).json(jobPost)
 }

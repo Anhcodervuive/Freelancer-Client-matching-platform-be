@@ -41,7 +41,8 @@ export const CLOUDINARY_CONFIG_INFO = {
         BASE_FOLDER: 'lvtn',
 
         PROFILE_FOLDER: 'user',
-        PORTFOLIO_FOLDER: 'portfolio'
+        PORTFOLIO_FOLDER: 'portfolio',
+        JOB_ATTACHMENT_FOLDER: 'job-posts'
 }
 
 export const STRIPE_CONFIG_INFO = {
