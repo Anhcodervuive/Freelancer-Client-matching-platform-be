@@ -429,6 +429,9 @@ model JobPost {
   closedAt           DateTime?              @map("closed_at")
   proposalsCount     Int                    @default(0) @map("proposals_count")
   viewsCount         Int                    @default(0) @map("views_count")
+  isDeleted          Boolean                @default(false) @map("is_deleted")
+  deletedAt          DateTime?              @map("deleted_at")
+  deletedBy          String?                @map("deleted_by")
   createdAt          DateTime               @default(now()) @map("created_at")
   updatedAt          DateTime               @updatedAt @map("updated_at")
 
@@ -443,9 +446,9 @@ model JobPost {
   activityLogs       JobActivityLog[]
   contracts          Contract[]
 
-  @@index([clientId, status])
-  @@index([specialtyId, status])
-  @@index([status, visibility])
+  @@index([clientId, status, isDeleted])
+  @@index([specialtyId, status, isDeleted])
+  @@index([status, visibility, isDeleted])
   @@map("job_post")
 }
 
