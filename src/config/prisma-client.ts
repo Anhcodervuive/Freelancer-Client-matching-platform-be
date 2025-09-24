@@ -7,16 +7,17 @@ if (process.env.NODE_ENV !== 'production') g.__basePrisma = base
 
 // CHỈ các model này mới có isDeleted
 const SOFT_MODELS = new Set<string>([
-	'PaymentMethodRef',
-	'Category',
-	'Specialty',
-	'Skill',
-	'CategorySkill',
-	'SpecialtySkill',
-	'FreelancerCategorySelection',
-	'FreelancerSpecialtySelection',
+        'PaymentMethodRef',
+        'Category',
+        'Specialty',
+        'Skill',
+        'CategorySkill',
+        'SpecialtySkill',
+        'FreelancerCategorySelection',
+        'FreelancerSpecialtySelection',
         'FreelancerSkillSelection',
-        'PortfolioProject'
+        'PortfolioProject',
+        'JobPost'
 ])
 // helper: tên property delegate trên PrismaClient là lowerCamelCase
 const toDelegate = (model: string) => (model && model.length > 0 ? model[0]?.toLowerCase() + model.slice(1) : '')
