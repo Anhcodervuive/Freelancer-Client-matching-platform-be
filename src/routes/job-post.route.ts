@@ -16,7 +16,7 @@ const router = Router()
 
 router.get('/', optionalAuthentication, errorHandler(listJobPosts))
 router.get('/:id', optionalAuthentication, errorHandler(getJobPostDetail))
-const uploadJobAttachments = uploadAnyFiles.array('attachments', 20)
+const uploadJobAttachments = uploadAnyFiles.any()
 
 router.post('/', authenticateMiddleware, uploadJobAttachments, errorHandler(createJobPost))
 router.patch('/:id', authenticateMiddleware, uploadJobAttachments, errorHandler(updateJobPost))
