@@ -350,9 +350,26 @@ model AssetLink {
   asset     Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
   createdAt DateTime       @default(now())
 
+  jobPostAttachments JobPostAttachment[]
+
   @@unique([ownerType, ownerId, role, position])
   @@index([ownerType, ownerId, role])
   @@map("asset_link")
+}
+
+model JobPostAttachment {
+  id          String   @id @default(cuid())
+  jobId       String   @map("job_id")
+  assetLinkId String   @unique @map("asset_link_id")
+  addedBy     String?  @map("added_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  job       JobPost   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  assetLink AssetLink @relation(fields: [assetLinkId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("job_post_attachment")
 }
 
 // ---------- Job Marketplace ----------
@@ -445,6 +462,7 @@ model JobPost {
   invitations        JobInvitation[]
   activityLogs       JobActivityLog[]
   contracts          Contract[]
+  attachments        JobPostAttachment[]
 
   @@index([clientId, status, isDeleted])
   @@index([specialtyId, status, isDeleted])
