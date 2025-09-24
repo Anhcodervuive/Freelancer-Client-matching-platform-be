@@ -45,6 +45,17 @@ export const CLOUDINARY_CONFIG_INFO = {
         JOB_ATTACHMENT_FOLDER: 'job-posts'
 }
 
+export const R2_CONFIG = {
+        ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
+        ENDPOINT: process.env.R2_ENDPOINT,
+        REGION: process.env.R2_REGION,
+        ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+        SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+        BUCKET: process.env.R2_BUCKET,
+        PUBLIC_BASE_URL: process.env.R2_PUBLIC_BASE_URL,
+        JOB_ATTACHMENT_PREFIX: process.env.R2_JOB_ATTACHMENT_PREFIX || 'job-posts'
+}
+
 export const STRIPE_CONFIG_INFO = {
-	API_KEY: process.env.STRIPE_API_KEY
+        API_KEY: process.env.STRIPE_API_KEY
 }
