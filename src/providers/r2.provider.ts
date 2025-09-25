@@ -46,13 +46,33 @@ const loadPresignerModule = async (): Promise<PresignerModule> => {
         return presignerModulePromise
 }
 
+const stripBucketFromEndpoint = (endpoint: string) => {
+        if (!R2_CONFIG.BUCKET) {
+                return endpoint
+        }
+
+        const bucket = R2_CONFIG.BUCKET.trim()
+        if (!bucket) {
+                return endpoint
+        }
+
+        const suffix = `/${bucket}`
+        if (endpoint.endsWith(suffix)) {
+                return endpoint.slice(0, -suffix.length)
+        }
+
+        return endpoint
+}
+
 const getEndpoint = () => {
         const endpoint =
                 R2_CONFIG.ENDPOINT || (R2_CONFIG.ACCOUNT_ID ? `https://${R2_CONFIG.ACCOUNT_ID}.r2.cloudflarestorage.com` : undefined)
         if (!endpoint) {
                 throw new Error('R2 endpoint is not configured. Please set R2_ENDPOINT or R2_ACCOUNT_ID.')
         }
-        return endpoint.replace(/\/$/, '')
+
+        const trimmed = endpoint.replace(/\/$/, '')
+        return stripBucketFromEndpoint(trimmed)
 }
 
 const getCredentials = () => {
