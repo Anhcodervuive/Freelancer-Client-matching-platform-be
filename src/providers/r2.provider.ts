@@ -126,11 +126,35 @@ const signRequest = (params: SignedRequestParams) => {
 	}
 }
 
+const normalizeCustomBase = (input: string) => {
+	try {
+		const parsed = new URL(input)
+		const host = parsed.host.toLowerCase()
+		const isS3Host = host.endsWith('.r2.cloudflarestorage.com')
+		if (isS3Host) {
+			return null
+		}
+
+		const normalizedPath = parsed.pathname.replace(/\/$/, '')
+		return `${parsed.origin}${normalizedPath}`
+	} catch (_error) {
+		if (!input.includes('://')) {
+			return input.replace(/\/$/, '')
+		}
+
+		return null
+	}
+}
+
 const buildObjectUrl = (bucket: string, key: string) => {
 	const encodedKey = encodeS3Key(key)
-	const custom = R2_CONFIG.PUBLIC_BASE_URL?.replace(/\/$/, '')
-	if (custom) {
-		return `${custom}/${encodedKey}`
+
+	const customBase = R2_CONFIG.PUBLIC_BASE_URL?.trim()
+	if (customBase) {
+		const normalized = normalizeCustomBase(customBase)
+		if (normalized) {
+			return `${normalized}/${encodedKey}`
+		}
 	}
 
 	if (R2_CONFIG.ACCOUNT_ID) {
