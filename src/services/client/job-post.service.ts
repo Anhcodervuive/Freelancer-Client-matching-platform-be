@@ -139,17 +139,40 @@ const validateSkillIds = async (skills: NormalizedSkills) => {
 	}
 }
 
-const validateAssetIds = async (assetIds: readonly string[]) => {
-	if (assetIds.length === 0) return
+const fetchAttachmentAssetIds = async (
+        tx: TransactionClient,
+        attachmentIds: readonly string[],
+        clientUserId: string,
+        options?: { jobId?: string }
+): Promise<string[]> => {
+        if (attachmentIds.length === 0) return []
 
-	const existing = await prismaClient.asset.findMany({
-		where: { id: { in: Array.from(assetIds) } },
-		select: { id: true }
-	})
+        const attachments = await tx.jobPostAttachment.findMany({
+                where: {
+                        id: { in: Array.from(attachmentIds) },
+                        ...(options?.jobId ? { jobId: options.jobId } : {}),
+                        job: { clientId: clientUserId }
+                },
+                include: {
+                        assetLink: {
+                                select: { assetId: true }
+                        }
+                }
+        })
 
-	if (existing.length !== assetIds.length) {
-		throw new NotFoundException('Tệp đính kèm không tồn tại', ErrorCode.ITEM_NOT_FOUND)
-	}
+        if (attachments.length !== attachmentIds.length) {
+                throw new NotFoundException('Tệp đính kèm không tồn tại', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const attachmentMap = new Map(attachments.map(item => [item.id, item.assetLink.assetId]))
+
+        return attachmentIds.map(id => {
+                const assetId = attachmentMap.get(id)
+                if (!assetId) {
+                        throw new NotFoundException('Tệp đính kèm không tồn tại', ErrorCode.ITEM_NOT_FOUND)
+                }
+                return assetId
+        })
 }
 
 const normalizeSkills = (skills: NormalizedSkills): NormalizedSkills => {
@@ -774,7 +797,7 @@ const createJobPost = async (
 
 	const normalizedSkills = normalizeSkills(input.skills)
 
-	const attachmentAssetIds = input.attachments ? uniquePreserveOrder(input.attachments) : []
+        const bodyAttachmentIds = input.attachments ? uniquePreserveOrder(input.attachments) : []
 	const uploadedAttachments = await uploadAttachmentFiles(clientUserId, options?.attachmentFiles)
 
 	const languages = normalizeLanguages(input.languages)
@@ -825,7 +848,12 @@ const createJobPost = async (
 				}))
 			)
 
-			let attachmentsToPersist = [...attachmentAssetIds]
+                        let attachmentsToPersist: string[] = []
+
+                        if (bodyAttachmentIds.length > 0) {
+                                const existingAssetIds = await fetchAttachmentAssetIds(tx, bodyAttachmentIds, clientUserId)
+                                attachmentsToPersist = [...existingAssetIds]
+                        }
 
 			if (uploadedAttachments.length > 0) {
 				const newAssetIds = await persistAttachmentUploads(tx, uploadedAttachments, clientUserId)
@@ -874,10 +902,7 @@ const updateJobPost = async (
 		await validateSkillIds(normalizedSkills)
 	}
 
-	const attachmentsFromBody = input.attachments !== undefined ? uniquePreserveOrder(input.attachments) : undefined
-	if (attachmentsFromBody !== undefined) {
-		await validateAssetIds(attachmentsFromBody)
-	}
+        const attachmentIdsFromBody = input.attachments !== undefined ? uniquePreserveOrder(input.attachments) : undefined
 
 	const uploadedAttachments = await uploadAttachmentFiles(clientUserId, options?.attachmentFiles)
 
@@ -959,11 +984,14 @@ const updateJobPost = async (
 				)
 			}
 
-			let attachmentsToPersist = attachmentsFromBody !== undefined ? [...attachmentsFromBody] : undefined
+                        let attachmentsToPersist =
+                                attachmentIdsFromBody !== undefined
+                                        ? await fetchAttachmentAssetIds(tx, attachmentIdsFromBody, clientUserId, { jobId })
+                                        : undefined
 
-			if (uploadedAttachments.length > 0) {
-				const base = attachmentsToPersist ?? (await fetchCurrentAttachmentAssetIds(tx, jobId))
-				const newAssetIds = await persistAttachmentUploads(tx, uploadedAttachments, clientUserId)
+                        if (uploadedAttachments.length > 0) {
+                                const base = attachmentsToPersist ?? (await fetchCurrentAttachmentAssetIds(tx, jobId))
+                                const newAssetIds = await persistAttachmentUploads(tx, uploadedAttachments, clientUserId)
 				attachmentsToPersist = [...base, ...newAssetIds]
 			}
 
