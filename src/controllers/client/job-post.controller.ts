@@ -6,7 +6,7 @@ import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { CreateJobPostSchema, JobPostFilterSchema, UpdateJobPostSchema } from '~/schema/job-post.schema'
-import jobPostService from '~/services/job-post.service'
+import jobPostService from '~/services/client/job-post.service'
 
 const ATTACHMENT_FILE_FIELD_NAMES = new Set(['attachmentFiles', 'attachmentFiles[]', 'attachments', 'attachments[]'])
 
