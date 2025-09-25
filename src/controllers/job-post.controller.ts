@@ -22,13 +22,22 @@ const extractAttachmentFiles = (files: Request['files']): Express.Multer.File[] 
 	return Array.from(ATTACHMENT_FILE_FIELD_NAMES).flatMap(fieldName => map[fieldName] ?? [])
 }
 
-const tryParseJson = (value: string): unknown => {
-	if (!value) return undefined
+function tryParseJSON<T = any>(value: unknown): T | unknown {
+	if (typeof value !== 'string') return value
 	try {
 		return JSON.parse(value)
-	} catch (error) {
-		return undefined
+	} catch {
+		return value
 	}
+}
+
+// parse toàn bộ req.body
+function parseFormDataBody(body: Record<string, any>) {
+	const result: Record<string, any> = {}
+	for (const key in body) {
+		result[key] = tryParseJSON(body[key])
+	}
+	return result
 }
 
 const normalizeAttachmentIdInput = (input: unknown): string[] => {
@@ -43,7 +52,7 @@ const normalizeAttachmentIdInput = (input: unknown): string[] => {
 
 		if (!trimmed) return []
 
-		const maybeJson = tryParseJson(trimmed)
+		const maybeJson = tryParseJSON<string>(trimmed)
 		if (Array.isArray(maybeJson)) {
 			return normalizeAttachmentIdInput(maybeJson)
 		}
@@ -131,10 +140,11 @@ export const updateJobPost = async (req: Request, res: Response) => {
 	if (!id) {
 		throw new BadRequestException('Thiếu tham số job post id', ErrorCode.PARAM_QUERY_ERROR)
 	}
+	const data = parseFormDataBody(req.body)
 
 	const attachmentFiles = extractAttachmentFiles(req.files)
 	sanitizeAttachmentIdsInBody(req.body, attachmentFiles)
-	const payload = UpdateJobPostSchema.parse(req.body)
+	const payload = UpdateJobPostSchema.parse(data)
 	const jobPost = await jobPostService.updateJobPost(id, userId, payload, { attachmentFiles })
 
 	return res.status(StatusCodes.OK).json(jobPost)

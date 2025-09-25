@@ -770,6 +770,7 @@ const createJobPost = async (
 ) => {
 	await ensureClientProfile(clientUserId)
 	await ensureSpecialtyExists(input.specialtyId)
+	console.log('attachment:', options?.attachmentFiles)
 
 	const normalizedSkills = normalizeSkills(input.skills)
 
