@@ -1,10 +1,50 @@
-import { createHash, createHmac } from 'node:crypto'
 import { URL } from 'node:url'
 
 import { R2_CONFIG } from '~/config/environment'
 
-const SERVICE = 's3'
 const REGION = R2_CONFIG.REGION || 'auto'
+const FORCE_PATH_STYLE = (() => {
+	const flag = process.env.R2_FORCE_PATH_STYLE
+	if (flag === undefined) {
+		return true
+	}
+	const normalized = flag.trim().toLowerCase()
+	if (normalized === 'true') return true
+	if (normalized === 'false') return false
+	return true
+})()
+
+type S3Module = typeof import('@aws-sdk/client-s3')
+type PresignerModule = typeof import('@aws-sdk/s3-request-presigner')
+
+let s3ModulePromise: Promise<S3Module> | null = null
+let presignerModulePromise: Promise<PresignerModule> | null = null
+let cachedClient: any | null = null
+
+const createDependencyError = (pkg: string, cause: unknown) =>
+	new Error(`Không thể tải module "${pkg}". Hãy chạy \`npm install ${pkg}\` rồi thử lại.`, {
+		cause
+	})
+
+const loadS3Module = async (): Promise<S3Module> => {
+	if (!s3ModulePromise) {
+		s3ModulePromise = import('@aws-sdk/client-s3').catch(error => {
+			s3ModulePromise = null
+			throw createDependencyError('@aws-sdk/client-s3', error)
+		})
+	}
+	return s3ModulePromise
+}
+
+const loadPresignerModule = async (): Promise<PresignerModule> => {
+	if (!presignerModulePromise) {
+		presignerModulePromise = import('@aws-sdk/s3-request-presigner').catch(error => {
+			presignerModulePromise = null
+			throw createDependencyError('@aws-sdk/s3-request-presigner', error)
+		})
+	}
+	return presignerModulePromise
+}
 
 const getEndpoint = () => {
 	const endpoint =
@@ -26,105 +66,24 @@ const getCredentials = () => {
 	}
 }
 
+const getClient = async (): Promise<any> => {
+	if (cachedClient) {
+		return cachedClient
+	}
+	const { S3Client } = await loadS3Module()
+	cachedClient = new S3Client({
+		region: REGION,
+		endpoint: getEndpoint(),
+		credentials: getCredentials(),
+		forcePathStyle: FORCE_PATH_STYLE
+	})
+	return cachedClient
+}
+
 const encodeRfc3986 = (value: string) =>
 	encodeURIComponent(value).replace(/[!'()*]/g, ch => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`)
 
 const encodeS3Key = (key: string) => key.split('/').map(encodeRfc3986).join('/')
-
-const toAmzDate = (date: Date) => {
-	const yyyy = date.getUTCFullYear()
-	const mm = String(date.getUTCMonth() + 1).padStart(2, '0')
-	const dd = String(date.getUTCDate()).padStart(2, '0')
-	const hh = String(date.getUTCHours()).padStart(2, '0')
-	const min = String(date.getUTCMinutes()).padStart(2, '0')
-	const ss = String(date.getUTCSeconds()).padStart(2, '0')
-	return `${yyyy}${mm}${dd}T${hh}${min}${ss}Z`
-}
-
-const toDateStamp = (date: Date) => {
-	const yyyy = date.getUTCFullYear()
-	const mm = String(date.getUTCMonth() + 1).padStart(2, '0')
-	const dd = String(date.getUTCDate()).padStart(2, '0')
-	return `${yyyy}${mm}${dd}`
-}
-
-const hashHex = (input: Buffer | string) => createHash('sha256').update(input).digest('hex')
-
-const getSigningKey = (secretKey: string, dateStamp: string) => {
-	const kDate = createHmac('sha256', `AWS4${secretKey}`).update(dateStamp).digest()
-	const kRegion = createHmac('sha256', kDate).update(REGION).digest()
-	const kService = createHmac('sha256', kRegion).update(SERVICE).digest()
-	return createHmac('sha256', kService).update('aws4_request').digest()
-}
-
-type SignedRequestParams = {
-	method: 'PUT' | 'DELETE'
-	bucket: string
-	key: string
-	body?: Buffer
-	contentType?: string
-}
-
-const signRequest = (params: SignedRequestParams) => {
-	const credentials = getCredentials()
-	const endpoint = new URL(getEndpoint())
-	const now = new Date()
-	const amzDate = toAmzDate(now)
-	const dateStamp = toDateStamp(now)
-	const bodyHash = params.body ? hashHex(params.body) : hashHex('')
-
-	const host = endpoint.host
-	const canonicalUri = `/${encodeRfc3986(params.bucket)}/${encodeS3Key(params.key)}`
-
-	const headers: Record<string, string> = {
-		host,
-		'x-amz-content-sha256': bodyHash,
-		'x-amz-date': amzDate
-	}
-
-	if (params.contentType) {
-		headers['content-type'] = params.contentType
-	}
-
-	const sortedHeaderNames = Object.keys(headers)
-		.map(name => name.toLowerCase())
-		.sort()
-	const canonicalHeaders = sortedHeaderNames
-		.map(name => {
-			const raw = headers[name]
-			const value = raw === undefined ? '' : raw.trim().replace(/\s+/g, ' ')
-			return `${name}:${value}`
-		})
-		.join('\n')
-	const signedHeaders = sortedHeaderNames.join(';')
-
-	const canonicalRequest = [params.method, canonicalUri, '', `${canonicalHeaders}\n`, signedHeaders, bodyHash].join(
-		'\n'
-	)
-
-	const credentialScope = `${dateStamp}/${REGION}/${SERVICE}/aws4_request`
-	const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, hashHex(canonicalRequest)].join('\n')
-
-	const signingKey = getSigningKey(credentials.secretAccessKey, dateStamp)
-	const signature = createHmac('sha256', signingKey).update(stringToSign).digest('hex')
-
-	const authorization = `AWS4-HMAC-SHA256 Credential=${credentials.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`
-
-	const finalHeaders: Record<string, string> = {}
-	for (const name of sortedHeaderNames) {
-		const value = headers[name]
-		if (value !== undefined) {
-			finalHeaders[name] = value
-		}
-	}
-	finalHeaders.Authorization = authorization
-
-	return {
-		url: `${endpoint.protocol}//${host}${canonicalUri}`,
-		headers: finalHeaders,
-		bodyHash
-	}
-}
 
 const normalizeCustomBase = (input: string) => {
 	try {
@@ -174,6 +133,7 @@ export type R2UploadResult = {
 	bucket: string
 	key: string
 	url: string
+	eTag?: string
 }
 
 export const uploadBufferToR2 = async (
@@ -185,34 +145,23 @@ export const uploadBufferToR2 = async (
 		throw new Error('R2 bucket is not configured. Please set R2_BUCKET.')
 	}
 
-	const signedParams: SignedRequestParams = {
-		method: 'PUT',
-		bucket,
-		key: options.key,
-		body: buffer
-	}
+	const client = await getClient()
+	const { PutObjectCommand } = await loadS3Module()
 
-	if (options.contentType) {
-		signedParams.contentType = options.contentType
-	}
-
-	const { url, headers } = signRequest(signedParams)
-
-	const response = await fetch(url, {
-		method: 'PUT',
-		headers,
-		body: buffer as any
-	})
-
-	if (!response.ok) {
-		console.log(response)
-		throw new Error(`Failed to upload object to R2: ${response.status} ${response.statusText}`)
-	}
+	const result = await client.send(
+		new PutObjectCommand({
+			Bucket: bucket,
+			Key: options.key,
+			Body: buffer,
+			ContentType: options.contentType
+		})
+	)
 
 	return {
 		bucket,
 		key: options.key,
-		url: buildObjectUrl(bucket, options.key)
+		url: buildObjectUrl(bucket, options.key),
+		eTag: typeof result?.ETag === 'string' ? result.ETag.replace(/"/g, '') : undefined
 	}
 }
 
@@ -220,16 +169,51 @@ export const deleteR2Object = async (bucket: string, key: string) => {
 	if (!bucket || !key) return
 
 	try {
-		const { url, headers } = signRequest({ method: 'DELETE', bucket, key })
-		const response = await fetch(url, {
-			method: 'DELETE',
-			headers
-		})
-		if (!response.ok && response.status !== 404) {
-			throw new Error(`Failed to delete R2 object: ${response.status} ${response.statusText}`)
-		}
+		const client = await getClient()
+		const { DeleteObjectCommand } = await loadS3Module()
+		await client.send(
+			new DeleteObjectCommand({
+				Bucket: bucket,
+				Key: key
+			})
+		)
 	} catch (error) {
 		// eslint-disable-next-line no-console
 		console.error('deleteR2Object error', error)
 	}
+}
+
+export const getR2ObjectStream = async (bucket: string, key: string) => {
+	const client = await getClient()
+	const { GetObjectCommand } = await loadS3Module()
+	const response = await client.send(
+		new GetObjectCommand({
+			Bucket: bucket,
+			Key: key
+		})
+	)
+	return response.Body ?? null
+}
+
+export const createPresignedUploadUrl = async (
+	key: string,
+	options: { bucket?: string; expiresIn?: number; contentType?: string } = {}
+) => {
+	const bucket = options.bucket || R2_CONFIG.BUCKET
+	if (!bucket) {
+		throw new Error('R2 bucket is not configured. Please set R2_BUCKET.')
+	}
+
+	const client = await getClient()
+	const [{ PutObjectCommand }, { getSignedUrl }] = await Promise.all([loadS3Module(), loadPresignerModule()])
+
+	return getSignedUrl(
+		client,
+		new PutObjectCommand({
+			Bucket: bucket,
+			Key: key,
+			ContentType: options.contentType
+		}),
+		{ expiresIn: options.expiresIn ?? 3600 }
+	)
 }
