@@ -486,30 +486,6 @@ const getJobPostDetail = async (jobId: string, viewerId?: string) => {
 		throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
 	}
 
-<<<<<<< HEAD
-	await prismaClient.$transaction([
-		prismaClient.jobPost.update({
-			where: { id: jobId },
-			data: { viewsCount: { increment: 1 } }
-		}),
-		prismaClient.jobActivityLog.create({
-			data: {
-				jobId,
-				actorId: viewerId ?? null,
-				actorRole: viewerId ? Role.FREELANCER : null,
-				action: 'FREELANCER_VIEW_JOB_DETAIL',
-				metadata: { scope: 'DETAIL' }
-			}
-		})
-	])
-
-	return serializeJobDetail(job)
-}
-
-export default {
-	listJobPosts,
-	getJobPostDetail
-=======
         const isSaved = viewerId
                 ? Boolean(
                           await prismaClient.freelancerSavedJob.findUnique({
@@ -618,5 +594,4 @@ export default {
         getJobPostDetail,
         saveJobPost,
         unsaveJobPost
->>>>>>> b569587f2bcbc39fe10652fb95cced03d9e6a73e
 }
