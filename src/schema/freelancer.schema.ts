@@ -13,6 +13,18 @@ const parseFilterArray = (value: unknown) => {
         return normalized.length > 0 ? normalized : undefined
 }
 
+const parseBoolean = (value: unknown) => {
+        if (value === undefined || value === null) return undefined
+        if (typeof value === 'boolean') return value
+
+        const normalized = String(value).trim().toLowerCase()
+
+        if (['true', '1', 'yes', 'y'].includes(normalized)) return true
+        if (['false', '0', 'no', 'n'].includes(normalized)) return false
+
+        return value
+}
+
 export const ClientFreelancerFilterSchema = z
         .object({
                 page: z.coerce.number().int().min(1).default(1),
@@ -20,7 +32,8 @@ export const ClientFreelancerFilterSchema = z
                 search: z.string().trim().min(1).optional(),
                 specialtyId: z.string().min(1).optional(),
                 skillIds: z.preprocess(parseFilterArray, z.array(z.string().min(1)).optional()).optional(),
-                country: z.string().trim().min(1).optional()
+                country: z.string().trim().min(1).optional(),
+                saved: z.preprocess(parseBoolean, z.boolean()).optional()
         })
         .strict()
 
