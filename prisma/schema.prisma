@@ -130,6 +130,7 @@ model Freelancer {
   jobInvitations               JobInvitation[]
   matchInteractions            MatchInteraction[]
   savedJobs                    FreelancerSavedJob[]
+  savedByClients               ClientSavedFreelancer[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -261,6 +262,7 @@ model Client {
   jobInvitations    JobInvitation[]
   contracts         Contract[]
   matchInteractions MatchInteraction[]
+  savedFreelancers  ClientSavedFreelancer[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -493,6 +495,18 @@ model FreelancerSavedJob {
 
   @@id([freelancerId, jobPostId])
   @@map("freelancer_saved_job")
+}
+
+model ClientSavedFreelancer {
+  clientId     String   @map("client_id")
+  freelancerId String   @map("freelancer_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  client     Client     @relation(fields: [clientId], references: [userId], onDelete: Cascade)
+  freelancer Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+  @@id([clientId, freelancerId])
+  @@map("client_saved_freelancer")
 }
 
 model JobLanguageRequirement {

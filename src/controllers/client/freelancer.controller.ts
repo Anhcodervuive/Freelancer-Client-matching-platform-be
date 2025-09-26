@@ -32,3 +32,33 @@ export async function getFreelancerDetailForClient(req: Request, res: Response) 
         const result = await clientFreelancerService.getFreelancerDetail(userId, freelancerId)
         res.status(StatusCodes.OK).json(result)
 }
+
+export async function saveFreelancerForClient(req: Request, res: Response) {
+        const userId = req.user?.id
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để lưu freelancer', ErrorCode.UNAUTHORIED)
+        }
+
+        const freelancerId = req.params.freelancerId
+        if (!freelancerId) {
+                throw new BadRequestException('Thiếu freelancerId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        await clientFreelancerService.saveFreelancer(userId, freelancerId)
+        res.status(StatusCodes.NO_CONTENT).send()
+}
+
+export async function unsaveFreelancerForClient(req: Request, res: Response) {
+        const userId = req.user?.id
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để bỏ lưu freelancer', ErrorCode.UNAUTHORIED)
+        }
+
+        const freelancerId = req.params.freelancerId
+        if (!freelancerId) {
+                throw new BadRequestException('Thiếu freelancerId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        await clientFreelancerService.unsaveFreelancer(userId, freelancerId)
+        res.status(StatusCodes.NO_CONTENT).send()
+}

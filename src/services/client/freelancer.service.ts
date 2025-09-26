@@ -96,6 +96,30 @@ const ensureClientUser = async (userId: string) => {
         return client
 }
 
+const ensureFreelancerUser = async (freelancerId: string) => {
+        const freelancer = await prismaClient.freelancer.findFirst({
+                where: {
+                        userId: freelancerId,
+                        profile: {
+                                is: {
+                                        user: {
+                                                isActive: true,
+                                                deletedAt: null,
+                                                role: Role.FREELANCER
+                                        }
+                                }
+                        }
+                },
+                select: { userId: true }
+        })
+
+        if (!freelancer) {
+                throw new NotFoundException('Không tìm thấy freelancer', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        return freelancer
+}
+
 const normalizeLinks = (value: Prisma.JsonValue | null) => {
         if (!value) return []
         if (Array.isArray(value)) {
@@ -341,7 +365,60 @@ const getFreelancerDetail = async (clientUserId: string, freelancerId: string) =
         return serializeFreelancerDetail(freelancer)
 }
 
+const saveFreelancer = async (clientUserId: string, freelancerId: string) => {
+        await ensureClientUser(clientUserId)
+        await ensureFreelancerUser(freelancerId)
+
+        const existing = await prismaClient.clientSavedFreelancer.findUnique({
+                where: {
+                        clientId_freelancerId: {
+                                clientId: clientUserId,
+                                freelancerId
+                        }
+                }
+        })
+
+        if (existing) {
+                return
+        }
+
+        await prismaClient.clientSavedFreelancer.create({
+                data: {
+                        clientId: clientUserId,
+                        freelancerId
+                }
+        })
+}
+
+const unsaveFreelancer = async (clientUserId: string, freelancerId: string) => {
+        await ensureClientUser(clientUserId)
+
+        const existing = await prismaClient.clientSavedFreelancer.findUnique({
+                where: {
+                        clientId_freelancerId: {
+                                clientId: clientUserId,
+                                freelancerId
+                        }
+                }
+        })
+
+        if (!existing) {
+                throw new NotFoundException('Client chưa lưu freelancer này', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        await prismaClient.clientSavedFreelancer.delete({
+                where: {
+                        clientId_freelancerId: {
+                                clientId: clientUserId,
+                                freelancerId
+                        }
+                }
+        })
+}
+
 export default {
         listFreelancers,
-        getFreelancerDetail
+        getFreelancerDetail,
+        saveFreelancer,
+        unsaveFreelancer
 }
