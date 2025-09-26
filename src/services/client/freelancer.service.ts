@@ -257,11 +257,14 @@ const serializeFreelancerDetail = (freelancer: FreelancerDetailPayload, avatarUr
 	}
 }
 
-const buildFreelancerWhere = (filters: ClientFreelancerFilterInput): Prisma.FreelancerWhereInput => {
-	const where: Prisma.FreelancerWhereInput = {
-		profile: {
-			is: {
-				user: {
+const buildFreelancerWhere = (
+        filters: ClientFreelancerFilterInput,
+        clientUserId: string
+): Prisma.FreelancerWhereInput => {
+        const where: Prisma.FreelancerWhereInput = {
+                profile: {
+                        is: {
+                                user: {
 					isActive: true,
 					deletedAt: null,
 					role: Role.FREELANCER
@@ -272,11 +275,11 @@ const buildFreelancerWhere = (filters: ClientFreelancerFilterInput): Prisma.Free
 
 	const andConditions: Prisma.FreelancerWhereInput[] = []
 
-	if (filters.specialtyId) {
-		andConditions.push({
-			freelancerSpecialtySelection: { some: { specialtyId: filters.specialtyId, isDeleted: false } }
-		})
-	}
+        if (filters.specialtyId) {
+                andConditions.push({
+                        freelancerSpecialtySelection: { some: { specialtyId: filters.specialtyId, isDeleted: false } }
+                })
+        }
 
 	if (filters.skillIds && filters.skillIds.length > 0) {
 		for (const skillId of filters.skillIds) {
@@ -286,19 +289,35 @@ const buildFreelancerWhere = (filters: ClientFreelancerFilterInput): Prisma.Free
 		}
 	}
 
-	if (filters.country) {
-		andConditions.push({
-			profile: {
-				is: {
-					country: { equals: filters.country }
-				}
-			}
-		})
-	}
+        if (filters.country) {
+                andConditions.push({
+                        profile: {
+                                is: {
+                                        country: { equals: filters.country }
+                                }
+                        }
+                })
+        }
 
-	if (andConditions.length > 0) {
-		where.AND = andConditions
-	}
+        if (typeof filters.saved === 'boolean') {
+                const relationFilter: Prisma.ClientSavedFreelancerWhereInput = {
+                        clientId: clientUserId
+                }
+
+                if (filters.saved) {
+                        andConditions.push({
+                                savedByClients: { some: relationFilter }
+                        })
+                } else {
+                        andConditions.push({
+                                savedByClients: { none: relationFilter }
+                        })
+                }
+        }
+
+        if (andConditions.length > 0) {
+                where.AND = andConditions
+        }
 
 	if (filters.search) {
 		const search = filters.search
@@ -329,7 +348,7 @@ const listFreelancers = async (clientUserId: string, filters: ClientFreelancerFi
 	const page = normalizedFilters.page
 	const limit = normalizedFilters.limit
 
-	const where = buildFreelancerWhere(normalizedFilters)
+        const where = buildFreelancerWhere(normalizedFilters, clientUserId)
 
 	const [items, total] = await prismaClient.$transaction([
 		prismaClient.freelancer.findMany({
