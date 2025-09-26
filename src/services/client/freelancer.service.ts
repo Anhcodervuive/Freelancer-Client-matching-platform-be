@@ -222,13 +222,19 @@ const mapPortfolios = (portfolios: FreelancerDetailPayload['portfolios']) => {
 	}))
 }
 
-const serializeFreelancerSummary = (freelancer: FreelancerSummaryLike, avatarUrl: string | null) => {
-	return {
-		id: freelancer.userId,
-		title: freelancer.title ?? null,
-		bio: freelancer.bio ?? null,
-		links: normalizeLinks(freelancer.links ?? null),
-		profile: {
+const serializeFreelancerSummary = (
+        freelancer: FreelancerSummaryLike,
+        avatarUrl: string | null,
+        options: { isSaved?: boolean } = {}
+) => {
+        const { isSaved = false } = options
+
+        return {
+                id: freelancer.userId,
+                title: freelancer.title ?? null,
+                bio: freelancer.bio ?? null,
+                links: normalizeLinks(freelancer.links ?? null),
+                profile: {
 			displayName: buildDisplayName(freelancer.profile),
 			avatarUrl,
 			location: {
@@ -239,16 +245,21 @@ const serializeFreelancerSummary = (freelancer: FreelancerSummaryLike, avatarUrl
 		languages: freelancer.languages.map(language => ({
 			languageCode: language.languageCode,
 			proficiency: language.proficiency
-		})),
-		skills: mapSkills(freelancer.freelancerSkillSelection),
-		specialties: mapSpecialties(freelancer.freelancerSpecialtySelection),
-		createdAt: freelancer.createdAt,
-		updatedAt: freelancer.updatedAt
-	}
+                })),
+                skills: mapSkills(freelancer.freelancerSkillSelection),
+                specialties: mapSpecialties(freelancer.freelancerSpecialtySelection),
+                createdAt: freelancer.createdAt,
+                updatedAt: freelancer.updatedAt,
+                isSaved
+        }
 }
 
-const serializeFreelancerDetail = (freelancer: FreelancerDetailPayload, avatarUrl: string | null) => {
-	const summary = serializeFreelancerSummary(freelancer, avatarUrl)
+const serializeFreelancerDetail = (
+        freelancer: FreelancerDetailPayload,
+        avatarUrl: string | null,
+        options: { isSaved?: boolean } = {}
+) => {
+        const summary = serializeFreelancerSummary(freelancer, avatarUrl, options)
 
 	return {
 		...summary,
@@ -350,23 +361,40 @@ const listFreelancers = async (clientUserId: string, filters: ClientFreelancerFi
 
         const where = buildFreelancerWhere(normalizedFilters, clientUserId)
 
-	const [items, total] = await prismaClient.$transaction([
-		prismaClient.freelancer.findMany({
-			where,
-			include: freelancerSummaryInclude,
-			orderBy: { updatedAt: Prisma.SortOrder.desc },
-			skip: (page - 1) * limit,
+        const [items, total] = await prismaClient.$transaction([
+                prismaClient.freelancer.findMany({
+                        where,
+                        include: freelancerSummaryInclude,
+                        orderBy: { updatedAt: Prisma.SortOrder.desc },
+                        skip: (page - 1) * limit,
 			take: limit
 		}),
 		prismaClient.freelancer.count({ where })
 	])
 
-	const data = await Promise.all(
-		items.map(async (freelancer: any) => {
-			const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
-			return serializeFreelancerSummary(freelancer, avatarUrl)
-		})
-	)
+        const freelancerIds = items.map(freelancer => freelancer.userId)
+
+        const savedFreelancerIds = new Set(
+                freelancerIds.length > 0
+                        ? (
+                                  await prismaClient.clientSavedFreelancer.findMany({
+                                          where: {
+                                                  clientId: clientUserId,
+                                                  freelancerId: { in: freelancerIds }
+                                          },
+                                          select: { freelancerId: true }
+                                  })
+                          ).map(relation => relation.freelancerId)
+                        : []
+        )
+
+        const data = await Promise.all(
+                items.map(async (freelancer: any) => {
+                        const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
+                        const isSaved = savedFreelancerIds.has(freelancer.userId)
+                        return serializeFreelancerSummary(freelancer, avatarUrl, { isSaved })
+                })
+        )
 
 	return {
 		data,
@@ -399,9 +427,20 @@ const getFreelancerDetail = async (clientUserId: string, freelancerId: string) =
 		throw new NotFoundException('Không tìm thấy freelancer', ErrorCode.ITEM_NOT_FOUND)
 	}
 
-	const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
+        const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
 
-	return serializeFreelancerDetail(freelancer, avatarUrl)
+        const savedRelation = await prismaClient.clientSavedFreelancer.findUnique({
+                where: {
+                        clientId_freelancerId: {
+                                clientId: clientUserId,
+                                freelancerId
+                        }
+                },
+                select: { freelancerId: true }
+        })
+        const isSaved = Boolean(savedRelation)
+
+        return serializeFreelancerDetail(freelancer, avatarUrl, { isSaved })
 }
 
 const saveFreelancer = async (clientUserId: string, freelancerId: string) => {
