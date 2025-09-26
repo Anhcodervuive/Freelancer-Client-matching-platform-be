@@ -1,7 +1,8 @@
-import { Prisma, Role } from '~/generated/prisma'
+import { PortfolioVisibility, Prisma, Role } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
+import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import { ClientFreelancerFilterInput } from '~/schema/freelancer.schema'
 
@@ -54,7 +55,34 @@ const freelancerSummaryInclude = Prisma.validator<Prisma.FreelancerInclude>()({
         }
 })
 
+const freelancerDetailInclude = Prisma.validator<Prisma.FreelancerInclude>()({
+        ...freelancerSummaryInclude,
+        educations: {
+                orderBy: { startYear: Prisma.SortOrder.desc }
+        },
+        portfolios: {
+                where: { isDeleted: false, visibility: PortfolioVisibility.PUBLIC },
+                orderBy: { createdAt: Prisma.SortOrder.desc },
+                include: {
+                        skills: {
+                                include: {
+                                        skill: {
+                                                select: {
+                                                        id: true,
+                                                        name: true,
+                                                        slug: true
+                                                }
+                                        }
+                                }
+                        }
+                }
+        }
+})
+
 type FreelancerSummaryPayload = Prisma.FreelancerGetPayload<{ include: typeof freelancerSummaryInclude }>
+type FreelancerDetailPayload = Prisma.FreelancerGetPayload<{ include: typeof freelancerDetailInclude }>
+
+type FreelancerSummaryLike = Pick<FreelancerSummaryPayload, 'userId' | 'title' | 'bio' | 'links' | 'profile' | 'languages' | 'freelancerSkillSelection' | 'freelancerSpecialtySelection' | 'createdAt' | 'updatedAt'>
 
 const ensureClientUser = async (userId: string) => {
         const client = await prismaClient.client.findUnique({
@@ -120,7 +148,44 @@ const buildDisplayName = (profile: FreelancerSummaryPayload['profile']) => {
         return combined.length > 0 ? combined : null
 }
 
-const serializeFreelancerSummary = (freelancer: FreelancerSummaryPayload) => {
+const mapEducations = (educations: FreelancerDetailPayload['educations']) => {
+        return educations.map(education => ({
+                id: education.id,
+                schoolName: education.schoolName,
+                degreeTitle: education.degreeTitle,
+                fieldOfStudy: education.fieldOfStudy ?? null,
+                startYear: education.startYear ?? null,
+                endYear: education.endYear ?? null
+        }))
+}
+
+const mapPortfolioSkills = (skills: FreelancerDetailPayload['portfolios'][number]['skills']) => {
+        return skills.map(relation => ({
+                id: relation.skill.id,
+                name: relation.skill.name,
+                slug: relation.skill.slug
+        }))
+}
+
+const mapPortfolios = (portfolios: FreelancerDetailPayload['portfolios']) => {
+        return portfolios.map(portfolio => ({
+                id: portfolio.id,
+                title: portfolio.title,
+                role: portfolio.role ?? null,
+                description: portfolio.description ?? null,
+                projectUrl: portfolio.projectUrl ?? null,
+                repositoryUrl: portfolio.repositoryUrl ?? null,
+                visibility: portfolio.visibility,
+                startedAt: portfolio.startedAt ?? null,
+                completedAt: portfolio.completedAt ?? null,
+                publishedAt: portfolio.publishedAt ?? null,
+                createdAt: portfolio.createdAt,
+                updatedAt: portfolio.updatedAt,
+                skills: mapPortfolioSkills(portfolio.skills)
+        }))
+}
+
+const serializeFreelancerSummary = (freelancer: FreelancerSummaryLike) => {
         return {
                 id: freelancer.userId,
                 title: freelancer.title ?? null,
@@ -141,6 +206,16 @@ const serializeFreelancerSummary = (freelancer: FreelancerSummaryPayload) => {
                 specialties: mapSpecialties(freelancer.freelancerSpecialtySelection),
                 createdAt: freelancer.createdAt,
                 updatedAt: freelancer.updatedAt
+        }
+}
+
+const serializeFreelancerDetail = (freelancer: FreelancerDetailPayload) => {
+        const summary = serializeFreelancerSummary(freelancer)
+
+        return {
+                ...summary,
+                educations: mapEducations(freelancer.educations),
+                portfolios: mapPortfolios(freelancer.portfolios)
         }
 }
 
@@ -240,6 +315,33 @@ const listFreelancers = async (clientUserId: string, filters: ClientFreelancerFi
         }
 }
 
+const getFreelancerDetail = async (clientUserId: string, freelancerId: string) => {
+        await ensureClientUser(clientUserId)
+
+        const freelancer = await prismaClient.freelancer.findFirst({
+                where: {
+                        userId: freelancerId,
+                        profile: {
+                                is: {
+                                        user: {
+                                                isActive: true,
+                                                deletedAt: null,
+                                                role: Role.FREELANCER
+                                        }
+                                }
+                        }
+                },
+                include: freelancerDetailInclude
+        })
+
+        if (!freelancer) {
+                throw new NotFoundException('Không tìm thấy freelancer', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        return serializeFreelancerDetail(freelancer)
+}
+
 export default {
-        listFreelancers
+        listFreelancers,
+        getFreelancerDetail
 }
