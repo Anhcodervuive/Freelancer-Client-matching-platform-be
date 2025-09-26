@@ -1,4 +1,11 @@
-import { JobStatus, JobVisibility, Prisma, Role } from '~/generated/prisma'
+import {
+	JobStatus,
+	JobVisibility,
+	MatchInteractionSource,
+	MatchInteractionType,
+	Prisma,
+	Role
+} from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
@@ -6,6 +13,7 @@ import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { FreelancerJobPostFilterInput } from '~/schema/job-post.schema'
+import matchInteractionService from '~/services/match-interaction.service'
 
 const publicJobDetailInclude = Prisma.validator<Prisma.JobPostInclude>()({
 	specialty: {
@@ -168,107 +176,107 @@ const normalizePreferredLocations = (value: Prisma.JsonValue | null): unknown[] 
 }
 
 const serializeJobSummary = (job: PublicJobSummaryPayload, options: { isSaved?: boolean } = {}) => {
-        const { isSaved = false } = options
-        const skills = mapSkills(job.requiredSkills as readonly JobSkillRelation[])
-        return {
-                id: job.id,
-                title: job.title,
-                description: job.description,
-                paymentMode: job.paymentMode,
-                budgetAmount: job.budgetAmount ? Number(job.budgetAmount) : null,
-                budgetCurrency: job.budgetCurrency ?? null,
-                duration: job.duration ?? null,
-                experienceLevel: job.experienceLevel,
-                locationType: job.locationType,
-                preferredLocations: normalizePreferredLocations(job.preferredLocations),
-                publishedAt: job.publishedAt ?? null,
-                createdAt: job.createdAt,
-                updatedAt: job.updatedAt,
-                specialty: {
-                        id: job.specialty.id,
-                        name: job.specialty.name,
-                        category: {
-                                id: job.specialty.category.id,
-                                name: job.specialty.category.name
-                        }
-                },
-                languages: job.languages.map(language => ({
-                        languageCode: language.languageCode,
-                        proficiency: language.proficiency
-                })),
-                skills,
-                client: sanitizeClientSummary(job.client),
-                proposalsCount: job.proposalsCount,
-                attachmentsCount: job._count.attachments,
-                isSaved
-        }
+	const { isSaved = false } = options
+	const skills = mapSkills(job.requiredSkills as readonly JobSkillRelation[])
+	return {
+		id: job.id,
+		title: job.title,
+		description: job.description,
+		paymentMode: job.paymentMode,
+		budgetAmount: job.budgetAmount ? Number(job.budgetAmount) : null,
+		budgetCurrency: job.budgetCurrency ?? null,
+		duration: job.duration ?? null,
+		experienceLevel: job.experienceLevel,
+		locationType: job.locationType,
+		preferredLocations: normalizePreferredLocations(job.preferredLocations),
+		publishedAt: job.publishedAt ?? null,
+		createdAt: job.createdAt,
+		updatedAt: job.updatedAt,
+		specialty: {
+			id: job.specialty.id,
+			name: job.specialty.name,
+			category: {
+				id: job.specialty.category.id,
+				name: job.specialty.category.name
+			}
+		},
+		languages: job.languages.map(language => ({
+			languageCode: language.languageCode,
+			proficiency: language.proficiency
+		})),
+		skills,
+		client: sanitizeClientSummary(job.client),
+		proposalsCount: job.proposalsCount,
+		attachmentsCount: job._count.attachments,
+		isSaved
+	}
 }
 
 const serializeJobDetail = (job: PublicJobDetailPayload, options: { isSaved?: boolean } = {}) => {
-        const { isSaved = false } = options
-        const skills = mapSkills(job.requiredSkills)
-        const attachments = job.attachments
-                .map(attachment => ({
-                        id: attachment.id,
-                        assetLinkId: attachment.assetLinkId,
-                        label: attachment.assetLink.label ?? null,
-                        caption: attachment.assetLink.caption ?? null,
-                        isPrimary: attachment.assetLink.isPrimary,
-                        position: attachment.assetLink.position,
-                        asset: {
-                                id: attachment.assetLink.asset.id,
-                                kind: attachment.assetLink.asset.kind,
-                                url: attachment.assetLink.asset.url ?? null,
-                                mimeType: attachment.assetLink.asset.mimeType ?? null,
-                                bytes: attachment.assetLink.asset.bytes ?? null
-                        },
-                        createdAt: attachment.createdAt,
-                        updatedAt: attachment.updatedAt
-                }))
-                .sort((a, b) => a.position - b.position)
+	const { isSaved = false } = options
+	const skills = mapSkills(job.requiredSkills)
+	const attachments = job.attachments
+		.map(attachment => ({
+			id: attachment.id,
+			assetLinkId: attachment.assetLinkId,
+			label: attachment.assetLink.label ?? null,
+			caption: attachment.assetLink.caption ?? null,
+			isPrimary: attachment.assetLink.isPrimary,
+			position: attachment.assetLink.position,
+			asset: {
+				id: attachment.assetLink.asset.id,
+				kind: attachment.assetLink.asset.kind,
+				url: attachment.assetLink.asset.url ?? null,
+				mimeType: attachment.assetLink.asset.mimeType ?? null,
+				bytes: attachment.assetLink.asset.bytes ?? null
+			},
+			createdAt: attachment.createdAt,
+			updatedAt: attachment.updatedAt
+		}))
+		.sort((a, b) => a.position - b.position)
 
-        return {
-                id: job.id,
-                title: job.title,
-                description: job.description,
-                paymentMode: job.paymentMode,
-                budgetAmount: job.budgetAmount ? Number(job.budgetAmount) : null,
-                budgetCurrency: job.budgetCurrency ?? null,
-                duration: job.duration ?? null,
-                experienceLevel: job.experienceLevel,
-                locationType: job.locationType,
-                preferredLocations: normalizePreferredLocations(job.preferredLocations),
-                publishedAt: job.publishedAt ?? null,
-                createdAt: job.createdAt,
-                updatedAt: job.updatedAt,
-                specialty: {
-                        id: job.specialty.id,
-                        name: job.specialty.name,
-                        category: {
-                                id: job.specialty.category.id,
-                                name: job.specialty.category.name
-                        }
-                },
-                languages: job.languages.map(language => ({
-                        languageCode: language.languageCode,
-                        proficiency: language.proficiency
-                })),
-                skills,
-                screeningQuestions: [...job.screeningQuestions]
-                        .sort((a, b) => {
-                                if (a.orderIndex !== b.orderIndex) return a.orderIndex - b.orderIndex
-                                return a.createdAt.getTime() - b.createdAt.getTime()
-                        })
-                        .map(question => ({
-                                id: question.id,
-                                question: question.question,
-                                isRequired: question.isRequired,
-                                orderIndex: question.orderIndex
-                        })),
-                attachments,
-                client: sanitizeClientSummary(job.client),
-                isSaved
-        }
+	return {
+		id: job.id,
+		title: job.title,
+		description: job.description,
+		paymentMode: job.paymentMode,
+		budgetAmount: job.budgetAmount ? Number(job.budgetAmount) : null,
+		budgetCurrency: job.budgetCurrency ?? null,
+		duration: job.duration ?? null,
+		experienceLevel: job.experienceLevel,
+		locationType: job.locationType,
+		preferredLocations: normalizePreferredLocations(job.preferredLocations),
+		publishedAt: job.publishedAt ?? null,
+		createdAt: job.createdAt,
+		updatedAt: job.updatedAt,
+		specialty: {
+			id: job.specialty.id,
+			name: job.specialty.name,
+			category: {
+				id: job.specialty.category.id,
+				name: job.specialty.category.name
+			}
+		},
+		languages: job.languages.map(language => ({
+			languageCode: language.languageCode,
+			proficiency: language.proficiency
+		})),
+		skills,
+		screeningQuestions: [...job.screeningQuestions]
+			.sort((a, b) => {
+				if (a.orderIndex !== b.orderIndex) return a.orderIndex - b.orderIndex
+				return a.createdAt.getTime() - b.createdAt.getTime()
+			})
+			.map(question => ({
+				id: question.id,
+				question: question.question,
+				isRequired: question.isRequired,
+				orderIndex: question.orderIndex
+			})),
+		attachments,
+		client: sanitizeClientSummary(job.client),
+		isSaved
+	}
 }
 
 const recordJobActivities = async (entries: readonly ActivityEntry[]) => {
@@ -285,30 +293,27 @@ const recordJobActivities = async (entries: readonly ActivityEntry[]) => {
 }
 
 const ensurePublicJobExists = async (jobId: string) => {
-        const job = await prismaClient.jobPost.findFirst({
-                where: {
-                        id: jobId,
-                        status: JobStatus.PUBLISHED,
-                        visibility: JobVisibility.PUBLIC,
-                        isDeleted: false
-                },
-                select: { id: true }
-        })
+	const job = await prismaClient.jobPost.findFirst({
+		where: {
+			id: jobId,
+			status: JobStatus.PUBLISHED,
+			visibility: JobVisibility.PUBLIC,
+			isDeleted: false
+		},
+		select: { id: true }
+	})
 
-        if (!job) {
-                throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
-        }
+	if (!job) {
+		throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
+	}
 }
 
-const buildPublicJobWhere = (
-        filters: FreelancerJobPostFilterInput,
-        viewerId?: string
-): Prisma.JobPostWhereInput => {
-        const where: Prisma.JobPostWhereInput = {
-                status: JobStatus.PUBLISHED,
-                visibility: JobVisibility.PUBLIC,
-                isDeleted: false
-        }
+const buildPublicJobWhere = (filters: FreelancerJobPostFilterInput, viewerId?: string): Prisma.JobPostWhereInput => {
+	const where: Prisma.JobPostWhereInput = {
+		status: JobStatus.PUBLISHED,
+		visibility: JobVisibility.PUBLIC,
+		isDeleted: false
+	}
 
 	if (filters.search) {
 		where.OR = [{ title: { contains: filters.search } }, { description: { contains: filters.search } }]
@@ -374,19 +379,16 @@ const buildPublicJobWhere = (
 		}
 	}
 
-        if (filters.savedOnly === true) {
-                if (!viewerId) {
-                        throw new UnauthorizedException(
-                                'Bạn cần đăng nhập để lọc job đã lưu',
-                                ErrorCode.UNAUTHORIED
-                        )
-                }
-                andConditions.push({ savedByFreelancers: { some: { freelancerId: viewerId } } })
-        }
+	if (filters.savedOnly === true) {
+		if (!viewerId) {
+			throw new UnauthorizedException('Bạn cần đăng nhập để lọc job đã lưu', ErrorCode.UNAUTHORIED)
+		}
+		andConditions.push({ savedByFreelancers: { some: { freelancerId: viewerId } } })
+	}
 
-        if (andConditions.length > 0) {
-                where.AND = andConditions
-        }
+	if (andConditions.length > 0) {
+		where.AND = andConditions
+	}
 
 	return where
 }
@@ -416,7 +418,7 @@ const listJobPosts = async (filters: FreelancerJobPostFilterInput, viewerId?: st
 		skillIds: filters.skillIds ? uniquePreserveOrder(filters.skillIds) : undefined
 	}
 
-        const where = buildPublicJobWhere(normalizedFilters, viewerId)
+	const where = buildPublicJobWhere(normalizedFilters, viewerId)
 
 	const orderBy: Prisma.JobPostOrderByWithRelationInput =
 		sortBy === 'oldest' ? { createdAt: Prisma.SortOrder.asc } : { createdAt: Prisma.SortOrder.desc }
@@ -434,41 +436,41 @@ const listJobPosts = async (filters: FreelancerJobPostFilterInput, viewerId?: st
 
 	const jobIds = uniquePreserveOrder(items.map(item => item.id))
 
-        const savedJobIds =
-                viewerId && jobIds.length > 0
-                        ? new Set(
-                                  (
-                                          await prismaClient.freelancerSavedJob.findMany({
-                                                  where: {
-                                                          freelancerId: viewerId,
-                                                          jobPostId: { in: jobIds }
-                                                  },
-                                                  select: { jobPostId: true }
-                                          })
-                                  ).map(entry => entry.jobPostId)
-                          )
-                        : new Set<string>()
+	const savedJobIds =
+		viewerId && jobIds.length > 0
+			? new Set(
+					(
+						await prismaClient.freelancerSavedJob.findMany({
+							where: {
+								freelancerId: viewerId,
+								jobPostId: { in: jobIds }
+							},
+							select: { jobPostId: true }
+						})
+					).map(entry => entry.jobPostId)
+			  )
+			: new Set<string>()
 
-        await recordJobActivities(
-                jobIds.map(jobId => ({
-                        jobId,
-                        actorId: viewerId ?? null,
-                        actorRole: viewerId ? Role.FREELANCER : null,
-                        action: 'FREELANCER_VIEW_JOB_SUMMARY',
-                        metadata: {
-                                scope: 'LIST',
-                                page,
-                                limit
-                        }
-                }))
-        )
+	await recordJobActivities(
+		jobIds.map(jobId => ({
+			jobId,
+			actorId: viewerId ?? null,
+			actorRole: viewerId ? Role.FREELANCER : null,
+			action: 'FREELANCER_VIEW_JOB_SUMMARY',
+			metadata: {
+				scope: 'LIST',
+				page,
+				limit
+			}
+		}))
+	)
 
-        return {
-                data: items.map(job => serializeJobSummary(job, { isSaved: savedJobIds.has(job.id) })),
-                total,
-                page,
-                limit
-        }
+	return {
+		data: items.map(job => serializeJobSummary(job, { isSaved: savedJobIds.has(job.id) })),
+		total,
+		page,
+		limit
+	}
 }
 
 const getJobPostDetail = async (jobId: string, viewerId?: string) => {
@@ -486,112 +488,125 @@ const getJobPostDetail = async (jobId: string, viewerId?: string) => {
 		throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
 	}
 
-        const isSaved = viewerId
-                ? Boolean(
-                          await prismaClient.freelancerSavedJob.findUnique({
-                                  where: {
-                                          freelancerId_jobPostId: {
-                                                  freelancerId: viewerId,
-                                                  jobPostId: jobId
-                                          }
-                                  },
-                                  select: { jobPostId: true }
-                          })
-                  )
-                : false
+	const isSaved = viewerId
+		? Boolean(
+				await prismaClient.freelancerSavedJob.findUnique({
+					where: {
+						freelancerId_jobPostId: {
+							freelancerId: viewerId,
+							jobPostId: jobId
+						}
+					},
+					select: { jobPostId: true }
+				})
+		  )
+		: false
 
-        await prismaClient.$transaction([
-                prismaClient.jobPost.update({
-                        where: { id: jobId },
-                        data: { viewsCount: { increment: 1 } }
-                }),
-                prismaClient.jobActivityLog.create({
-                        data: {
-                                jobId,
-                                actorId: viewerId ?? null,
-                                actorRole: viewerId ? Role.FREELANCER : null,
-                                action: 'FREELANCER_VIEW_JOB_DETAIL',
-                                metadata: { scope: 'DETAIL' }
-                        }
-                })
-        ])
+	await prismaClient.$transaction([
+		prismaClient.jobPost.update({
+			where: { id: jobId },
+			data: { viewsCount: { increment: 1 } }
+		}),
+		prismaClient.jobActivityLog.create({
+			data: {
+				jobId,
+				actorId: viewerId ?? null,
+				actorRole: viewerId ? Role.FREELANCER : null,
+				action: 'FREELANCER_VIEW_JOB_DETAIL',
+				metadata: { scope: 'DETAIL' }
+			}
+		})
+	])
 
-        return serializeJobDetail(job, { isSaved })
+	await matchInteractionService.persistInteraction({
+		type: MatchInteractionType.JOB_VIEW,
+		source: MatchInteractionSource.DIRECT,
+		jobId,
+		...(viewerId
+			? {
+					freelancerId: viewerId,
+					actorProfileId: viewerId,
+					actorRole: Role.FREELANCER
+			  }
+			: {})
+	})
+
+	return serializeJobDetail(job, { isSaved })
 }
 
 const saveJobPost = async (jobId: string, freelancerId: string) => {
-        await ensurePublicJobExists(jobId)
+	await ensurePublicJobExists(jobId)
 
-        const existing = await prismaClient.freelancerSavedJob.findUnique({
-                where: {
-                        freelancerId_jobPostId: {
-                                freelancerId,
-                                jobPostId: jobId
-                        }
-                }
-        })
+	const existing = await prismaClient.freelancerSavedJob.findUnique({
+		where: {
+			freelancerId_jobPostId: {
+				freelancerId,
+				jobPostId: jobId
+			}
+		}
+	})
 
-        if (existing) {
-                return
-        }
+	if (existing) {
+		return
+	}
 
-        await prismaClient.$transaction([
-                prismaClient.freelancerSavedJob.create({
-                        data: {
-                                freelancerId,
-                                jobPostId: jobId
-                        }
-                }),
-                prismaClient.jobActivityLog.create({
-                        data: {
-                                jobId,
-                                actorId: freelancerId,
-                                actorRole: Role.FREELANCER,
-                                action: 'FREELANCER_SAVE_JOB',
-                                metadata: { scope: 'SAVE' }
-                        }
-                })
-        ])
+	await prismaClient.$transaction([
+		prismaClient.freelancerSavedJob.create({
+			data: {
+				freelancerId,
+				jobPostId: jobId
+			}
+		}),
+		prismaClient.jobActivityLog.create({
+			data: {
+				jobId,
+				actorId: freelancerId,
+				actorRole: Role.FREELANCER,
+				action: 'FREELANCER_SAVE_JOB',
+				metadata: { scope: 'SAVE' }
+			}
+		})
+	])
 }
 
 const unsaveJobPost = async (jobId: string, freelancerId: string) => {
-        const existing = await prismaClient.freelancerSavedJob.findUnique({
-                where: {
-                        freelancerId_jobPostId: {
-                                freelancerId,
-                                jobPostId: jobId
-                        }
-                }
-        })
+	const existing = await prismaClient.freelancerSavedJob.findUnique({
+		where: {
+			freelancerId_jobPostId: {
+				freelancerId,
+				jobPostId: jobId
+			}
+		}
+	})
 
-        if (!existing) {
-                throw new NotFoundException('Freelancer chưa lưu job này', ErrorCode.ITEM_NOT_FOUND)
-        }
+	if (!existing) {
+		throw new NotFoundException('Freelancer chưa lưu job này', ErrorCode.ITEM_NOT_FOUND)
+	}
 
-        await prismaClient.$transaction([
-                prismaClient.freelancerSavedJob.delete({
-                        where: {
-                                freelancerId_jobPostId: {
-                                        freelancerId,
-                                        jobPostId: jobId
-                                }
-                        }
-                }),
-                prismaClient.jobActivityLog.create({
-                        data: {
-                                jobId,
-                                actorId: freelancerId,
-                                actorRole: Role.FREELANCER,
-                                action: 'FREELANCER_UNSAVE_JOB',
-                                metadata: { scope: 'UNSAVE' }
-                        }
-                })
-        ])
+	await prismaClient.$transaction([
+		prismaClient.freelancerSavedJob.delete({
+			where: {
+				freelancerId_jobPostId: {
+					freelancerId,
+					jobPostId: jobId
+				}
+			}
+		}),
+		prismaClient.jobActivityLog.create({
+			data: {
+				jobId,
+				actorId: freelancerId,
+				actorRole: Role.FREELANCER,
+				action: 'FREELANCER_UNSAVE_JOB',
+				metadata: { scope: 'UNSAVE' }
+			}
+		})
+	])
 }
 
 export default {
-        listJobPosts,
-        getJobPostDetail,
-        saveJobPost,
-        unsaveJobPost
+	listJobPosts,
+	getJobPostDetail,
+	saveJobPost,
+	unsaveJobPost
 }
