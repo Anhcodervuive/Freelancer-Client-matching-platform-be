@@ -129,6 +129,7 @@ model Freelancer {
   jobProposals                 JobProposal[]
   jobInvitations               JobInvitation[]
   matchInteractions            MatchInteraction[]
+  savedJobs                    FreelancerSavedJob[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -474,11 +475,24 @@ model JobPost {
   matchInteractions  MatchInteraction[]
   contracts          Contract[]
   attachments        JobPostAttachment[]
+  savedByFreelancers FreelancerSavedJob[]
 
   @@index([clientId, status, isDeleted])
   @@index([specialtyId, status, isDeleted])
   @@index([status, visibility, isDeleted])
   @@map("job_post")
+}
+
+model FreelancerSavedJob {
+  freelancerId String   @map("freelancer_id")
+  jobPostId    String   @map("job_post_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  freelancer Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+  jobPost    JobPost    @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+
+  @@id([freelancerId, jobPostId])
+  @@map("freelancer_saved_job")
 }
 
 model JobLanguageRequirement {
