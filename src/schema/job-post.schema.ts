@@ -197,6 +197,8 @@ export const FreelancerJobPostFilterSchema = JobPostFilterSchema.omit({
         mine: true,
         clientId: true,
         visibility: true
+}).extend({
+        savedOnly: booleanQuerySchema
 })
 
 export type FreelancerJobPostFilterInput = z.infer<typeof FreelancerJobPostFilterSchema>

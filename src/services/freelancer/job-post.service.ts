@@ -4,6 +4,7 @@ import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
+import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { FreelancerJobPostFilterInput } from '~/schema/job-post.schema'
 
 const publicJobDetailInclude = Prisma.validator<Prisma.JobPostInclude>()({
@@ -168,7 +169,8 @@ const normalizePreferredLocations = (value: Prisma.JsonValue | null): unknown[] 
         return []
 }
 
-const serializeJobSummary = (job: PublicJobSummaryPayload) => {
+const serializeJobSummary = (job: PublicJobSummaryPayload, options: { isSaved?: boolean } = {}) => {
+        const { isSaved = false } = options
         const skills = mapSkills(job.requiredSkills as readonly JobSkillRelation[])
         return {
                 id: job.id,
@@ -199,11 +201,13 @@ const serializeJobSummary = (job: PublicJobSummaryPayload) => {
                 skills,
                 client: sanitizeClientSummary(job.client),
                 proposalsCount: job.proposalsCount,
-                attachmentsCount: job._count.attachments
+                attachmentsCount: job._count.attachments,
+                isSaved
         }
 }
 
-const serializeJobDetail = (job: PublicJobDetailPayload) => {
+const serializeJobDetail = (job: PublicJobDetailPayload, options: { isSaved?: boolean } = {}) => {
+        const { isSaved = false } = options
         const skills = mapSkills(job.requiredSkills)
         const attachments = job.attachments
                 .map(attachment => ({
@@ -264,7 +268,8 @@ const serializeJobDetail = (job: PublicJobDetailPayload) => {
                                 orderIndex: question.orderIndex
                         })),
                 attachments,
-                client: sanitizeClientSummary(job.client)
+                client: sanitizeClientSummary(job.client),
+                isSaved
         }
 }
 
@@ -281,7 +286,26 @@ const recordJobActivities = async (entries: readonly ActivityEntry[]) => {
         })
 }
 
-const buildPublicJobWhere = (filters: FreelancerJobPostFilterInput): Prisma.JobPostWhereInput => {
+const ensurePublicJobExists = async (jobId: string) => {
+        const job = await prismaClient.jobPost.findFirst({
+                where: {
+                        id: jobId,
+                        status: JobStatus.PUBLISHED,
+                        visibility: JobVisibility.PUBLIC,
+                        isDeleted: false
+                },
+                select: { id: true }
+        })
+
+        if (!job) {
+                throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
+        }
+}
+
+const buildPublicJobWhere = (
+        filters: FreelancerJobPostFilterInput,
+        viewerId?: string
+): Prisma.JobPostWhereInput => {
         const where: Prisma.JobPostWhereInput = {
                 status: JobStatus.PUBLISHED,
                 visibility: JobVisibility.PUBLIC,
@@ -362,6 +386,16 @@ const buildPublicJobWhere = (filters: FreelancerJobPostFilterInput): Prisma.JobP
                 }
         }
 
+        if (filters.savedOnly === true) {
+                if (!viewerId) {
+                        throw new UnauthorizedException(
+                                'Bạn cần đăng nhập để lọc job đã lưu',
+                                ErrorCode.UNAUTHORIED
+                        )
+                }
+                andConditions.push({ savedByFreelancers: { some: { freelancerId: viewerId } } })
+        }
+
         if (andConditions.length > 0) {
                 where.AND = andConditions
         }
@@ -398,7 +432,7 @@ const listJobPosts = async (filters: FreelancerJobPostFilterInput, viewerId?: st
                 skillIds: filters.skillIds ? uniquePreserveOrder(filters.skillIds) : undefined
         }
 
-        const where = buildPublicJobWhere(normalizedFilters)
+        const where = buildPublicJobWhere(normalizedFilters, viewerId)
 
         const orderBy: Prisma.JobPostOrderByWithRelationInput =
                 sortBy === 'oldest' ? { createdAt: Prisma.SortOrder.asc } : { createdAt: Prisma.SortOrder.desc }
@@ -416,6 +450,21 @@ const listJobPosts = async (filters: FreelancerJobPostFilterInput, viewerId?: st
 
         const jobIds = uniquePreserveOrder(items.map(item => item.id))
 
+        const savedJobIds =
+                viewerId && jobIds.length > 0
+                        ? new Set(
+                                  (
+                                          await prismaClient.freelancerSavedJob.findMany({
+                                                  where: {
+                                                          freelancerId: viewerId,
+                                                          jobPostId: { in: jobIds }
+                                                  },
+                                                  select: { jobPostId: true }
+                                          })
+                                  ).map(entry => entry.jobPostId)
+                          )
+                        : new Set<string>()
+
         await recordJobActivities(
                 jobIds.map(jobId => ({
                         jobId,
@@ -431,7 +480,7 @@ const listJobPosts = async (filters: FreelancerJobPostFilterInput, viewerId?: st
         )
 
         return {
-                data: items.map(serializeJobSummary),
+                data: items.map(job => serializeJobSummary(job, { isSaved: savedJobIds.has(job.id) })),
                 total,
                 page,
                 limit
@@ -453,6 +502,20 @@ const getJobPostDetail = async (jobId: string, viewerId?: string) => {
                 throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
         }
 
+        const isSaved = viewerId
+                ? Boolean(
+                          await prismaClient.freelancerSavedJob.findUnique({
+                                  where: {
+                                          freelancerId_jobPostId: {
+                                                  freelancerId: viewerId,
+                                                  jobPostId: jobId
+                                          }
+                                  },
+                                  select: { jobPostId: true }
+                          })
+                  )
+                : false
+
         await prismaClient.$transaction([
                 prismaClient.jobPost.update({
                         where: { id: jobId },
@@ -469,10 +532,82 @@ const getJobPostDetail = async (jobId: string, viewerId?: string) => {
                 })
         ])
 
-        return serializeJobDetail(job)
+        return serializeJobDetail(job, { isSaved })
+}
+
+const saveJobPost = async (jobId: string, freelancerId: string) => {
+        await ensurePublicJobExists(jobId)
+
+        const existing = await prismaClient.freelancerSavedJob.findUnique({
+                where: {
+                        freelancerId_jobPostId: {
+                                freelancerId,
+                                jobPostId: jobId
+                        }
+                }
+        })
+
+        if (existing) {
+                return
+        }
+
+        await prismaClient.$transaction([
+                prismaClient.freelancerSavedJob.create({
+                        data: {
+                                freelancerId,
+                                jobPostId: jobId
+                        }
+                }),
+                prismaClient.jobActivityLog.create({
+                        data: {
+                                jobId,
+                                actorId: freelancerId,
+                                actorRole: Role.FREELANCER,
+                                action: 'FREELANCER_SAVE_JOB',
+                                metadata: { scope: 'SAVE' }
+                        }
+                })
+        ])
+}
+
+const unsaveJobPost = async (jobId: string, freelancerId: string) => {
+        const existing = await prismaClient.freelancerSavedJob.findUnique({
+                where: {
+                        freelancerId_jobPostId: {
+                                freelancerId,
+                                jobPostId: jobId
+                        }
+                }
+        })
+
+        if (!existing) {
+                throw new NotFoundException('Freelancer chưa lưu job này', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        await prismaClient.$transaction([
+                prismaClient.freelancerSavedJob.delete({
+                        where: {
+                                freelancerId_jobPostId: {
+                                        freelancerId,
+                                        jobPostId: jobId
+                                }
+                        }
+                }),
+                prismaClient.jobActivityLog.create({
+                        data: {
+                                jobId,
+                                actorId: freelancerId,
+                                actorRole: Role.FREELANCER,
+                                action: 'FREELANCER_UNSAVE_JOB',
+                                metadata: { scope: 'UNSAVE' }
+                        }
+                })
+        ])
 }
 
 export default {
         listJobPosts,
-        getJobPostDetail
+        getJobPostDetail,
+        saveJobPost,
+        unsaveJobPost
 }
