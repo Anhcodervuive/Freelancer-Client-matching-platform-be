@@ -343,7 +343,7 @@ const listFreelancers = async (clientUserId: string, filters: ClientFreelancerFi
 	])
 
 	const data = await Promise.all(
-		items.map(async freelancer => {
+		items.map(async (freelancer: any) => {
 			const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
 			return serializeFreelancerSummary(freelancer, avatarUrl)
 		})
