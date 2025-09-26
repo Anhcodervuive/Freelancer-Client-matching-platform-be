@@ -192,3 +192,11 @@ export const JobPostFilterSchema = z
 export type CreateJobPostInput = z.infer<typeof CreateJobPostSchema>
 export type UpdateJobPostInput = z.infer<typeof UpdateJobPostSchema>
 export type JobPostFilterInput = z.infer<typeof JobPostFilterSchema>
+
+export const FreelancerJobPostFilterSchema = JobPostFilterSchema.omit({
+        mine: true,
+        clientId: true,
+        visibility: true
+})
+
+export type FreelancerJobPostFilterInput = z.infer<typeof FreelancerJobPostFilterSchema>

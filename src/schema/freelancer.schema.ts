@@ -1,9 +1,35 @@
 import { z } from 'zod'
 
+const parseFilterArray = (value: unknown) => {
+        if (value === undefined || value === null) return undefined
+        const raw = Array.isArray(value) ? value : [value]
+        const normalized = raw
+                .flatMap(item =>
+                        String(item)
+                                .split(',')
+                                .map(part => part.trim())
+                                .filter(Boolean)
+                )
+        return normalized.length > 0 ? normalized : undefined
+}
+
+export const ClientFreelancerFilterSchema = z
+        .object({
+                page: z.coerce.number().int().min(1).default(1),
+                limit: z.coerce.number().int().min(1).max(100).default(20),
+                search: z.string().trim().min(1).optional(),
+                specialtyId: z.string().min(1).optional(),
+                skillIds: z.preprocess(parseFilterArray, z.array(z.string().min(1)).optional()).optional(),
+                country: z.string().trim().min(1).optional()
+        })
+        .strict()
+
+export type ClientFreelancerFilterInput = z.infer<typeof ClientFreelancerFilterSchema>
+
 export const UpdateFreelancerProfileSchema = z.object({
-	title: z.string().max(255).optional(),
-	bio: z.string().max(5000).optional(),
-	links: z.array(z.string().url()).optional()
+        title: z.string().max(255).optional(),
+        bio: z.string().max(5000).optional(),
+        links: z.array(z.string().url()).optional()
 })
 
 export type UpdateFreelanceProfileInput = z.infer<typeof UpdateFreelancerProfileSchema>
