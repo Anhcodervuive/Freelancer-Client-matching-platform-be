@@ -12,6 +12,8 @@ import skillRoute from './skill.route'
 import portfolioRoute from './portfolio.route'
 import freelancerConnectAccountRoute from './freelancer-connect-account.route'
 import jobPostRoute from './job-post.route'
+import freelancerJobPostRoute from './freelancer-job-post.route'
+import clientFreelancerRoute from './client-freelancer.route'
 
 const rootRouter: Router = Router()
 
@@ -24,6 +26,8 @@ rootRouter.use('/specialty', specialtyRoute, specialtySkillRoute)
 rootRouter.use('/skill', skillRoute)
 rootRouter.use('/portfolio', portfolioRoute)
 rootRouter.use('/freelancer/connect-account', freelancerConnectAccountRoute)
+rootRouter.use('/freelancer/job-posts', freelancerJobPostRoute)
 rootRouter.use('/job-posts', jobPostRoute)
+rootRouter.use('/client', clientFreelancerRoute)
 
 export default rootRouter
