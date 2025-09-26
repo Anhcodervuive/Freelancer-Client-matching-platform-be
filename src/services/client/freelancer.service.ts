@@ -5,420 +5,440 @@ import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import { ClientFreelancerFilterInput } from '~/schema/freelancer.schema'
+import assetService from '../asset.service'
 
 const uniquePreserveOrder = <T>(items: readonly T[]): T[] => {
-        const seen = new Set<T>()
-        const result: T[] = []
-        for (const item of items) {
-                if (seen.has(item)) continue
-                seen.add(item)
-                result.push(item)
-        }
-        return result
+	const seen = new Set<T>()
+	const result: T[] = []
+	for (const item of items) {
+		if (seen.has(item)) continue
+		seen.add(item)
+		result.push(item)
+	}
+	return result
 }
 
 const freelancerSummaryInclude = Prisma.validator<Prisma.FreelancerInclude>()({
-        profile: {
-                select: {
-                        firstName: true,
-                        lastName: true,
-                        country: true,
-                        city: true
-                }
-        },
-        languages: true,
-        freelancerSpecialtySelection: {
-                where: { isDeleted: false },
-                include: {
-                        specialty: {
-                                select: {
-                                        id: true,
-                                        name: true,
-                                        category: {
-                                                select: { id: true, name: true }
-                                        }
-                                }
-                        }
-                }
-        },
-        freelancerSkillSelection: {
-                where: { isDeleted: false },
-                include: {
-                        skill: {
-                                select: {
-                                        id: true,
-                                        name: true,
-                                        slug: true
-                                }
-                        }
-                }
-        }
+	profile: {
+		select: {
+			firstName: true,
+			lastName: true,
+			country: true,
+			city: true
+		}
+	},
+	languages: true,
+	freelancerSpecialtySelection: {
+		where: { isDeleted: false },
+		include: {
+			specialty: {
+				select: {
+					id: true,
+					name: true,
+					category: {
+						select: { id: true, name: true }
+					}
+				}
+			}
+		}
+	},
+	freelancerSkillSelection: {
+		where: { isDeleted: false },
+		include: {
+			skill: {
+				select: {
+					id: true,
+					name: true,
+					slug: true
+				}
+			}
+		}
+	}
 })
 
 const freelancerDetailInclude = Prisma.validator<Prisma.FreelancerInclude>()({
-        ...freelancerSummaryInclude,
-        educations: {
-                orderBy: { startYear: Prisma.SortOrder.desc }
-        },
-        portfolios: {
-                where: { isDeleted: false, visibility: PortfolioVisibility.PUBLIC },
-                orderBy: { createdAt: Prisma.SortOrder.desc },
-                include: {
-                        skills: {
-                                include: {
-                                        skill: {
-                                                select: {
-                                                        id: true,
-                                                        name: true,
-                                                        slug: true
-                                                }
-                                        }
-                                }
-                        }
-                }
-        }
+	...freelancerSummaryInclude,
+	educations: {
+		orderBy: { startYear: Prisma.SortOrder.desc }
+	},
+	portfolios: {
+		where: { isDeleted: false, visibility: PortfolioVisibility.PUBLIC },
+		orderBy: { createdAt: Prisma.SortOrder.desc },
+		include: {
+			skills: {
+				include: {
+					skill: {
+						select: {
+							id: true,
+							name: true,
+							slug: true
+						}
+					}
+				}
+			}
+		}
+	}
 })
 
 type FreelancerSummaryPayload = Prisma.FreelancerGetPayload<{ include: typeof freelancerSummaryInclude }>
 type FreelancerDetailPayload = Prisma.FreelancerGetPayload<{ include: typeof freelancerDetailInclude }>
 
-type FreelancerSummaryLike = Pick<FreelancerSummaryPayload, 'userId' | 'title' | 'bio' | 'links' | 'profile' | 'languages' | 'freelancerSkillSelection' | 'freelancerSpecialtySelection' | 'createdAt' | 'updatedAt'>
+type FreelancerSummaryLike = Pick<
+	FreelancerSummaryPayload,
+	| 'userId'
+	| 'title'
+	| 'bio'
+	| 'links'
+	| 'profile'
+	| 'languages'
+	| 'freelancerSkillSelection'
+	| 'freelancerSpecialtySelection'
+	| 'createdAt'
+	| 'updatedAt'
+>
 
 const ensureClientUser = async (userId: string) => {
-        const client = await prismaClient.client.findUnique({
-                where: { userId }
-        })
+	const client = await prismaClient.client.findUnique({
+		where: { userId }
+	})
 
-        if (!client) {
-                throw new UnauthorizedException('Chỉ client mới có thể xem danh sách freelancer', ErrorCode.USER_NOT_AUTHORITY)
-        }
+	if (!client) {
+		throw new UnauthorizedException('Chỉ client mới có thể xem danh sách freelancer', ErrorCode.USER_NOT_AUTHORITY)
+	}
 
-        return client
+	return client
 }
 
 const ensureFreelancerUser = async (freelancerId: string) => {
-        const freelancer = await prismaClient.freelancer.findFirst({
-                where: {
-                        userId: freelancerId,
-                        profile: {
-                                is: {
-                                        user: {
-                                                isActive: true,
-                                                deletedAt: null,
-                                                role: Role.FREELANCER
-                                        }
-                                }
-                        }
-                },
-                select: { userId: true }
-        })
+	const freelancer = await prismaClient.freelancer.findFirst({
+		where: {
+			userId: freelancerId,
+			profile: {
+				is: {
+					user: {
+						isActive: true,
+						deletedAt: null,
+						role: Role.FREELANCER
+					}
+				}
+			}
+		},
+		select: { userId: true }
+	})
 
-        if (!freelancer) {
-                throw new NotFoundException('Không tìm thấy freelancer', ErrorCode.ITEM_NOT_FOUND)
-        }
+	if (!freelancer) {
+		throw new NotFoundException('Không tìm thấy freelancer', ErrorCode.ITEM_NOT_FOUND)
+	}
 
-        return freelancer
+	return freelancer
 }
 
 const normalizeLinks = (value: Prisma.JsonValue | null) => {
-        if (!value) return []
-        if (Array.isArray(value)) {
-                const seen = new Set<string>()
-                const links: string[] = []
-                for (const entry of value) {
-                        if (typeof entry !== 'string') continue
-                        const trimmed = entry.trim()
-                        if (!trimmed || seen.has(trimmed)) continue
-                        seen.add(trimmed)
-                        links.push(trimmed)
-                }
-                return links
-        }
-        return []
+	if (!value) return []
+	if (Array.isArray(value)) {
+		const seen = new Set<string>()
+		const links: string[] = []
+		for (const entry of value) {
+			if (typeof entry !== 'string') continue
+			const trimmed = entry.trim()
+			if (!trimmed || seen.has(trimmed)) continue
+			seen.add(trimmed)
+			links.push(trimmed)
+		}
+		return links
+	}
+	return []
 }
 
 const mapSkills = (relations: FreelancerSummaryPayload['freelancerSkillSelection']) => {
-        return relations
-                .map(relation => ({
-                        id: relation.skill.id,
-                        name: relation.skill.name,
-                        slug: relation.skill.slug,
-                        orderHint: relation.orderHint ?? null
-                }))
-                .sort((a, b) => {
-                        const hintA = a.orderHint ?? Number.MAX_SAFE_INTEGER
-                        const hintB = b.orderHint ?? Number.MAX_SAFE_INTEGER
-                        if (hintA !== hintB) return hintA - hintB
-                        return a.name.localeCompare(b.name)
-                })
+	return relations
+		.map(relation => ({
+			id: relation.skill.id,
+			name: relation.skill.name,
+			slug: relation.skill.slug,
+			orderHint: relation.orderHint ?? null
+		}))
+		.sort((a, b) => {
+			const hintA = a.orderHint ?? Number.MAX_SAFE_INTEGER
+			const hintB = b.orderHint ?? Number.MAX_SAFE_INTEGER
+			if (hintA !== hintB) return hintA - hintB
+			return a.name.localeCompare(b.name)
+		})
 }
 
 const mapSpecialties = (relations: FreelancerSummaryPayload['freelancerSpecialtySelection']) => {
-        return relations.map(relation => ({
-                id: relation.specialty.id,
-                name: relation.specialty.name,
-                category: {
-                        id: relation.specialty.category.id,
-                        name: relation.specialty.category.name
-                }
-        }))
+	return relations.map(relation => ({
+		id: relation.specialty.id,
+		name: relation.specialty.name,
+		category: {
+			id: relation.specialty.category.id,
+			name: relation.specialty.category.name
+		}
+	}))
 }
 
 const buildDisplayName = (profile: FreelancerSummaryPayload['profile']) => {
-        if (!profile) return null
-        const firstName = profile.firstName ?? ''
-        const lastNameInitial = profile.lastName ? `${profile.lastName[0]}.` : ''
-        const combined = `${firstName} ${lastNameInitial}`.trim()
-        return combined.length > 0 ? combined : null
+	if (!profile) return null
+	const firstName = profile.firstName ?? ''
+	const lastNameInitial = profile.lastName ? `${profile.lastName[0]}.` : ''
+	const combined = `${firstName} ${lastNameInitial}`.trim()
+	return combined.length > 0 ? combined : null
 }
 
 const mapEducations = (educations: FreelancerDetailPayload['educations']) => {
-        return educations.map(education => ({
-                id: education.id,
-                schoolName: education.schoolName,
-                degreeTitle: education.degreeTitle,
-                fieldOfStudy: education.fieldOfStudy ?? null,
-                startYear: education.startYear ?? null,
-                endYear: education.endYear ?? null
-        }))
+	return educations.map(education => ({
+		id: education.id,
+		schoolName: education.schoolName,
+		degreeTitle: education.degreeTitle,
+		fieldOfStudy: education.fieldOfStudy ?? null,
+		startYear: education.startYear ?? null,
+		endYear: education.endYear ?? null
+	}))
 }
 
 const mapPortfolioSkills = (skills: FreelancerDetailPayload['portfolios'][number]['skills']) => {
-        return skills.map(relation => ({
-                id: relation.skill.id,
-                name: relation.skill.name,
-                slug: relation.skill.slug
-        }))
+	return skills.map(relation => ({
+		id: relation.skill.id,
+		name: relation.skill.name,
+		slug: relation.skill.slug
+	}))
 }
 
 const mapPortfolios = (portfolios: FreelancerDetailPayload['portfolios']) => {
-        return portfolios.map(portfolio => ({
-                id: portfolio.id,
-                title: portfolio.title,
-                role: portfolio.role ?? null,
-                description: portfolio.description ?? null,
-                projectUrl: portfolio.projectUrl ?? null,
-                repositoryUrl: portfolio.repositoryUrl ?? null,
-                visibility: portfolio.visibility,
-                startedAt: portfolio.startedAt ?? null,
-                completedAt: portfolio.completedAt ?? null,
-                publishedAt: portfolio.publishedAt ?? null,
-                createdAt: portfolio.createdAt,
-                updatedAt: portfolio.updatedAt,
-                skills: mapPortfolioSkills(portfolio.skills)
-        }))
+	return portfolios.map(portfolio => ({
+		id: portfolio.id,
+		title: portfolio.title,
+		role: portfolio.role ?? null,
+		description: portfolio.description ?? null,
+		projectUrl: portfolio.projectUrl ?? null,
+		repositoryUrl: portfolio.repositoryUrl ?? null,
+		visibility: portfolio.visibility,
+		startedAt: portfolio.startedAt ?? null,
+		completedAt: portfolio.completedAt ?? null,
+		publishedAt: portfolio.publishedAt ?? null,
+		createdAt: portfolio.createdAt,
+		updatedAt: portfolio.updatedAt,
+		skills: mapPortfolioSkills(portfolio.skills)
+	}))
 }
 
-const serializeFreelancerSummary = (freelancer: FreelancerSummaryLike) => {
-        return {
-                id: freelancer.userId,
-                title: freelancer.title ?? null,
-                bio: freelancer.bio ?? null,
-                links: normalizeLinks(freelancer.links ?? null),
-                profile: {
-                        displayName: buildDisplayName(freelancer.profile),
-                        location: {
-                                country: freelancer.profile?.country ?? null,
-                                city: freelancer.profile?.city ?? null
-                        }
-                },
-                languages: freelancer.languages.map(language => ({
-                        languageCode: language.languageCode,
-                        proficiency: language.proficiency
-                })),
-                skills: mapSkills(freelancer.freelancerSkillSelection),
-                specialties: mapSpecialties(freelancer.freelancerSpecialtySelection),
-                createdAt: freelancer.createdAt,
-                updatedAt: freelancer.updatedAt
-        }
+const serializeFreelancerSummary = (freelancer: FreelancerSummaryLike, avatarUrl: string | null) => {
+	return {
+		id: freelancer.userId,
+		title: freelancer.title ?? null,
+		bio: freelancer.bio ?? null,
+		links: normalizeLinks(freelancer.links ?? null),
+		profile: {
+			displayName: buildDisplayName(freelancer.profile),
+			avatarUrl,
+			location: {
+				country: freelancer.profile?.country ?? null,
+				city: freelancer.profile?.city ?? null
+			}
+		},
+		languages: freelancer.languages.map(language => ({
+			languageCode: language.languageCode,
+			proficiency: language.proficiency
+		})),
+		skills: mapSkills(freelancer.freelancerSkillSelection),
+		specialties: mapSpecialties(freelancer.freelancerSpecialtySelection),
+		createdAt: freelancer.createdAt,
+		updatedAt: freelancer.updatedAt
+	}
 }
 
-const serializeFreelancerDetail = (freelancer: FreelancerDetailPayload) => {
-        const summary = serializeFreelancerSummary(freelancer)
+const serializeFreelancerDetail = (freelancer: FreelancerDetailPayload, avatarUrl: string | null) => {
+	const summary = serializeFreelancerSummary(freelancer, avatarUrl)
 
-        return {
-                ...summary,
-                educations: mapEducations(freelancer.educations),
-                portfolios: mapPortfolios(freelancer.portfolios)
-        }
+	return {
+		...summary,
+		educations: mapEducations(freelancer.educations),
+		portfolios: mapPortfolios(freelancer.portfolios)
+	}
 }
 
 const buildFreelancerWhere = (filters: ClientFreelancerFilterInput): Prisma.FreelancerWhereInput => {
-        const where: Prisma.FreelancerWhereInput = {
-                profile: {
-                        is: {
-                                user: {
-                                        isActive: true,
-                                        deletedAt: null,
-                                        role: Role.FREELANCER
-                                }
-                        }
-                }
-        }
+	const where: Prisma.FreelancerWhereInput = {
+		profile: {
+			is: {
+				user: {
+					isActive: true,
+					deletedAt: null,
+					role: Role.FREELANCER
+				}
+			}
+		}
+	}
 
-        const andConditions: Prisma.FreelancerWhereInput[] = []
+	const andConditions: Prisma.FreelancerWhereInput[] = []
 
-        if (filters.specialtyId) {
-                andConditions.push({
-                        freelancerSpecialtySelection: { some: { specialtyId: filters.specialtyId, isDeleted: false } }
-                })
-        }
+	if (filters.specialtyId) {
+		andConditions.push({
+			freelancerSpecialtySelection: { some: { specialtyId: filters.specialtyId, isDeleted: false } }
+		})
+	}
 
-        if (filters.skillIds && filters.skillIds.length > 0) {
-                for (const skillId of filters.skillIds) {
-                        andConditions.push({
-                                freelancerSkillSelection: { some: { skillId, isDeleted: false } }
-                        })
-                }
-        }
+	if (filters.skillIds && filters.skillIds.length > 0) {
+		for (const skillId of filters.skillIds) {
+			andConditions.push({
+				freelancerSkillSelection: { some: { skillId, isDeleted: false } }
+			})
+		}
+	}
 
-        if (filters.country) {
-                andConditions.push({
-                        profile: {
-                                is: {
-                                        country: { equals: filters.country }
-                                }
-                        }
-                })
-        }
+	if (filters.country) {
+		andConditions.push({
+			profile: {
+				is: {
+					country: { equals: filters.country }
+				}
+			}
+		})
+	}
 
-        if (andConditions.length > 0) {
-                where.AND = andConditions
-        }
+	if (andConditions.length > 0) {
+		where.AND = andConditions
+	}
 
-        if (filters.search) {
-                const search = filters.search
-                where.OR = [
-                        { title: { contains: search } },
-                        { bio: { contains: search } },
-                        {
-                                profile: {
-                                        is: {
-                                                OR: [
-                                                        { firstName: { contains: search } },
-                                                        { lastName: { contains: search } }
-                                                ]
-                                        }
-                                }
-                        }
-                ]
-        }
+	if (filters.search) {
+		const search = filters.search
+		where.OR = [
+			{ title: { contains: search } },
+			{ bio: { contains: search } },
+			{
+				profile: {
+					is: {
+						OR: [{ firstName: { contains: search } }, { lastName: { contains: search } }]
+					}
+				}
+			}
+		]
+	}
 
-        return where
+	return where
 }
 
 const listFreelancers = async (clientUserId: string, filters: ClientFreelancerFilterInput) => {
-        await ensureClientUser(clientUserId)
+	await ensureClientUser(clientUserId)
 
-        const normalizedFilters: ClientFreelancerFilterInput = {
-                ...filters,
-                skillIds: filters.skillIds ? uniquePreserveOrder(filters.skillIds) : undefined
-        }
+	const normalizedFilters: ClientFreelancerFilterInput = {
+		...filters,
+		skillIds: filters.skillIds ? uniquePreserveOrder(filters.skillIds) : undefined
+	}
 
-        const page = normalizedFilters.page
-        const limit = normalizedFilters.limit
+	const page = normalizedFilters.page
+	const limit = normalizedFilters.limit
 
-        const where = buildFreelancerWhere(normalizedFilters)
+	const where = buildFreelancerWhere(normalizedFilters)
 
-        const [items, total] = await prismaClient.$transaction([
-                prismaClient.freelancer.findMany({
-                        where,
-                        include: freelancerSummaryInclude,
-                        orderBy: { updatedAt: Prisma.SortOrder.desc },
-                        skip: (page - 1) * limit,
-                        take: limit
-                }),
-                prismaClient.freelancer.count({ where })
-        ])
+	const [items, total] = await prismaClient.$transaction([
+		prismaClient.freelancer.findMany({
+			where,
+			include: freelancerSummaryInclude,
+			orderBy: { updatedAt: Prisma.SortOrder.desc },
+			skip: (page - 1) * limit,
+			take: limit
+		}),
+		prismaClient.freelancer.count({ where })
+	])
 
-        return {
-                data: items.map(serializeFreelancerSummary),
-                total,
-                page,
-                limit
-        }
+	const data = await Promise.all(
+		items.map(async freelancer => {
+			const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
+			return serializeFreelancerSummary(freelancer, avatarUrl)
+		})
+	)
+
+	return {
+		data,
+		total,
+		page,
+		limit
+	}
 }
 
 const getFreelancerDetail = async (clientUserId: string, freelancerId: string) => {
-        await ensureClientUser(clientUserId)
+	await ensureClientUser(clientUserId)
 
-        const freelancer = await prismaClient.freelancer.findFirst({
-                where: {
-                        userId: freelancerId,
-                        profile: {
-                                is: {
-                                        user: {
-                                                isActive: true,
-                                                deletedAt: null,
-                                                role: Role.FREELANCER
-                                        }
-                                }
-                        }
-                },
-                include: freelancerDetailInclude
-        })
+	const freelancer = await prismaClient.freelancer.findFirst({
+		where: {
+			userId: freelancerId,
+			profile: {
+				is: {
+					user: {
+						isActive: true,
+						deletedAt: null,
+						role: Role.FREELANCER
+					}
+				}
+			}
+		},
+		include: freelancerDetailInclude
+	})
 
-        if (!freelancer) {
-                throw new NotFoundException('Không tìm thấy freelancer', ErrorCode.ITEM_NOT_FOUND)
-        }
+	if (!freelancer) {
+		throw new NotFoundException('Không tìm thấy freelancer', ErrorCode.ITEM_NOT_FOUND)
+	}
 
-        return serializeFreelancerDetail(freelancer)
+	const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
+
+	return serializeFreelancerDetail(freelancer, avatarUrl)
 }
 
 const saveFreelancer = async (clientUserId: string, freelancerId: string) => {
-        await ensureClientUser(clientUserId)
-        await ensureFreelancerUser(freelancerId)
+	await ensureClientUser(clientUserId)
+	await ensureFreelancerUser(freelancerId)
 
-        const existing = await prismaClient.clientSavedFreelancer.findUnique({
-                where: {
-                        clientId_freelancerId: {
-                                clientId: clientUserId,
-                                freelancerId
-                        }
-                }
-        })
+	const existing = await prismaClient.clientSavedFreelancer.findUnique({
+		where: {
+			clientId_freelancerId: {
+				clientId: clientUserId,
+				freelancerId
+			}
+		}
+	})
 
-        if (existing) {
-                return
-        }
+	if (existing) {
+		return
+	}
 
-        await prismaClient.clientSavedFreelancer.create({
-                data: {
-                        clientId: clientUserId,
-                        freelancerId
-                }
-        })
+	await prismaClient.clientSavedFreelancer.create({
+		data: {
+			clientId: clientUserId,
+			freelancerId
+		}
+	})
 }
 
 const unsaveFreelancer = async (clientUserId: string, freelancerId: string) => {
-        await ensureClientUser(clientUserId)
+	await ensureClientUser(clientUserId)
 
-        const existing = await prismaClient.clientSavedFreelancer.findUnique({
-                where: {
-                        clientId_freelancerId: {
-                                clientId: clientUserId,
-                                freelancerId
-                        }
-                }
-        })
+	const existing = await prismaClient.clientSavedFreelancer.findUnique({
+		where: {
+			clientId_freelancerId: {
+				clientId: clientUserId,
+				freelancerId
+			}
+		}
+	})
 
-        if (!existing) {
-                throw new NotFoundException('Client chưa lưu freelancer này', ErrorCode.ITEM_NOT_FOUND)
-        }
+	if (!existing) {
+		throw new NotFoundException('Client chưa lưu freelancer này', ErrorCode.ITEM_NOT_FOUND)
+	}
 
-        await prismaClient.clientSavedFreelancer.delete({
-                where: {
-                        clientId_freelancerId: {
-                                clientId: clientUserId,
-                                freelancerId
-                        }
-                }
-        })
+	await prismaClient.clientSavedFreelancer.delete({
+		where: {
+			clientId_freelancerId: {
+				clientId: clientUserId,
+				freelancerId
+			}
+		}
+	})
 }
 
 export default {
-        listFreelancers,
-        getFreelancerDetail,
-        saveFreelancer,
-        unsaveFreelancer
+	listFreelancers,
+	getFreelancerDetail,
+	saveFreelancer,
+	unsaveFreelancer
 }
