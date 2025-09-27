@@ -33,7 +33,8 @@ export const ClientFreelancerFilterSchema = z
                 specialtyId: z.string().min(1).optional(),
                 skillIds: z.preprocess(parseFilterArray, z.array(z.string().min(1)).optional()).optional(),
                 country: z.string().trim().min(1).optional(),
-                saved: z.preprocess(parseBoolean, z.boolean()).optional()
+                saved: z.preprocess(parseBoolean, z.boolean()).optional(),
+                invitedJobId: z.string().min(1).optional()
         })
         .strict()
 
