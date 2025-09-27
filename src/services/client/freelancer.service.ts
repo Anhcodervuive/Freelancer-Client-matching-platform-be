@@ -223,18 +223,18 @@ const mapPortfolios = (portfolios: FreelancerDetailPayload['portfolios']) => {
 }
 
 const serializeFreelancerSummary = (
-        freelancer: FreelancerSummaryLike,
-        avatarUrl: string | null,
-        options: { isSaved?: boolean } = {}
+	freelancer: FreelancerSummaryLike,
+	avatarUrl: string | null,
+	options: { isSaved?: boolean } = {}
 ) => {
-        const { isSaved = false } = options
+	const { isSaved = false } = options
 
-        return {
-                id: freelancer.userId,
-                title: freelancer.title ?? null,
-                bio: freelancer.bio ?? null,
-                links: normalizeLinks(freelancer.links ?? null),
-                profile: {
+	return {
+		id: freelancer.userId,
+		title: freelancer.title ?? null,
+		bio: freelancer.bio ?? null,
+		links: normalizeLinks(freelancer.links ?? null),
+		profile: {
 			displayName: buildDisplayName(freelancer.profile),
 			avatarUrl,
 			location: {
@@ -245,21 +245,21 @@ const serializeFreelancerSummary = (
 		languages: freelancer.languages.map(language => ({
 			languageCode: language.languageCode,
 			proficiency: language.proficiency
-                })),
-                skills: mapSkills(freelancer.freelancerSkillSelection),
-                specialties: mapSpecialties(freelancer.freelancerSpecialtySelection),
-                createdAt: freelancer.createdAt,
-                updatedAt: freelancer.updatedAt,
-                isSaved
-        }
+		})),
+		skills: mapSkills(freelancer.freelancerSkillSelection),
+		specialties: mapSpecialties(freelancer.freelancerSpecialtySelection),
+		createdAt: freelancer.createdAt,
+		updatedAt: freelancer.updatedAt,
+		isSaved
+	}
 }
 
 const serializeFreelancerDetail = (
-        freelancer: FreelancerDetailPayload,
-        avatarUrl: string | null,
-        options: { isSaved?: boolean } = {}
+	freelancer: FreelancerDetailPayload,
+	avatarUrl: string | null,
+	options: { isSaved?: boolean } = {}
 ) => {
-        const summary = serializeFreelancerSummary(freelancer, avatarUrl, options)
+	const summary = serializeFreelancerSummary(freelancer, avatarUrl, options)
 
 	return {
 		...summary,
@@ -269,13 +269,13 @@ const serializeFreelancerDetail = (
 }
 
 const buildFreelancerWhere = (
-        filters: ClientFreelancerFilterInput,
-        clientUserId: string
+	filters: ClientFreelancerFilterInput,
+	clientUserId: string
 ): Prisma.FreelancerWhereInput => {
-        const where: Prisma.FreelancerWhereInput = {
-                profile: {
-                        is: {
-                                user: {
+	const where: Prisma.FreelancerWhereInput = {
+		profile: {
+			is: {
+				user: {
 					isActive: true,
 					deletedAt: null,
 					role: Role.FREELANCER
@@ -286,11 +286,11 @@ const buildFreelancerWhere = (
 
 	const andConditions: Prisma.FreelancerWhereInput[] = []
 
-        if (filters.specialtyId) {
-                andConditions.push({
-                        freelancerSpecialtySelection: { some: { specialtyId: filters.specialtyId, isDeleted: false } }
-                })
-        }
+	if (filters.specialtyId) {
+		andConditions.push({
+			freelancerSpecialtySelection: { some: { specialtyId: filters.specialtyId, isDeleted: false } }
+		})
+	}
 
 	if (filters.skillIds && filters.skillIds.length > 0) {
 		for (const skillId of filters.skillIds) {
@@ -300,46 +300,52 @@ const buildFreelancerWhere = (
 		}
 	}
 
-        if (filters.country) {
-                andConditions.push({
-                        profile: {
-                                is: {
-                                        country: { equals: filters.country }
-                                }
-                        }
-                })
-        }
+	if (filters.country) {
+		andConditions.push({
+			profile: {
+				is: {
+					country: { equals: filters.country }
+				}
+			}
+		})
+	}
 
-        if (filters.invitedJobId) {
-                andConditions.push({
-                        jobInvitations: {
-                                some: {
-                                        jobId: filters.invitedJobId,
-                                        clientId: clientUserId
-                                }
-                        }
-                })
-        }
+	if (filters.invitedJobId) {
+		andConditions.push({
+			jobInvitations: {
+				some: {
+					jobId: filters.invitedJobId,
+					clientId: clientUserId,
+					job: {
+						is: {
+							id: filters.invitedJobId,
+							clientId: clientUserId
+						}
+					}
+				}
+			}
+		})
+	}
 
-        if (typeof filters.saved === 'boolean') {
-                const relationFilter: Prisma.ClientSavedFreelancerWhereInput = {
-                        clientId: clientUserId
-                }
+	if (typeof filters.saved === 'boolean') {
+		const relationFilter: Prisma.ClientSavedFreelancerWhereInput = {
+			clientId: clientUserId
+		}
 
-                if (filters.saved) {
-                        andConditions.push({
-                                savedByClients: { some: relationFilter }
-                        })
-                } else {
-                        andConditions.push({
-                                savedByClients: { none: relationFilter }
-                        })
-                }
-        }
+		if (filters.saved) {
+			andConditions.push({
+				savedByClients: { some: relationFilter }
+			})
+		} else {
+			andConditions.push({
+				savedByClients: { none: relationFilter }
+			})
+		}
+	}
 
-        if (andConditions.length > 0) {
-                where.AND = andConditions
-        }
+	if (andConditions.length > 0) {
+		where.AND = andConditions
+	}
 
 	if (filters.search) {
 		const search = filters.search
@@ -367,45 +373,46 @@ const listFreelancers = async (clientUserId: string, filters: ClientFreelancerFi
 		skillIds: filters.skillIds ? uniquePreserveOrder(filters.skillIds) : undefined
 	}
 
+	console.log(normalizedFilters)
+
 	const page = normalizedFilters.page
 	const limit = normalizedFilters.limit
 
-        const where = buildFreelancerWhere(normalizedFilters, clientUserId)
-
-        const [items, total] = await prismaClient.$transaction([
-                prismaClient.freelancer.findMany({
-                        where,
-                        include: freelancerSummaryInclude,
-                        orderBy: { updatedAt: Prisma.SortOrder.desc },
-                        skip: (page - 1) * limit,
+	const where = buildFreelancerWhere(normalizedFilters, clientUserId)
+	const [items, total] = await prismaClient.$transaction([
+		prismaClient.freelancer.findMany({
+			where,
+			include: freelancerSummaryInclude,
+			orderBy: { updatedAt: Prisma.SortOrder.desc },
+			skip: (page - 1) * limit,
 			take: limit
 		}),
 		prismaClient.freelancer.count({ where })
 	])
 
-        const freelancerIds = items.map(freelancer => freelancer.userId)
+	const freelancerIds = items.map(freelancer => freelancer.userId)
 
-        const savedFreelancerIds = new Set(
-                freelancerIds.length > 0
-                        ? (
-                                  await prismaClient.clientSavedFreelancer.findMany({
-                                          where: {
-                                                  clientId: clientUserId,
-                                                  freelancerId: { in: freelancerIds }
-                                          },
-                                          select: { freelancerId: true }
-                                  })
-                          ).map(relation => relation.freelancerId)
-                        : []
-        )
+	const savedFreelancerIds = new Set(
+		freelancerIds.length > 0
+			? (
+					await prismaClient.clientSavedFreelancer.findMany({
+						where: {
+							clientId: clientUserId,
+							freelancerId: { in: freelancerIds }
+						},
+						select: { freelancerId: true }
+					})
+			  ).map(relation => relation.freelancerId)
+			: []
+	)
 
-        const data = await Promise.all(
-                items.map(async (freelancer: any) => {
-                        const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
-                        const isSaved = savedFreelancerIds.has(freelancer.userId)
-                        return serializeFreelancerSummary(freelancer, avatarUrl, { isSaved })
-                })
-        )
+	const data = await Promise.all(
+		items.map(async (freelancer: any) => {
+			const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
+			const isSaved = savedFreelancerIds.has(freelancer.userId)
+			return serializeFreelancerSummary(freelancer, avatarUrl, { isSaved })
+		})
+	)
 
 	return {
 		data,
@@ -438,20 +445,20 @@ const getFreelancerDetail = async (clientUserId: string, freelancerId: string) =
 		throw new NotFoundException('Không tìm thấy freelancer', ErrorCode.ITEM_NOT_FOUND)
 	}
 
-        const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
+	const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
 
-        const savedRelation = await prismaClient.clientSavedFreelancer.findUnique({
-                where: {
-                        clientId_freelancerId: {
-                                clientId: clientUserId,
-                                freelancerId
-                        }
-                },
-                select: { freelancerId: true }
-        })
-        const isSaved = Boolean(savedRelation)
+	const savedRelation = await prismaClient.clientSavedFreelancer.findUnique({
+		where: {
+			clientId_freelancerId: {
+				clientId: clientUserId,
+				freelancerId
+			}
+		},
+		select: { freelancerId: true }
+	})
+	const isSaved = Boolean(savedRelation)
 
-        return serializeFreelancerDetail(freelancer, avatarUrl, { isSaved })
+	return serializeFreelancerDetail(freelancer, avatarUrl, { isSaved })
 }
 
 const saveFreelancer = async (clientUserId: string, freelancerId: string) => {
