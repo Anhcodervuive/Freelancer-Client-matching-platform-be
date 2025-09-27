@@ -310,6 +310,17 @@ const buildFreelancerWhere = (
                 })
         }
 
+        if (filters.invitedJobId) {
+                andConditions.push({
+                        jobInvitations: {
+                                some: {
+                                        jobId: filters.invitedJobId,
+                                        clientId: clientUserId
+                                }
+                        }
+                })
+        }
+
         if (typeof filters.saved === 'boolean') {
                 const relationFilter: Prisma.ClientSavedFreelancerWhereInput = {
                         clientId: clientUserId
