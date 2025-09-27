@@ -2,6 +2,7 @@ import express from 'express'
 import morgan from 'morgan'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import { createServer } from 'http'
 
 import { PORT } from './config/environment'
 import { prismaClient } from './config/prisma-client'
@@ -11,6 +12,7 @@ import { errorMiddleware } from './middlewares/errors'
 import { redisClient } from './config/redis-client'
 import { corsOptions } from './config/cors'
 import '~/config/passport'
+import { registerRealtime } from './realtime'
 
 async function START_SERVIER() {
 	try {
@@ -35,23 +37,30 @@ async function START_SERVIER() {
 
 		app.use('/api', rootRouter)
 
-		app.use(errorMiddleware)
+                app.use(errorMiddleware)
 
-		app.listen(PORT, () => {
-			console.log(`Server is running on http://localhost:${PORT}`)
-		})
+                const httpServer = createServer(app)
+                registerRealtime(httpServer)
 
-		// 3. Graceful shutdown khi stop app
-		process.on('SIGINT', async () => {
-			await prismaClient.$disconnect()
-			redisClient.disconnect()
-			process.exit(0)
-		})
-		process.on('SIGTERM', async () => {
-			await prismaClient.$disconnect()
-			redisClient.disconnect()
-			process.exit(0)
-		})
+                httpServer.listen(PORT, () => {
+                        console.log(`Server is running on http://localhost:${PORT}`)
+                })
+
+                // 3. Graceful shutdown khi stop app
+                process.on('SIGINT', async () => {
+                        await prismaClient.$disconnect()
+                        redisClient.disconnect()
+                        httpServer.close(() => {
+                                process.exit(0)
+                        })
+                })
+                process.on('SIGTERM', async () => {
+                        await prismaClient.$disconnect()
+                        redisClient.disconnect()
+                        httpServer.close(() => {
+                                process.exit(0)
+                        })
+                })
 	} catch (error) {
 		// Nếu connect lỗi, báo lỗi và dừng app
 		console.error('❌ Failed to connect database:', error)

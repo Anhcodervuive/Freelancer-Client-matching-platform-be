@@ -1,4 +1,12 @@
-import { Prisma, JobInvitationStatus, JobProposalStatus, JobStatus } from '~/generated/prisma'
+import {
+        Prisma,
+        JobInvitationStatus,
+        JobProposalStatus,
+        JobStatus,
+        NotificationCategory,
+        NotificationEvent,
+        NotificationResource
+} from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
@@ -11,6 +19,7 @@ import {
         jobInvitationSummaryInclude,
         serializeJobInvitation
 } from '~/services/job-invitation/shared'
+import notificationService from '~/services/notification.service'
 
 const uniquePreserveOrder = <T>(items: readonly T[]): T[] => {
         const seen = new Set<T>()
@@ -110,6 +119,24 @@ const createJobInvitation = async (clientUserId: string, payload: CreateJobInvit
                         },
                         include: jobInvitationInclude
                 })
+
+                try {
+                        await notificationService.create({
+                                recipientId: payload.freelancerId,
+                                actorId: clientUserId,
+                                category: NotificationCategory.JOB,
+                                event: NotificationEvent.JOB_INVITATION_CREATED,
+                                resourceType: NotificationResource.JOB_INVITATION,
+                                resourceId: invitation.id,
+                                payload: {
+                                        jobId: payload.jobId,
+                                        invitationId: invitation.id
+                                }
+                        })
+                } catch (notificationError) {
+                        // eslint-disable-next-line no-console
+                        console.error('Failed to create notification for job invitation', notificationError)
+                }
 
                 return serializeJobInvitation(invitation)
         } catch (error) {

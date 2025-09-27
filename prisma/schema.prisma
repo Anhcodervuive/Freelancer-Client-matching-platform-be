@@ -41,6 +41,8 @@ model User {
 
   emailVerifyTokens EmailVerifyToken[]
   jobActivityLogs   JobActivityLog[]
+  notificationsReceived Notification[] @relation("NotificationRecipient")
+  notificationsAuthored Notification[] @relation("NotificationActor")
 
   @@index([email])
   @@map("user")
@@ -667,6 +669,64 @@ model MatchInteraction {
   @@index([type, occurredAt], name: "idx_match_interaction_type")
   @@index([actorProfileId, occurredAt], name: "idx_match_interaction_actor")
   @@map("match_interaction")
+}
+
+model Notification {
+  id           String              @id @default(cuid())
+  recipientId  String              @map("recipient_id")
+  actorId      String?             @map("actor_id")
+  category     NotificationCategory
+  event        NotificationEvent
+  resourceType NotificationResource? @map("resource_type")
+  resourceId   String?             @map("resource_id")
+  payload      Json?
+  status       NotificationStatus  @default(PENDING)
+  readAt       DateTime?           @map("read_at")
+  deliveredAt  DateTime?           @map("delivered_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  recipient User @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, status, createdAt], name: "idx_notification_recipient_status")
+  @@index([resourceType, resourceId], name: "idx_notification_resource")
+  @@map("notification")
+}
+
+enum NotificationCategory {
+  JOB
+  PROPOSAL
+  DISPUTE
+  SYSTEM
+}
+
+enum NotificationEvent {
+  JOB_INVITATION_CREATED
+  JOB_INVITATION_CANCELLED
+  JOB_INVITATION_ACCEPTED
+  JOB_INVITATION_DECLINED
+  JOB_HIRE
+  JOB_ACCEPT
+  PROPOSAL_SUBMITTED
+  DISPUTE_CREATED
+  DISPUTE_UPDATED
+  SYSTEM_MESSAGE
+}
+
+enum NotificationResource {
+  JOB_POST
+  JOB_INVITATION
+  JOB_PROPOSAL
+  CONTRACT
+  DISPUTE
+  SYSTEM
+}
+
+enum NotificationStatus {
+  PENDING
+  DELIVERED
+  READ
 }
 
 // ---------- Enums ----------

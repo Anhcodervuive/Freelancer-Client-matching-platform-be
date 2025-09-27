@@ -1,4 +1,4 @@
-import { JobInvitationStatus } from '~/generated/prisma'
+import { JobInvitationStatus, NotificationCategory, NotificationEvent, NotificationResource } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
@@ -7,6 +7,7 @@ import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { RespondJobInvitationInput } from '~/schema/job-invitation.schema'
 import { jobInvitationInclude, serializeJobInvitation } from '~/services/job-invitation/shared'
+import notificationService from '~/services/notification.service'
 
 const ensureFreelancerUser = async (userId: string) => {
         const freelancer = await prismaClient.freelancer.findUnique({
@@ -72,6 +73,28 @@ const respondToJobInvitation = async (
         })
 
         const serialized = serializeJobInvitation(updatedInvitation)
+
+        try {
+                await notificationService.create({
+                        recipientId: invitation.clientId,
+                        actorId: freelancerUserId,
+                        category: NotificationCategory.JOB,
+                        event:
+                                status === JobInvitationStatus.ACCEPTED
+                                        ? NotificationEvent.JOB_INVITATION_ACCEPTED
+                                        : NotificationEvent.JOB_INVITATION_DECLINED,
+                        resourceType: NotificationResource.JOB_INVITATION,
+                        resourceId: invitation.id,
+                        payload: {
+                                invitationId: invitation.id,
+                                jobId: invitation.jobId,
+                                status
+                        }
+                })
+        } catch (notificationError) {
+                // eslint-disable-next-line no-console
+                console.error('Failed to create notification for job invitation response', notificationError)
+        }
 
         return {
                 ...serialized,
