@@ -1,11 +1,23 @@
-import { Prisma, JobProposalStatus } from '~/generated/prisma'
+import {
+        Prisma,
+        JobProposalStatus,
+        MatchInteractionSource,
+        MatchInteractionType,
+        NotificationCategory,
+        NotificationEvent,
+        NotificationResource,
+        Role
+} from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
+import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { JobProposalFilterInput } from '~/schema/job-proposal.schema'
 import { jobProposalInclude, serializeJobProposal } from '~/services/job-proposal/shared'
+import matchInteractionService from '~/services/match-interaction.service'
+import notificationService from '~/services/notification.service'
 
 const uniquePreserveOrder = <T>(items: readonly T[]): T[] => {
         const seen = new Set<T>()
@@ -46,6 +58,28 @@ const ensureJobOwnedByClient = async (jobId: string, clientId: string) => {
         }
 
         return job
+}
+
+const findProposalForClient = async (proposalId: string, jobId: string, clientId: string) => {
+        const proposal = await prismaClient.jobProposal.findFirst({
+                where: {
+                        id: proposalId,
+                        jobId,
+                        job: {
+                                is: {
+                                        clientId,
+                                        isDeleted: false
+                                }
+                        }
+                },
+                include: jobProposalInclude
+        })
+
+        if (!proposal) {
+                throw new NotFoundException('Proposal không tồn tại', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        return proposal
 }
 
 const normalizeStatuses = (filters: JobProposalFilterInput): JobProposalStatus[] | undefined => {
@@ -167,8 +201,185 @@ const listJobProposalsForJob = async (clientUserId: string, jobId: string, filte
         }
 }
 
+const acceptJobProposalInterview = async (clientUserId: string, jobId: string, proposalId: string) => {
+        await ensureClientUser(clientUserId)
+        await ensureJobOwnedByClient(jobId, clientUserId)
+
+        const proposal = await findProposalForClient(proposalId, jobId, clientUserId)
+
+        if (proposal.status === JobProposalStatus.WITHDRAWN) {
+                throw new BadRequestException('Proposal đã được freelancer rút lại', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (proposal.status === JobProposalStatus.DECLINED) {
+                throw new BadRequestException('Proposal đã bị từ chối trước đó', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (proposal.status === JobProposalStatus.HIRED) {
+                throw new BadRequestException('Proposal đã được chấp nhận tuyển dụng', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (proposal.status === JobProposalStatus.INTERVIEWING) {
+                throw new BadRequestException('Proposal đã ở trạng thái phỏng vấn', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const updated = await prismaClient.jobProposal.update({
+                where: { id: proposal.id },
+                data: { status: JobProposalStatus.INTERVIEWING },
+                include: jobProposalInclude
+        })
+
+        try {
+                await matchInteractionService.recordInteraction({
+                        type: MatchInteractionType.PROPOSAL_INTERVIEWING,
+                        source: MatchInteractionSource.DIRECT,
+                        jobId: updated.jobId,
+                        freelancerId: updated.freelancerId,
+                        clientId: clientUserId,
+                        proposalId: updated.id,
+                        actorProfileId: clientUserId,
+                        actorRole: Role.CLIENT
+                })
+        } catch (error) {
+                // eslint-disable-next-line no-console
+                console.error('Không thể ghi lại tương tác khi chuyển proposal sang trạng thái phỏng vấn', error)
+        }
+
+        try {
+                await notificationService.create({
+                        recipientId: updated.freelancerId,
+                        actorId: clientUserId,
+                        category: NotificationCategory.PROPOSAL,
+                        event: NotificationEvent.JOB_ACCEPT,
+                        resourceType: NotificationResource.JOB_PROPOSAL,
+                        resourceId: updated.id,
+                        payload: {
+                                jobId: updated.jobId,
+                                proposalId: updated.id,
+                                status: updated.status
+                        }
+                })
+        } catch (notificationError) {
+                // eslint-disable-next-line no-console
+                console.error('Không thể tạo thông báo khi client chấp nhận phỏng vấn', notificationError)
+        }
+
+        return serializeJobProposal(updated)
+}
+
+const declineJobProposal = async (clientUserId: string, jobId: string, proposalId: string) => {
+        await ensureClientUser(clientUserId)
+        await ensureJobOwnedByClient(jobId, clientUserId)
+
+        const proposal = await findProposalForClient(proposalId, jobId, clientUserId)
+
+        if (proposal.status === JobProposalStatus.WITHDRAWN) {
+                throw new BadRequestException('Proposal đã được freelancer rút lại', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (proposal.status === JobProposalStatus.DECLINED) {
+                throw new BadRequestException('Proposal đã bị từ chối', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (proposal.status === JobProposalStatus.HIRED) {
+                throw new BadRequestException('Không thể từ chối proposal đã được thuê', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const updated = await prismaClient.jobProposal.update({
+                where: { id: proposal.id },
+                data: { status: JobProposalStatus.DECLINED },
+                include: jobProposalInclude
+        })
+
+        try {
+                await notificationService.create({
+                        recipientId: updated.freelancerId,
+                        actorId: clientUserId,
+                        category: NotificationCategory.PROPOSAL,
+                        event: NotificationEvent.JOB_INVITATION_DECLINED,
+                        resourceType: NotificationResource.JOB_PROPOSAL,
+                        resourceId: updated.id,
+                        payload: {
+                                jobId: updated.jobId,
+                                proposalId: updated.id,
+                                status: updated.status
+                        }
+                })
+        } catch (notificationError) {
+                // eslint-disable-next-line no-console
+                console.error('Không thể tạo thông báo khi client từ chối proposal', notificationError)
+        }
+
+        return serializeJobProposal(updated)
+}
+
+const hireFreelancerFromProposal = async (clientUserId: string, jobId: string, proposalId: string) => {
+        await ensureClientUser(clientUserId)
+        await ensureJobOwnedByClient(jobId, clientUserId)
+
+        const proposal = await findProposalForClient(proposalId, jobId, clientUserId)
+
+        if (proposal.status === JobProposalStatus.WITHDRAWN) {
+                throw new BadRequestException('Proposal đã được freelancer rút lại', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (proposal.status === JobProposalStatus.DECLINED) {
+                throw new BadRequestException('Không thể thuê freelancer từ proposal đã bị từ chối', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (proposal.status === JobProposalStatus.HIRED) {
+                throw new BadRequestException('Proposal đã được thuê trước đó', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const updated = await prismaClient.jobProposal.update({
+                where: { id: proposal.id },
+                data: { status: JobProposalStatus.HIRED },
+                include: jobProposalInclude
+        })
+
+        try {
+                await matchInteractionService.recordInteraction({
+                        type: MatchInteractionType.PROPOSAL_HIRED,
+                        source: MatchInteractionSource.DIRECT,
+                        jobId: updated.jobId,
+                        freelancerId: updated.freelancerId,
+                        clientId: clientUserId,
+                        proposalId: updated.id,
+                        actorProfileId: clientUserId,
+                        actorRole: Role.CLIENT
+                })
+        } catch (error) {
+                // eslint-disable-next-line no-console
+                console.error('Không thể ghi lại tương tác khi client thuê freelancer', error)
+        }
+
+        try {
+                await notificationService.create({
+                        recipientId: updated.freelancerId,
+                        actorId: clientUserId,
+                        category: NotificationCategory.PROPOSAL,
+                        event: NotificationEvent.JOB_HIRE,
+                        resourceType: NotificationResource.JOB_PROPOSAL,
+                        resourceId: updated.id,
+                        payload: {
+                                jobId: updated.jobId,
+                                proposalId: updated.id,
+                                status: updated.status
+                        }
+                })
+        } catch (notificationError) {
+                // eslint-disable-next-line no-console
+                console.error('Không thể tạo thông báo khi client thuê freelancer', notificationError)
+        }
+
+        return serializeJobProposal(updated)
+}
+
 const clientJobProposalService = {
-        listJobProposalsForJob
+        listJobProposalsForJob,
+        acceptJobProposalInterview,
+        declineJobProposal,
+        hireFreelancerFromProposal
 }
 
 export default clientJobProposalService

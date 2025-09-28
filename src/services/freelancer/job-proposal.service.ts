@@ -5,6 +5,9 @@ import {
         JobInvitationStatus,
         MatchInteractionSource,
         MatchInteractionType,
+        NotificationCategory,
+        NotificationEvent,
+        NotificationResource,
         Role
 } from '~/generated/prisma'
 
@@ -20,6 +23,7 @@ import {
 } from '~/schema/job-proposal.schema'
 import { jobProposalInclude, serializeJobProposal, type JobProposalPayload } from '~/services/job-proposal/shared'
 import matchInteractionService from '~/services/match-interaction.service'
+import notificationService from '~/services/notification.service'
 
 const uniquePreserveOrder = <T>(items: readonly T[]): T[] => {
         const seen = new Set<T>()
@@ -307,6 +311,25 @@ const createJobProposal = async (freelancerUserId: string, payload: CreateJobPro
         } catch (error) {
                 // eslint-disable-next-line no-console
                 console.error('Không thể ghi lại tương tác khi gửi proposal', error)
+        }
+
+        try {
+                await notificationService.create({
+                        recipientId: job.clientId,
+                        actorId: freelancerUserId,
+                        category: NotificationCategory.PROPOSAL,
+                        event: NotificationEvent.PROPOSAL_SUBMITTED,
+                        resourceType: NotificationResource.JOB_PROPOSAL,
+                        resourceId: proposal.id,
+                        payload: {
+                                jobId: proposal.jobId,
+                                proposalId: proposal.id,
+                                freelancerId: freelancerUserId
+                        }
+                })
+        } catch (notificationError) {
+                // eslint-disable-next-line no-console
+                console.error('Không thể tạo thông báo khi gửi proposal', notificationError)
         }
 
         return serializeProposalForFreelancer(proposal)
