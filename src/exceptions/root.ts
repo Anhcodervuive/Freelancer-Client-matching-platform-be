@@ -38,5 +38,8 @@ export enum ErrorCode {
 	PARAM_QUERY_ERROR = 2002,
 	ITEM_NOT_FOUND = 2003,
 
+	// Forbidden
+	FORBIDDEN = 3000,
+
 	INTERNAL_SERVER_ERROR = 5000
 }

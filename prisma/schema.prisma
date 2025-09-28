@@ -686,6 +686,10 @@ model Notification {
   createdAt    DateTime            @default(now()) @map("created_at")
   updatedAt    DateTime            @updatedAt @map("updated_at")
 
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+
   recipient User @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
   actor     User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
 

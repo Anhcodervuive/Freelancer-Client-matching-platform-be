@@ -3,6 +3,9 @@ import { Prisma, NotificationStatus } from '~/generated/prisma'
 import { prismaClient } from '~/config/prisma-client'
 import { CreateNotificationInput, CreateNotificationSchema } from '~/schema/notification.schema'
 import { NotificationRealtimeEvent, notificationEventEmitter } from '~/realtime/notifications/notification.events'
+import { ForbiddenException } from '~/exceptions/Forbidden'
+import { ErrorCode } from '~/exceptions/root'
+import { BadRequestException } from '~/exceptions/bad-request'
 
 const notificationService = {
 	async create(input: CreateNotificationInput) {
@@ -65,6 +68,30 @@ const notificationService = {
 						profile: true
 					}
 				}
+			}
+		})
+	},
+
+	async ensureIsOwnerOfNotification(recipientId: string, notificationId: string) {
+		const notification = await prismaClient.notification.findFirst({
+			where: {
+				id: notificationId
+			}
+		})
+
+		if (!notification) {
+			throw new BadRequestException('Notification not found', ErrorCode.ITEM_NOT_FOUND)
+		} else if (notification.recipientId !== recipientId) {
+			throw new ForbiddenException('Forbidden', ErrorCode.FORBIDDEN)
+		}
+	},
+
+	async deleteById(recipientId: string, notificationId: string) {
+		await this.ensureIsOwnerOfNotification(recipientId, notificationId)
+
+		return prismaClient.notification.softDelete({
+			where: {
+				id: notificationId
 			}
 		})
 	}
