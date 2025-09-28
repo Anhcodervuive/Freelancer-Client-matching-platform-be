@@ -1,75 +1,80 @@
+import { StatusCodes } from 'http-status-codes'
+import { JsonWebTokenError } from 'jsonwebtoken'
 import type { Socket } from 'socket.io'
 
 import { JWT_CONFIG_INFO } from '~/config/environment'
 import { prismaClient } from '~/config/prisma-client'
+import { ErrorCode } from '~/exceptions/root'
+import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { JwtProvider } from '~/providers/jwt.provider'
 
 const buildUnauthorizedError = () => new Error('Unauthorized socket connection')
 
 const parseCookies = (cookieHeader: unknown): Record<string, string> => {
-        if (typeof cookieHeader !== 'string' || cookieHeader.trim().length === 0) {
-                return {}
-        }
+	if (typeof cookieHeader !== 'string' || cookieHeader.trim().length === 0) {
+		return {}
+	}
 
-        return cookieHeader.split(';').reduce<Record<string, string>>((acc, cookiePart) => {
-                const [rawName, ...rawValueParts] = cookiePart.split('=')
-                if (!rawName || rawValueParts.length === 0) {
-                        return acc
-                }
+	return cookieHeader.split(';').reduce<Record<string, string>>((acc, cookiePart) => {
+		const [rawName, ...rawValueParts] = cookiePart.split('=')
+		if (!rawName || rawValueParts.length === 0) {
+			return acc
+		}
 
-                const name = rawName.trim()
-                const value = rawValueParts.join('=').trim()
+		const name = rawName.trim()
+		const value = rawValueParts.join('=').trim()
 
-                if (name.length > 0 && value.length > 0) {
-                        acc[name] = decodeURIComponent(value)
-                }
+		if (name.length > 0 && value.length > 0) {
+			acc[name] = decodeURIComponent(value)
+		}
 
-                return acc
-        }, {})
+		return acc
+	}, {})
 }
 
 const extractToken = (socket: Socket): string | undefined => {
-        const authToken = socket.handshake.auth?.token
-        if (typeof authToken === 'string' && authToken.trim().length > 0) {
-                return authToken
-        }
+	const authToken = socket.handshake.auth?.token
+	if (typeof authToken === 'string' && authToken.trim().length > 0) {
+		return authToken
+	}
 
-        const header = socket.handshake.headers?.authorization
-        if (typeof header === 'string' && header.startsWith('Bearer ')) {
-                return header.slice(7)
-        }
+	const header = socket.handshake.headers?.authorization
+	if (typeof header === 'string' && header.startsWith('Bearer ')) {
+		return header.slice(7)
+	}
+	const cookies = parseCookies(socket.handshake.headers?.cookie)
+	const cookieToken = cookies.accessToken
+	if (typeof cookieToken === 'string' && cookieToken.trim().length > 0) {
+		return cookieToken
+	}
 
-        const cookies = parseCookies(socket.handshake.headers?.cookie)
-        const cookieToken = cookies.accessToken
-        if (typeof cookieToken === 'string' && cookieToken.trim().length > 0) {
-                return cookieToken
-        }
-
-        return undefined
+	return undefined
 }
 
 export const authenticateSocket = async (socket: Socket, next: (err?: Error) => void) => {
-        try {
-                const token = extractToken(socket)
+	try {
+		const token = extractToken(socket)
 
-                if (!token) {
-                        return next(buildUnauthorizedError())
-                }
+		if (!token) {
+			return next(buildUnauthorizedError())
+		}
 
-                const decoded = await JwtProvider.verifyToken(token, JWT_CONFIG_INFO.ACCESS_TOKEN_SECRET_SIGNATURE)
+		const decoded = await JwtProvider.verifyToken(token, JWT_CONFIG_INFO.ACCESS_TOKEN_SECRET_SIGNATURE)
+		const user = await prismaClient.user.findUnique({
+			where: { id: decoded.id }
+		})
 
-                const user = await prismaClient.user.findUnique({
-                        where: { id: decoded.id }
-                })
+		if (!user) {
+			return next(buildUnauthorizedError())
+		}
 
-                if (!user) {
-                        return next(buildUnauthorizedError())
-                }
+		socket.data.user = user
 
-                socket.data.user = user
-
-                return next()
-        } catch (error) {
-                return next(buildUnauthorizedError())
-        }
+		return next()
+	} catch (error) {
+		if (error instanceof JsonWebTokenError) {
+			return next(new UnauthorizedException('Token is not validated', ErrorCode.UNAUTHORIED, null, StatusCodes.GONE))
+		}
+		return next(buildUnauthorizedError())
+	}
 }

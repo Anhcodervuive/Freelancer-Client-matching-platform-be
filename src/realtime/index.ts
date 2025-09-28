@@ -6,11 +6,11 @@ import { corsOptions } from '~/config/cors'
 import { registerNotificationGateway } from './notifications/notification.gateway'
 
 export const registerRealtime = (httpServer: HttpServer) => {
-        const io = new SocketIOServer(httpServer, {
-                cors: corsOptions
-        })
+	const io = new SocketIOServer(httpServer, {
+		cors: corsOptions
+	})
 
-        registerNotificationGateway(io)
+	registerNotificationGateway(io)
 
-        return io
+	return io
 }
