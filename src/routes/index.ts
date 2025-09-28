@@ -16,7 +16,11 @@ import freelancerJobPostRoute from './freelancer-job-post.route'
 import clientFreelancerRoute from './client-freelancer.route'
 import clientJobInvitationRoute from './client-job-invitation.route'
 import freelancerJobInvitationRoute from './freelancer-job-invitation.route'
+<<<<<<< HEAD
 import notificationRoute from './notifcation.route'
+=======
+import notificationRoute from './notification.route'
+>>>>>>> 97f0d8766f95c0bb1778489b6559c597f71bba13
 
 const rootRouter: Router = Router()
 
