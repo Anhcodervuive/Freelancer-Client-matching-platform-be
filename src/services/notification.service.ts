@@ -89,7 +89,7 @@ const notificationService = {
 	async deleteById(recipientId: string, notificationId: string) {
 		await this.ensureIsOwnerOfNotification(recipientId, notificationId)
 
-		return prismaClient.notification.softDelete({
+		return prismaClient.notification.delete({
 			where: {
 				id: notificationId
 			}
