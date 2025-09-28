@@ -53,7 +53,19 @@ const notificationService = {
 		return prismaClient.notification.findMany({
 			where: { recipientId },
 			orderBy: { createdAt: 'desc' },
-			take: limit
+			take: limit,
+			include: {
+				actor: {
+					include: {
+						profile: true
+					}
+				},
+				recipient: {
+					include: {
+						profile: true
+					}
+				}
+			}
 		})
 	}
 }
