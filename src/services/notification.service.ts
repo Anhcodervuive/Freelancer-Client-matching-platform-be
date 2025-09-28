@@ -49,11 +49,11 @@ const notificationService = {
 		})
 	},
 
-	async listRecentByRecipient(recipientId: string, limit = 20) {
-		return prismaClient.notification.findMany({
-			where: { recipientId },
-			orderBy: { createdAt: 'desc' },
-			take: limit,
+        async listRecentByRecipient(recipientId: string, limit = 20) {
+                return prismaClient.notification.findMany({
+                        where: { recipientId },
+                        orderBy: { createdAt: 'desc' },
+                        take: limit,
 			include: {
 				actor: {
 					include: {
@@ -64,10 +64,21 @@ const notificationService = {
 					include: {
 						profile: true
 					}
-				}
-			}
-		})
-	}
+                                }
+                        }
+                })
+        },
+
+        async deleteNotification(recipientId: string, notificationId: string) {
+                const deleted = await prismaClient.notification.deleteMany({
+                        where: {
+                                id: notificationId,
+                                recipientId
+                        }
+                })
+
+                return deleted.count > 0
+        }
 }
 
 export default notificationService
