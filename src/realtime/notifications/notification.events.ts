@@ -1,13 +1,13 @@
 import { EventEmitter } from 'node:events'
 
-import type { Notification } from '~/generated/prisma'
+import type { Notification, Profile } from '~/generated/prisma'
 
 export const NotificationRealtimeEvent = {
 	CREATED: 'notification.created'
 } as const
 
 type NotificationRealtimeEventPayloads = {
-	[NotificationRealtimeEvent.CREATED]: Notification
+	[NotificationRealtimeEvent.CREATED]: any
 }
 
 export const notificationEventEmitter = new EventEmitter()

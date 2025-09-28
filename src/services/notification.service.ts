@@ -21,6 +21,18 @@ const notificationService = {
 				resourceId: parsed.resourceId ?? null,
 				payload: (parsed.payload ?? {}) as Prisma.InputJsonValue | {},
 				status: NotificationStatus.PENDING
+			},
+			include: {
+				actor: {
+					include: {
+						profile: true
+					}
+				},
+				recipient: {
+					include: {
+						profile: true
+					}
+				}
 			}
 		})
 
@@ -35,6 +47,18 @@ const notificationService = {
 			data: {
 				deliveredAt: new Date(),
 				status: NotificationStatus.DELIVERED
+			},
+			include: {
+				actor: {
+					include: {
+						profile: true
+					}
+				},
+				recipient: {
+					include: {
+						profile: true
+					}
+				}
 			}
 		})
 	},
@@ -72,28 +96,15 @@ const notificationService = {
 		})
 	},
 
-	async ensureIsOwnerOfNotification(recipientId: string, notificationId: string) {
-		const notification = await prismaClient.notification.findFirst({
+	async deleteNotification(recipientId: string, notificationId: string) {
+		const deleted = await prismaClient.notification.deleteMany({
 			where: {
-				id: notificationId
+				id: notificationId,
+				recipientId
 			}
 		})
 
-		if (!notification) {
-			throw new BadRequestException('Notification not found', ErrorCode.ITEM_NOT_FOUND)
-		} else if (notification.recipientId !== recipientId) {
-			throw new ForbiddenException('Forbidden', ErrorCode.FORBIDDEN)
-		}
-	},
-
-	async deleteById(recipientId: string, notificationId: string) {
-		await this.ensureIsOwnerOfNotification(recipientId, notificationId)
-
-		return prismaClient.notification.delete({
-			where: {
-				id: notificationId
-			}
-		})
+		return deleted.count > 0
 	}
 }
 
