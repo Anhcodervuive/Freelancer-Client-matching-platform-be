@@ -18,6 +18,18 @@ const notificationService = {
 				resourceId: parsed.resourceId ?? null,
 				payload: (parsed.payload ?? {}) as Prisma.InputJsonValue | {},
 				status: NotificationStatus.PENDING
+			},
+			include: {
+				actor: {
+					include: {
+						profile: true
+					}
+				},
+				recipient: {
+					include: {
+						profile: true
+					}
+				}
 			}
 		})
 
@@ -32,6 +44,18 @@ const notificationService = {
 			data: {
 				deliveredAt: new Date(),
 				status: NotificationStatus.DELIVERED
+			},
+			include: {
+				actor: {
+					include: {
+						profile: true
+					}
+				},
+				recipient: {
+					include: {
+						profile: true
+					}
+				}
 			}
 		})
 	},
@@ -49,11 +73,11 @@ const notificationService = {
 		})
 	},
 
-        async listRecentByRecipient(recipientId: string, limit = 20) {
-                return prismaClient.notification.findMany({
-                        where: { recipientId },
-                        orderBy: { createdAt: 'desc' },
-                        take: limit,
+	async listRecentByRecipient(recipientId: string, limit = 20) {
+		return prismaClient.notification.findMany({
+			where: { recipientId },
+			orderBy: { createdAt: 'desc' },
+			take: limit,
 			include: {
 				actor: {
 					include: {
@@ -64,21 +88,21 @@ const notificationService = {
 					include: {
 						profile: true
 					}
-                                }
-                        }
-                })
-        },
+				}
+			}
+		})
+	},
 
-        async deleteNotification(recipientId: string, notificationId: string) {
-                const deleted = await prismaClient.notification.deleteMany({
-                        where: {
-                                id: notificationId,
-                                recipientId
-                        }
-                })
+	async deleteNotification(recipientId: string, notificationId: string) {
+		const deleted = await prismaClient.notification.deleteMany({
+			where: {
+				id: notificationId,
+				recipientId
+			}
+		})
 
-                return deleted.count > 0
-        }
+		return deleted.count > 0
+	}
 }
 
 export default notificationService
