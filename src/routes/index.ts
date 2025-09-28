@@ -16,6 +16,7 @@ import freelancerJobPostRoute from './freelancer-job-post.route'
 import clientFreelancerRoute from './client-freelancer.route'
 import clientJobInvitationRoute from './client-job-invitation.route'
 import freelancerJobInvitationRoute from './freelancer-job-invitation.route'
+import notificationRoute from './notification.route'
 
 const rootRouter: Router = Router()
 
@@ -33,5 +34,6 @@ rootRouter.use('/freelancer/job-invitations', freelancerJobInvitationRoute)
 rootRouter.use('/job-posts', jobPostRoute)
 rootRouter.use('/client', clientFreelancerRoute)
 rootRouter.use('/client', clientJobInvitationRoute)
+rootRouter.use('/notification', notificationRoute)
 
 export default rootRouter
