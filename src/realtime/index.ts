@@ -4,13 +4,15 @@ import { Server as SocketIOServer } from 'socket.io'
 import { corsOptions } from '~/config/cors'
 
 import { registerNotificationGateway } from './notifications/notification.gateway'
+import { registerChatGateway } from './chat'
 
 export const registerRealtime = (httpServer: HttpServer) => {
-	const io = new SocketIOServer(httpServer, {
-		cors: corsOptions
-	})
+        const io = new SocketIOServer(httpServer, {
+                cors: corsOptions
+        })
 
-	registerNotificationGateway(io)
+        registerNotificationGateway(io)
+        registerChatGateway(io)
 
-	return io
+        return io
 }

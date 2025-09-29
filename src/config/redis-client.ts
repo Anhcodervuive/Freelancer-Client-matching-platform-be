@@ -1,7 +1,16 @@
-import Redis from 'ioredis'
+import Redis, { type RedisOptions } from 'ioredis'
 
-export const redisClient = new Redis({
-	host: 'localhost', // đổi thành host production nếu dùng cloud
-	port: 6379 // port mặc định
-	// password: 'nếu có password'
+import { REDIS_CONFIG } from './environment'
+
+const buildRedisOptions = (): RedisOptions => ({
+        host: REDIS_CONFIG.HOST,
+        port: REDIS_CONFIG.PORT,
+        password: REDIS_CONFIG.PASSWORD || undefined,
+        lazyConnect: false,
+        enableReadyCheck: true,
+        maxRetriesPerRequest: 3
 })
+
+export const createRedisClient = () => new Redis(buildRedisOptions())
+
+export const redisClient = createRedisClient()
