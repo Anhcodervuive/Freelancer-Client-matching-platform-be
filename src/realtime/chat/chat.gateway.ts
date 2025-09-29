@@ -1,9 +1,15 @@
 import type { ChatMessage, ChatMessageType, Role } from '~/generated/prisma'
-import type { Server, Socket } from 'socket.io'
+import type { RemoteSocket, Server, Socket } from 'socket.io'
 
 import { prismaClient } from '~/config/prisma-client'
 import { redisClient } from '~/config/redis-client'
 
+import {
+        ChatRealtimeEvent,
+        chatEventEmitter,
+        type ChatRealtimeEventPayloads,
+        type ChatThreadSummary
+} from './chat.events'
 import { authenticateSocket } from '../common/auth.middleware'
 
 type Acknowledgement = (response: { success: boolean; message?: string; data?: unknown }) => void
@@ -28,23 +34,6 @@ interface TypingPayload {
 interface ReadReceiptPayload {
 	threadId: string
 	messageId: string
-}
-
-interface CachedThreadMeta {
-	id: string
-	type: string
-	subject: string | null
-	jobPostId: string | null
-	contractId: string | null
-	participants: Array<{
-		id: string
-		userId: string
-		role: Role
-		profile: {
-			firstName: string | null
-			lastName: string | null
-		}
-	}>
 }
 
 const THREAD_ROOM = (threadId: string) => `chat:thread:${threadId}`
@@ -107,14 +96,14 @@ const isUserOnline = async (userId: string) => {
 	return result === 1
 }
 
-const cacheThreadMeta = async (threadId: string): Promise<CachedThreadMeta | null> => {
-	const cached = await redisClient.get(THREAD_META_CACHE_KEY(threadId))
-	if (cached) {
-		try {
-			return JSON.parse(cached) as CachedThreadMeta
-		} catch {
-			await redisClient.del(THREAD_META_CACHE_KEY(threadId))
-		}
+const cacheThreadMeta = async (threadId: string): Promise<ChatThreadSummary | null> => {
+        const cached = await redisClient.get(THREAD_META_CACHE_KEY(threadId))
+        if (cached) {
+                try {
+                        return JSON.parse(cached) as ChatThreadSummary
+                } catch {
+                        await redisClient.del(THREAD_META_CACHE_KEY(threadId))
+                }
 	}
 
 	const thread = await prismaClient.chatThread.findUnique({
@@ -149,12 +138,12 @@ const cacheThreadMeta = async (threadId: string): Promise<CachedThreadMeta | nul
 		return null
 	}
 
-	const payload: CachedThreadMeta = {
-		id: thread.id,
-		type: thread.type,
-		subject: thread.subject,
-		jobPostId: thread.jobPostId ?? null,
-		contractId: thread.contractId ?? null,
+        const payload: ChatThreadSummary = {
+                id: thread.id,
+                type: thread.type,
+                subject: thread.subject,
+                jobPostId: thread.jobPostId ?? null,
+                contractId: thread.contractId ?? null,
 		participants: thread.participants.map(participant => ({
 			id: participant.id,
 			userId: participant.userId,
@@ -236,11 +225,11 @@ export const registerChatGateway = (io: Server) => {
 
 	namespace.use(authenticateSocket)
 
-	namespace.on('connection', async socket => {
-		const user = socket.data.user
-		const joinedThreads = new Set<string>()
+        namespace.on('connection', async socket => {
+                const user = socket.data.user
+                const joinedThreads = new Set<string>()
 
-		await markUserOnline(user.id)
+                await markUserOnline(user.id)
 		const heartbeatInterval = Math.max(1000, Math.floor((PRESENCE_TTL_SECONDS / 2) * 1000))
 		const presenceHeartbeat = setInterval(() => {
 			void redisClient.expire(PRESENCE_KEY(user.id), PRESENCE_TTL_SECONDS).catch(error => {
@@ -560,6 +549,69 @@ export const registerChatGateway = (io: Server) => {
 					})
 				}
 			}
-		})
-	})
+                })
+        })
+
+        const handleThreadCreated = async (
+                payload: ChatRealtimeEventPayloads[(typeof ChatRealtimeEvent)['THREAD_CREATED']]
+        ) => {
+                const { thread } = payload
+
+                try {
+                        await redisClient.set(
+                                THREAD_META_CACHE_KEY(thread.id),
+                                JSON.stringify(thread),
+                                'EX',
+                                THREAD_META_TTL_SECONDS
+                        )
+                } catch (error) {
+                        // eslint-disable-next-line no-console
+                        console.error('Failed to cache thread metadata', error)
+                }
+
+                const sockets = await namespace.fetchSockets()
+                const socketsByUser = new Map<string, RemoteSocket<any, any>[]>()
+
+                for (const socket of sockets) {
+                        const socketUserId = socket.data?.user?.id
+                        if (!socketUserId) {
+                                continue
+                        }
+
+                        const bucket = socketsByUser.get(socketUserId)
+                        if (bucket) {
+                                bucket.push(socket)
+                        } else {
+                                socketsByUser.set(socketUserId, [socket])
+                        }
+                }
+
+                for (const participant of thread.participants) {
+                        const roomPayload = { thread }
+                        const userSockets = socketsByUser.get(participant.userId)
+
+                        if (userSockets && userSockets.length > 0) {
+                                userSockets.forEach(socket => {
+                                        socket.emit('chat:thread-created', roomPayload)
+                                })
+                                continue
+                        }
+
+                        try {
+                                await queueOfflineMessage(participant.id, participant.userId, {
+                                        event: 'chat:thread-created',
+                                        data: roomPayload
+                                })
+                        } catch (error) {
+                                // eslint-disable-next-line no-console
+                                console.error('Failed to queue offline thread notification', error)
+                        }
+                }
+        }
+
+        chatEventEmitter.on(ChatRealtimeEvent.THREAD_CREATED, handleThreadCreated)
+
+        io.of('/chat').server.on('close', () => {
+                chatEventEmitter.off(ChatRealtimeEvent.THREAD_CREATED, handleThreadCreated)
+        })
 }
