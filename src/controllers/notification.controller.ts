@@ -11,7 +11,7 @@ export const deleteNotification = async (req: Request, res: Response) => {
 	if (!notificationId) {
 		throw new BadRequestException('Missing notificaition id', ErrorCode.PARAM_QUERY_ERROR)
 	}
-	const result = await notificationService.deleteById(userId!, notificationId)
+	const result = await notificationService.deleteNotification(userId!, notificationId)
 
 	return res.json({ message: 'Notification deleted' })
 }

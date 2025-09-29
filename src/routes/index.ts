@@ -17,12 +17,8 @@ import clientFreelancerRoute from './client-freelancer.route'
 import clientJobInvitationRoute from './client-job-invitation.route'
 import clientJobProposalRoute from './client-job-proposal.route'
 import freelancerJobInvitationRoute from './freelancer-job-invitation.route'
-<<<<<<< HEAD
-import notificationRoute from './notifcation.route'
-=======
 import freelancerJobProposalRoute from './freelancer-job-proposal.route'
 import notificationRoute from './notification.route'
->>>>>>> codex/create-crud-api-for-freelancer-proposals
 
 const rootRouter: Router = Router()
 
