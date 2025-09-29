@@ -57,5 +57,11 @@ export const R2_CONFIG = {
 }
 
 export const STRIPE_CONFIG_INFO = {
-	API_KEY: process.env.STRIPE_API_KEY
+        API_KEY: process.env.STRIPE_API_KEY
+}
+
+export const REDIS_CONFIG = {
+        HOST: process.env.REDIS_HOST ?? 'localhost',
+        PORT: Number(process.env.REDIS_PORT ?? '6379'),
+        PASSWORD: process.env.REDIS_PASSWORD
 }

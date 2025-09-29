@@ -39,10 +39,13 @@ model User {
   // 1-1
   profile Profile?
 
-  emailVerifyTokens EmailVerifyToken[]
-  jobActivityLogs   JobActivityLog[]
-  notificationsReceived Notification[] @relation("NotificationRecipient")
-  notificationsAuthored Notification[] @relation("NotificationActor")
+  emailVerifyTokens     EmailVerifyToken[]
+  jobActivityLogs       JobActivityLog[]
+  notificationsReceived Notification[]       @relation("NotificationRecipient")
+  notificationsAuthored Notification[]       @relation("NotificationActor")
+  chatParticipants      ChatParticipant[]
+  chatMessagesSent      ChatMessage[]        @relation("ChatMessageSender")
+  chatAdminAccessLogs   ChatAdminAccessLog[] @relation("ChatAdminAccessLogAdmin")
 
   @@index([email])
   @@map("user")
@@ -321,7 +324,8 @@ model Asset {
   variants   Asset[]         @relation("AssetVariants")
   createdAt  DateTime        @default(now())
 
-  links AssetLink[]
+  links                  AssetLink[]
+  chatMessageAttachments ChatMessageAttachment[]
 
   @@index([provider, bucket, storageKey])
   @@index([status])
@@ -478,6 +482,7 @@ model JobPost {
   activityLogs       JobActivityLog[]
   matchInteractions  MatchInteraction[]
   contracts          Contract[]
+  chatThreads        ChatThread[]
   attachments        JobPostAttachment[]
   savedByFreelancers FreelancerSavedJob[]
 
@@ -672,25 +677,25 @@ model MatchInteraction {
 }
 
 model Notification {
-  id           String              @id @default(cuid())
-  recipientId  String              @map("recipient_id")
-  actorId      String?             @map("actor_id")
+  id           String                @id @default(cuid())
+  recipientId  String                @map("recipient_id")
+  actorId      String?               @map("actor_id")
   category     NotificationCategory
   event        NotificationEvent
   resourceType NotificationResource? @map("resource_type")
-  resourceId   String?             @map("resource_id")
+  resourceId   String?               @map("resource_id")
   payload      Json?
-  status       NotificationStatus  @default(PENDING)
-  readAt       DateTime?           @map("read_at")
-  deliveredAt  DateTime?           @map("delivered_at")
-  createdAt    DateTime            @default(now()) @map("created_at")
-  updatedAt    DateTime            @updatedAt @map("updated_at")
+  status       NotificationStatus    @default(PENDING)
+  readAt       DateTime?             @map("read_at")
+  deliveredAt  DateTime?             @map("delivered_at")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
 
   isDeleted Boolean   @default(false) @map("is_deleted")
   deletedAt DateTime? @map("deleted_at")
   deletedBy String?   @map("deleted_by")
 
-  recipient User @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  recipient User  @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
   actor     User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([recipientId, status, createdAt], name: "idx_notification_recipient_status")
@@ -785,11 +790,12 @@ model Contract {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  client     Client       @relation(fields: [clientId], references: [userId])
-  freelancer Freelancer   @relation(fields: [freelancerId], references: [userId])
-  jobPost    JobPost?     @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
-  proposal   JobProposal? @relation("ContractProposal", fields: [proposalId], references: [id], onDelete: SetNull)
-  milestones Milestone[]
+  client      Client       @relation(fields: [clientId], references: [userId])
+  freelancer  Freelancer   @relation(fields: [freelancerId], references: [userId])
+  jobPost     JobPost?     @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
+  proposal    JobProposal? @relation("ContractProposal", fields: [proposalId], references: [id], onDelete: SetNull)
+  milestones  Milestone[]
+  chatThreads ChatThread[]
 
   @@index([jobPostId])
 }
@@ -947,7 +953,150 @@ model Dispute {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  escrow Escrow @relation(fields: [escrowId], references: [id])
+  escrow         Escrow               @relation(fields: [escrowId], references: [id])
+  chatAccessLogs ChatAdminAccessLog[]
+}
+
+// ---------- Chat ----------
+enum ChatThreadType {
+  PROJECT
+  ADMIN_CLIENT
+  ADMIN_FREELANCER
+}
+
+enum ChatMessageType {
+  USER
+  SYSTEM
+}
+
+enum ChatAdminAction {
+  VIEW_THREAD
+  EXPORT_TRANSCRIPT
+  DOWNLOAD_ATTACHMENT
+}
+
+model ChatThread {
+  id         String         @id @default(cuid())
+  type       ChatThreadType
+  jobPostId  String?        @map("job_post_id")
+  contractId String?        @map("contract_id")
+  subject    String?        @db.VarChar(255)
+  metadata   Json?
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  jobPost  JobPost?  @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
+  contract Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+
+  participants    ChatParticipant[]
+  messages        ChatMessage[]
+  adminAccessLogs ChatAdminAccessLog[]
+
+  @@index([type, jobPostId])
+  @@index([type, contractId])
+  @@map("chat_thread")
+}
+
+model ChatParticipant {
+  id                String    @id @default(cuid())
+  threadId          String    @map("thread_id")
+  userId            String    @map("user_id")
+  role              Role      @map("role")
+  joinedAt          DateTime  @default(now()) @map("joined_at")
+  leftAt            DateTime? @map("left_at")
+  lastReadMessageId String?   @map("last_read_message_id")
+  lastReadAt        DateTime? @map("last_read_at")
+  isMuted           Boolean   @default(false) @map("is_muted")
+  metadata          Json?
+
+  thread          ChatThread           @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadMessage ChatMessage?         @relation("ParticipantLastReadMessage", fields: [lastReadMessageId], references: [id], onDelete: SetNull)
+  receipts        ChatMessageReceipt[]
+
+  @@unique([threadId, userId])
+  @@index([userId])
+  @@map("chat_participant")
+}
+
+model ChatMessage {
+  id          String          @id @default(cuid())
+  threadId    String          @map("thread_id")
+  senderId    String?         @map("sender_id")
+  senderRole  Role?           @map("sender_role")
+  type        ChatMessageType @default(USER)
+  body        String?         @db.Text
+  richPayload Json?           @map("rich_payload")
+  sentAt      DateTime        @default(now()) @map("sent_at")
+  editedAt    DateTime?       @map("edited_at")
+  deletedAt   DateTime?       @map("deleted_at")
+  metadata    Json?
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  thread      ChatThread              @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender      User?                   @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+  attachments ChatMessageAttachment[]
+  receipts    ChatMessageReceipt[]
+  lastReadBy  ChatParticipant[]       @relation("ParticipantLastReadMessage")
+
+  @@index([threadId, sentAt])
+  @@index([senderId])
+  @@map("chat_message")
+}
+
+model ChatMessageAttachment {
+  id        String   @id @default(cuid())
+  messageId String   @map("message_id")
+  assetId   String?  @map("asset_id")
+  url       String?  @db.VarChar(2048)
+  name      String?  @db.VarChar(255)
+  mimeType  String?  @map("mime_type") @db.VarChar(255)
+  size      Int?     @map("size_bytes")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  asset   Asset?      @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([messageId])
+  @@index([assetId])
+  @@map("chat_message_attachment")
+}
+
+model ChatMessageReceipt {
+  id            String    @id @default(cuid())
+  messageId     String    @map("message_id")
+  participantId String    @map("participant_id")
+  deliveredAt   DateTime? @map("delivered_at")
+  readAt        DateTime? @map("read_at")
+  metadata      Json?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  message     ChatMessage     @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  participant ChatParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, participantId])
+  @@index([participantId, readAt])
+  @@map("chat_message_receipt")
+}
+
+model ChatAdminAccessLog {
+  id        String          @id @default(cuid())
+  threadId  String          @map("thread_id")
+  adminId   String          @map("admin_id")
+  disputeId String?         @map("dispute_id")
+  action    ChatAdminAction @default(VIEW_THREAD)
+  reason    String?         @db.VarChar(255)
+  metadata  Json?
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  thread  ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  admin   User       @relation("ChatAdminAccessLogAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  dispute Dispute?   @relation(fields: [disputeId], references: [id], onDelete: SetNull)
+
+  @@index([adminId, createdAt])
+  @@index([disputeId])
+  @@map("chat_admin_access_log")
 }
 
 // ---------- Cards / Methods (cache nhẹ cho UI) ----------
