@@ -78,7 +78,7 @@ const chatService = {
                 const resolvedIncludeParticipants = includeParticipants ?? true
                 const resolvedIncludeLastMessage = includeLastMessage ?? true
 
-                const threadInclude: Prisma.ChatThreadInclude = {
+                const threadInclude = {
                         jobPost: {
                                 select: {
                                         id: true,
@@ -117,7 +117,7 @@ const chatService = {
                                                           }
                                                   },
                                                   orderBy: {
-                                                          joinedAt: 'asc'
+                                                          joinedAt: Prisma.SortOrder.asc
                                                   }
                                           }
                                   }
@@ -126,7 +126,7 @@ const chatService = {
                                 ? {
                                           messages: {
                                                   orderBy: {
-                                                          sentAt: 'desc'
+                                                          sentAt: Prisma.SortOrder.desc
                                                   },
                                                   take: 1,
                                                   include: {
@@ -148,7 +148,7 @@ const chatService = {
                         prismaClient.chatThread.findMany({
                                 where,
                                 orderBy: {
-                                        updatedAt: 'desc'
+                                        updatedAt: Prisma.SortOrder.desc
                                 },
                                 skip,
                                 take: limit,
@@ -206,12 +206,12 @@ const chatService = {
                                                 }
                                         },
                                         orderBy: {
-                                                joinedAt: 'asc'
+                                                joinedAt: Prisma.SortOrder.asc
                                         }
                                 },
                                 messages: {
                                         orderBy: {
-                                                sentAt: 'desc'
+                                                sentAt: Prisma.SortOrder.desc
                                         },
                                         take: 1,
                                         include: {
@@ -266,10 +266,11 @@ const chatService = {
 
                 const { limit, cursor, direction, includeReceipts, includeAttachments } = parsed
 
-                const orderDirection = direction === 'after' ? 'asc' : 'desc'
+                const orderDirection: Prisma.SortOrder =
+                        direction === 'after' ? Prisma.SortOrder.asc : Prisma.SortOrder.desc
                 const take = limit + 1
 
-                const messageInclude: Prisma.ChatMessageInclude = {
+                const messageInclude = {
                         sender: {
                                 select: {
                                         id: true,
@@ -392,7 +393,7 @@ const chatService = {
                                 const latestMessage = await tx.chatMessage.findFirst({
                                         where: { threadId },
                                         orderBy: {
-                                                sentAt: 'desc'
+                                                sentAt: Prisma.SortOrder.desc
                                         },
                                         select: {
                                                 id: true,
