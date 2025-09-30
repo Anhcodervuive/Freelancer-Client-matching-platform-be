@@ -259,7 +259,25 @@ const chatService = {
 			messageQuery.skip = 1
 		}
 
-		const messages = await prismaClient.chatMessage.findMany(messageQuery)
+		const messages = await prismaClient.chatMessage.findMany({
+			where: {
+				threadId,
+				deletedAt: null
+			},
+			orderBy: [
+				{
+					sentAt: orderDirection
+				},
+				{
+					id: orderDirection
+				}
+			],
+			take,
+			include: buildMessageInclude({
+				includeAttachments,
+				includeReceipts
+			})
+		})
 
 		const hasMore = messages.length > limit
 		const sliced = hasMore ? messages.slice(0, limit) : messages
