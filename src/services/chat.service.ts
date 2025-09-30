@@ -7,80 +7,6 @@ import { NotFoundException } from '~/exceptions/not-found'
 import { ForbiddenException } from '~/exceptions/Forbidden'
 import { BadRequestException } from '~/exceptions/bad-request'
 
-// ❌ đừng: const include: Prisma.ChatThreadInclude = { ... }
-
-const buildThreadInclude = (options?: { includeParticipants?: boolean; includeLastMessage?: boolean }) => {
-	let include: Record<string, any> = {
-		jobPost: {
-			select: {
-				/* ... */
-			}
-		},
-		contract: {
-			select: {
-				/* ... */
-			}
-		},
-		_count: { select: { messages: true } }
-	}
-
-	if (options?.includeParticipants) {
-		include.participants = {
-			include: { user: { select: { id: true, email: true, profile: true } } },
-			orderBy: { joinedAt: 'asc' }
-		}
-	}
-
-	if (options?.includeLastMessage) {
-		include.messages = {
-			orderBy: { sentAt: 'desc' },
-			take: 1,
-			include: {
-				sender: { select: { id: true, email: true, profile: true } },
-				attachments: true
-			}
-		}
-	}
-
-	return include // để Prisma suy luận ở chỗ gọi
-}
-
-const buildMessageInclude = (options: { includeAttachments: boolean; includeReceipts: boolean }) => {
-	const include: Prisma.ChatMessageInclude = {
-		sender: {
-			select: {
-				id: true,
-				email: true,
-				profile: true
-			}
-		}
-	}
-
-	if (options.includeAttachments) {
-		include.attachments = true
-	}
-
-	if (options.includeReceipts) {
-		include.receipts = {
-			include: {
-				participant: {
-					include: {
-						user: {
-							select: {
-								id: true,
-								email: true,
-								profile: true
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return include
-}
-
 const chatService = {
 	async listThreads(userId: string, rawQuery: unknown) {
 		const parsed = ChatThreadListQuerySchema.parse(rawQuery)
@@ -149,6 +75,75 @@ const chatService = {
 			]
 		}
 
+		const resolvedIncludeParticipants = includeParticipants ?? true
+		const resolvedIncludeLastMessage = includeLastMessage ?? true
+
+		const threadInclude: Prisma.ChatThreadInclude = {
+			jobPost: {
+				select: {
+					id: true,
+					title: true,
+					status: true,
+					clientId: true,
+					specialtyId: true,
+					createdAt: true
+				}
+			},
+			contract: {
+				select: {
+					id: true,
+					title: true,
+					clientId: true,
+					freelancerId: true,
+					jobPostId: true,
+					createdAt: true
+				}
+			},
+			_count: {
+				select: {
+					messages: true
+				}
+			},
+			...(resolvedIncludeParticipants
+				? {
+						participants: {
+							include: {
+								user: {
+									select: {
+										id: true,
+										email: true,
+										profile: true
+									}
+								}
+							},
+							orderBy: {
+								joinedAt: 'asc'
+							}
+						}
+				  }
+				: {}),
+			...(resolvedIncludeLastMessage
+				? {
+						messages: {
+							orderBy: {
+								sentAt: 'desc'
+							},
+							take: 1,
+							include: {
+								sender: {
+									select: {
+										id: true,
+										email: true,
+										profile: true
+									}
+								},
+								attachments: true
+							}
+						}
+				  }
+				: {})
+		}
+
 		const [threads, total] = await Promise.all([
 			prismaClient.chatThread.findMany({
 				where,
@@ -157,10 +152,7 @@ const chatService = {
 				},
 				skip,
 				take: limit,
-				include: buildThreadInclude({
-					includeParticipants: includeParticipants ?? true,
-					includeLastMessage: includeLastMessage ?? true
-				})
+				include: threadInclude
 			}),
 			prismaClient.chatThread.count({ where })
 		])
@@ -178,15 +170,58 @@ const chatService = {
 		const thread = await prismaClient.chatThread.findUnique({
 			where: { id: threadId },
 			include: {
+				jobPost: {
+					select: {
+						id: true,
+						title: true,
+						status: true,
+						clientId: true,
+						specialtyId: true,
+						createdAt: true
+					}
+				},
+				contract: {
+					select: {
+						id: true,
+						title: true,
+						clientId: true,
+						freelancerId: true,
+						jobPostId: true,
+						createdAt: true
+					}
+				},
+				_count: {
+					select: {
+						messages: true
+					}
+				},
 				participants: {
-					include: { user: { select: { id: true, email: true, profile: true } } },
-					orderBy: { joinedAt: 'asc' }
+					include: {
+						user: {
+							select: {
+								id: true,
+								email: true,
+								profile: true
+							}
+						}
+					},
+					orderBy: {
+						joinedAt: 'asc'
+					}
 				},
 				messages: {
-					orderBy: { sentAt: 'desc' },
+					orderBy: {
+						sentAt: 'desc'
+					},
 					take: 1,
 					include: {
-						sender: { select: { id: true, email: true, profile: true } },
+						sender: {
+							select: {
+								id: true,
+								email: true,
+								profile: true
+							}
+						},
 						attachments: true
 					}
 				}
@@ -234,29 +269,34 @@ const chatService = {
 		const orderDirection = direction === 'after' ? 'asc' : 'desc'
 		const take = limit + 1
 
-		const messageQuery: Prisma.ChatMessageFindManyArgs = {
-			where: {
-				threadId,
-				deletedAt: null
-			},
-			orderBy: [
-				{
-					sentAt: orderDirection
-				},
-				{
-					id: orderDirection
+		const messageInclude: Prisma.ChatMessageInclude = {
+			sender: {
+				select: {
+					id: true,
+					email: true,
+					profile: true
 				}
-			],
-			take,
-			include: buildMessageInclude({
-				includeAttachments,
-				includeReceipts
-			})
-		}
-
-		if (cursor) {
-			messageQuery.cursor = { id: cursor }
-			messageQuery.skip = 1
+			},
+			...(includeAttachments ? { attachments: true } : {}),
+			...(includeReceipts
+				? {
+						receipts: {
+							include: {
+								participant: {
+									include: {
+										user: {
+											select: {
+												id: true,
+												email: true,
+												profile: true
+											}
+										}
+									}
+								}
+							}
+						}
+				  }
+				: {})
 		}
 
 		const messages = await prismaClient.chatMessage.findMany({
@@ -273,10 +313,13 @@ const chatService = {
 				}
 			],
 			take,
-			include: buildMessageInclude({
-				includeAttachments,
-				includeReceipts
-			})
+			...(cursor
+				? {
+						cursor: { id: cursor },
+						skip: 1
+				  }
+				: {}),
+			include: messageInclude
 		})
 
 		const hasMore = messages.length > limit
