@@ -16,6 +16,7 @@ import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { JobProposalFilterInput } from '~/schema/job-proposal.schema'
 import { jobProposalInclude, serializeJobProposal } from '~/services/job-proposal/shared'
+import chatThreadService from '~/services/chat/chat-thread.service'
 import matchInteractionService from '~/services/match-interaction.service'
 import notificationService from '~/services/notification.service'
 
@@ -264,6 +265,14 @@ const acceptJobProposalInterview = async (clientUserId: string, jobId: string, p
                 console.error('Không thể tạo thông báo khi client chấp nhận phỏng vấn', notificationError)
         }
 
+        await chatThreadService.ensureProjectThreadForProposal({
+                jobPostId: updated.jobId,
+                proposalId: updated.id,
+                clientId: updated.job.clientId,
+                freelancerId: updated.freelancer.userId,
+                jobTitle: updated.job.title
+        })
+
         return serializeJobProposal(updated)
 }
 
@@ -371,6 +380,14 @@ const hireFreelancerFromProposal = async (clientUserId: string, jobId: string, p
                 // eslint-disable-next-line no-console
                 console.error('Không thể tạo thông báo khi client thuê freelancer', notificationError)
         }
+
+        await chatThreadService.ensureProjectThreadForProposal({
+                jobPostId: updated.jobId,
+                proposalId: updated.id,
+                clientId: updated.job.clientId,
+                freelancerId: updated.freelancer.userId,
+                jobTitle: updated.job.title
+        })
 
         return serializeJobProposal(updated)
 }
