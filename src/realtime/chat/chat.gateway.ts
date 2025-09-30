@@ -439,7 +439,9 @@ export const registerChatGateway = (io: Server) => {
 					}
 				}
 
-				namespace.to(THREAD_ROOM(payload.threadId)).emit('chat:message', responsePayload)
+				const threadRoom = THREAD_ROOM(payload.threadId)
+
+				namespace.to(threadRoom).emit('chat:message', responsePayload)
 
 				await appendAnalyticsLog({
 					event: 'message_sent',
@@ -448,12 +450,34 @@ export const registerChatGateway = (io: Server) => {
 					messageId: message.id
 				})
 
+				const namespaceSockets = await namespace.fetchSockets()
+				const socketsByUser = new Map<string, RemoteSocket<any, any>[]>()
+
+				for (const namespaceSocket of namespaceSockets) {
+					const socketUserId = namespaceSocket.data?.user?.id
+					if (!socketUserId) {
+						continue
+					}
+
+					const bucket = socketsByUser.get(socketUserId)
+					if (bucket) {
+						bucket.push(namespaceSocket)
+					} else {
+						socketsByUser.set(socketUserId, [namespaceSocket])
+					}
+				}
+
 				for (const item of participants) {
 					if (item.userId === user.id) {
 						continue
 					}
 
 					const online = await isUserOnline(item.userId)
+					const participantSockets = socketsByUser.get(item.userId) ?? []
+					const isInThread = participantSockets.some(namespaceSocket =>
+						namespaceSocket.rooms.has(threadRoom)
+					)
+
 					if (!online) {
 						await queueOfflineMessage(item.id, item.userId, {
 							event: 'chat:message',
@@ -472,6 +496,15 @@ export const registerChatGateway = (io: Server) => {
 								deliveredAt: new Date()
 							}
 						})
+
+						if (!isInThread && participantSockets.length > 0) {
+							for (const namespaceSocket of participantSockets) {
+								namespaceSocket.emit('chat:thread-unread', {
+									threadId: payload.threadId,
+									message: responsePayload.message
+								})
+							}
+						}
 					}
 				}
 
