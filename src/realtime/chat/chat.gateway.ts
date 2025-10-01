@@ -291,6 +291,7 @@ export const registerChatGateway = (io: Server) => {
                         }
                 }
 
+
                 for (const threadId of uniqueThreadIds) {
                         const threadMeta = await cacheThreadMeta(threadId)
                         if (!threadMeta) {
@@ -306,6 +307,7 @@ export const registerChatGateway = (io: Server) => {
                                 presence,
                                 participants: threadMeta.participants
                         })
+
 
                         const presencePayload = {
                                 threadId,
@@ -339,6 +341,7 @@ export const registerChatGateway = (io: Server) => {
                                         namespaceSocket.emit('chat:presence', presencePayload)
                                 })
                         }
+
                 }
 
                 if (presenceSnapshots.length > 0) {
