@@ -272,6 +272,26 @@ export const registerChatGateway = (io: Server) => {
                         participants: ChatThreadSummary['participants']
                 }[] = []
 
+                const namespaceSockets = await namespace.fetchSockets()
+                const socketsByUser = new Map<string, RemoteSocket<any, any>[]>()
+
+                for (const namespaceSocket of namespaceSockets) {
+                        const socketUserId = namespaceSocket.data?.user?.id
+
+                        if (!socketUserId || socketUserId === user.id) {
+                                continue
+                        }
+
+                        const existing = socketsByUser.get(socketUserId)
+
+                        if (existing) {
+                                existing.push(namespaceSocket)
+                        } else {
+                                socketsByUser.set(socketUserId, [namespaceSocket])
+                        }
+                }
+
+
                 for (const threadId of uniqueThreadIds) {
                         const threadMeta = await cacheThreadMeta(threadId)
                         if (!threadMeta) {
@@ -287,6 +307,41 @@ export const registerChatGateway = (io: Server) => {
                                 presence,
                                 participants: threadMeta.participants
                         })
+
+
+                        const presencePayload = {
+                                threadId,
+                                userId: user.id,
+                                status: 'online' as const
+                        }
+
+                        namespace.to(THREAD_ROOM(threadId)).emit('chat:presence', presencePayload)
+
+                        for (const participant of threadMeta.participants) {
+                                if (participant.userId === user.id) {
+                                        continue
+                                }
+
+                                const participantSockets = socketsByUser.get(participant.userId)
+
+                                if (!participantSockets || participantSockets.length === 0) {
+                                        continue
+                                }
+
+                                const threadRoom = THREAD_ROOM(threadId)
+                                const socketsInThread = participantSockets.filter(namespaceSocket =>
+                                        namespaceSocket.rooms.has(threadRoom)
+                                )
+
+                                if (socketsInThread.length > 0) {
+                                        continue
+                                }
+
+                                participantSockets.forEach(namespaceSocket => {
+                                        namespaceSocket.emit('chat:presence', presencePayload)
+                                })
+                        }
+
                 }
 
                 if (presenceSnapshots.length > 0) {
