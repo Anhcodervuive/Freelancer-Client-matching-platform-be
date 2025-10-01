@@ -670,19 +670,86 @@ export const registerChatGateway = (io: Server) => {
 			}
 		})
 
-		socket.on('disconnect', async () => {
-			clearInterval(presenceHeartbeat)
-			const stillOnline = await markUserOffline(user.id)
-			if (!stillOnline) {
-				for (const threadId of joinedThreads) {
-					namespace.to(THREAD_ROOM(threadId)).emit('chat:presence', {
-						threadId,
-						userId: user.id,
-						status: 'offline'
-					})
-				}
-			}
-		})
+                socket.on('disconnect', async () => {
+                        clearInterval(presenceHeartbeat)
+                        const stillOnline = await markUserOffline(user.id)
+
+                        if (stillOnline) {
+                                return
+                        }
+
+                        const [namespaceSockets, memberships] = await Promise.all([
+                                namespace.fetchSockets(),
+                                prismaClient.chatParticipant.findMany({
+                                        where: { userId: user.id },
+                                        select: { threadId: true }
+                                })
+                        ])
+
+                        const socketsByUser = new Map<string, RemoteSocket<any, any>[]>()
+
+                        for (const namespaceSocket of namespaceSockets) {
+                                const socketUserId = namespaceSocket.data?.user?.id
+
+                                if (!socketUserId || socketUserId === user.id) {
+                                        continue
+                                }
+
+                                const existing = socketsByUser.get(socketUserId)
+
+                                if (existing) {
+                                        existing.push(namespaceSocket)
+                                } else {
+                                        socketsByUser.set(socketUserId, [namespaceSocket])
+                                }
+                        }
+
+                        const allThreadIds = new Set<string>([
+                                ...joinedThreads,
+                                ...memberships.map(item => item.threadId)
+                        ])
+
+                        for (const threadId of allThreadIds) {
+                                const presencePayload = {
+                                        threadId,
+                                        userId: user.id,
+                                        status: 'offline' as const
+                                }
+
+                                namespace.to(THREAD_ROOM(threadId)).emit('chat:presence', presencePayload)
+
+                                const threadMeta = await cacheThreadMeta(threadId)
+
+                                if (!threadMeta) {
+                                        continue
+                                }
+
+                                for (const participant of threadMeta.participants) {
+                                        if (participant.userId === user.id) {
+                                                continue
+                                        }
+
+                                        const participantSockets = socketsByUser.get(participant.userId)
+
+                                        if (!participantSockets || participantSockets.length === 0) {
+                                                continue
+                                        }
+
+                                        const threadRoom = THREAD_ROOM(threadId)
+                                        const socketsInThread = participantSockets.filter(namespaceSocket =>
+                                                namespaceSocket.rooms.has(threadRoom)
+                                        )
+
+                                        if (socketsInThread.length > 0) {
+                                                continue
+                                        }
+
+                                        participantSockets.forEach(namespaceSocket => {
+                                                namespaceSocket.emit('chat:presence', presencePayload)
+                                        })
+                                }
+                        }
+                })
 	})
 
 	const handleThreadCreated = async (
