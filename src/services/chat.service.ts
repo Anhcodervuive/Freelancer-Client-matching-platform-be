@@ -19,7 +19,9 @@ type ParticipantWithUser = {
         [key: string]: any
 }
 
-const attachAvatarToParticipants = async <T extends ParticipantWithUser>(data: T | T[]) => {
+async function attachAvatarToParticipants<T extends ParticipantWithUser>(data: T[]): Promise<T[]>
+async function attachAvatarToParticipants<T extends ParticipantWithUser>(data: T): Promise<T>
+async function attachAvatarToParticipants<T extends ParticipantWithUser>(data: T | T[]) {
         const collection = Array.isArray(data) ? data : [data]
 
         const userIds = new Set<string>()
