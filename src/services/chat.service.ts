@@ -6,6 +6,60 @@ import { ErrorCode } from '~/exceptions/root'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ForbiddenException } from '~/exceptions/Forbidden'
 import { BadRequestException } from '~/exceptions/bad-request'
+import assetService from './asset.service'
+
+type ParticipantWithUser = {
+        participants?: Array<{
+                user?: {
+                        id: string
+                        [key: string]: any
+                }
+                [key: string]: any
+        }>
+        [key: string]: any
+}
+
+const attachAvatarToParticipants = async <T extends ParticipantWithUser>(data: T | T[]) => {
+        const collection = Array.isArray(data) ? data : [data]
+
+        const userIds = new Set<string>()
+
+        collection.forEach(item => {
+                item.participants?.forEach(participant => {
+                        if (participant.user?.id) {
+                                userIds.add(participant.user.id)
+                        }
+                })
+        })
+
+        if (userIds.size === 0) {
+                return data
+        }
+
+        const avatarEntries = await Promise.all(
+                Array.from(userIds).map(async userId => {
+                        const avatar = await assetService.getProfileAvatarUrl(userId)
+                        return [userId, avatar] as const
+                })
+        )
+
+        const avatarMap = new Map<string, string | null>(avatarEntries)
+
+        const result = collection.map(item => ({
+                ...item,
+                participants: item.participants?.map(participant => ({
+                        ...participant,
+                        user: participant.user
+                                ? {
+                                          ...participant.user,
+                                          avatar: avatarMap.get(participant.user.id) ?? null
+                                  }
+                                : participant.user
+                }))
+        })) as T[]
+
+        return Array.isArray(data) ? result : result[0]
+}
 
 const chatService = {
 	async listThreads(userId: string, rawQuery: unknown) {
@@ -144,12 +198,12 @@ const chatService = {
 				: {})
 		}
 
-		const [threads, total] = await Promise.all([
-			prismaClient.chatThread.findMany({
-				where,
-				orderBy: {
-					updatedAt: Prisma.SortOrder.desc
-				},
+                const [threads, total] = await Promise.all([
+                        prismaClient.chatThread.findMany({
+                                where,
+                                orderBy: {
+                                        updatedAt: Prisma.SortOrder.desc
+                                },
 				skip,
 				take: limit,
 				include: threadInclude
@@ -157,17 +211,21 @@ const chatService = {
 			prismaClient.chatThread.count({ where })
 		])
 
-		return {
-			page,
-			limit,
-			total,
-			hasMore: skip + threads.length < total,
-			data: threads
-		}
-	},
+                const threadsWithAvatar = resolvedIncludeParticipants
+                        ? await attachAvatarToParticipants(threads)
+                        : threads
 
-	async getThreadById(userId: string, threadId: string) {
-		const thread = await prismaClient.chatThread.findUnique({
+                return {
+                        page,
+                        limit,
+                        total,
+                        hasMore: skip + threadsWithAvatar.length < total,
+                        data: threadsWithAvatar
+                }
+        },
+
+        async getThreadById(userId: string, threadId: string) {
+                const thread = await prismaClient.chatThread.findUnique({
 			where: { id: threadId },
 			include: {
 				jobPost: {
@@ -238,8 +296,10 @@ const chatService = {
 			throw new ForbiddenException('You are not a participant of this chat thread', ErrorCode.FORBIDDEN)
 		}
 
-		return thread
-	},
+                const threadWithAvatar = await attachAvatarToParticipants(thread)
+
+                return threadWithAvatar
+        },
 
 	async getThreadMessages(userId: string, threadId: string, rawQuery: unknown) {
 		const parsed = ChatMessageListQuerySchema.parse(rawQuery)
