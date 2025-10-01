@@ -79,7 +79,6 @@ const markUserOnline = async (userId: string) => {
 
 const markUserOffline = async (userId: string): Promise<boolean> => {
 	const remaining = await redisClient.decr(PRESENCE_COUNT_KEY(userId))
-
 	if (remaining <= 0) {
 		const pipeline = redisClient.multi()
 		pipeline.del(PRESENCE_COUNT_KEY(userId))
@@ -670,86 +669,82 @@ export const registerChatGateway = (io: Server) => {
 			}
 		})
 
-                socket.on('disconnect', async () => {
-                        clearInterval(presenceHeartbeat)
-                        const stillOnline = await markUserOffline(user.id)
+		socket.on('disconnect', async () => {
+			clearInterval(presenceHeartbeat)
+			const stillOnline = await markUserOffline(user.id)
+			if (stillOnline) {
+				return
+			}
 
-                        if (stillOnline) {
-                                return
-                        }
+			const [namespaceSockets, memberships] = await Promise.all([
+				namespace.fetchSockets(),
+				prismaClient.chatParticipant.findMany({
+					where: { userId: user.id },
+					select: { threadId: true }
+				})
+			])
 
-                        const [namespaceSockets, memberships] = await Promise.all([
-                                namespace.fetchSockets(),
-                                prismaClient.chatParticipant.findMany({
-                                        where: { userId: user.id },
-                                        select: { threadId: true }
-                                })
-                        ])
+			const socketsByUser = new Map<string, RemoteSocket<any, any>[]>()
 
-                        const socketsByUser = new Map<string, RemoteSocket<any, any>[]>()
+			for (const namespaceSocket of namespaceSockets) {
+				const socketUserId = namespaceSocket.data?.user?.id
 
-                        for (const namespaceSocket of namespaceSockets) {
-                                const socketUserId = namespaceSocket.data?.user?.id
+				if (!socketUserId || socketUserId === user.id) {
+					continue
+				}
 
-                                if (!socketUserId || socketUserId === user.id) {
-                                        continue
-                                }
+				const existing = socketsByUser.get(socketUserId)
 
-                                const existing = socketsByUser.get(socketUserId)
+				if (existing) {
+					existing.push(namespaceSocket)
+				} else {
+					socketsByUser.set(socketUserId, [namespaceSocket])
+				}
+			}
 
-                                if (existing) {
-                                        existing.push(namespaceSocket)
-                                } else {
-                                        socketsByUser.set(socketUserId, [namespaceSocket])
-                                }
-                        }
+			const allThreadIds = new Set<string>([...joinedThreads, ...memberships.map(item => item.threadId)])
 
-                        const allThreadIds = new Set<string>([
-                                ...joinedThreads,
-                                ...memberships.map(item => item.threadId)
-                        ])
+			console.log(socketsByUser)
 
-                        for (const threadId of allThreadIds) {
-                                const presencePayload = {
-                                        threadId,
-                                        userId: user.id,
-                                        status: 'offline' as const
-                                }
+			for (const threadId of allThreadIds) {
+				const presencePayload = {
+					threadId,
+					userId: user.id,
+					status: 'offline' as const
+				}
 
-                                namespace.to(THREAD_ROOM(threadId)).emit('chat:presence', presencePayload)
+				namespace.to(THREAD_ROOM(threadId)).emit('chat:presence', presencePayload)
 
-                                const threadMeta = await cacheThreadMeta(threadId)
+				const threadMeta = await cacheThreadMeta(threadId)
 
-                                if (!threadMeta) {
-                                        continue
-                                }
+				if (!threadMeta) {
+					continue
+				}
 
-                                for (const participant of threadMeta.participants) {
-                                        if (participant.userId === user.id) {
-                                                continue
-                                        }
+				for (const participant of threadMeta.participants) {
+					if (participant.userId === user.id) {
+						continue
+					}
 
-                                        const participantSockets = socketsByUser.get(participant.userId)
+					const participantSockets = socketsByUser.get(participant.userId)
 
-                                        if (!participantSockets || participantSockets.length === 0) {
-                                                continue
-                                        }
+					if (!participantSockets || participantSockets.length === 0) {
+						continue
+					}
 
-                                        const threadRoom = THREAD_ROOM(threadId)
-                                        const socketsInThread = participantSockets.filter(namespaceSocket =>
-                                                namespaceSocket.rooms.has(threadRoom)
-                                        )
+					const threadRoom = THREAD_ROOM(threadId)
+					const socketsInThread = participantSockets.filter(namespaceSocket => namespaceSocket.rooms.has(threadRoom))
 
-                                        if (socketsInThread.length > 0) {
-                                                continue
-                                        }
+					if (socketsInThread.length > 0) {
+						continue
+					}
 
-                                        participantSockets.forEach(namespaceSocket => {
-                                                namespaceSocket.emit('chat:presence', presencePayload)
-                                        })
-                                }
-                        }
-                })
+					participantSockets.forEach(namespaceSocket => {
+						namespaceSocket.emit('chat:presence', presencePayload)
+					})
+				}
+			}
+		})
 	})
 
 	const handleThreadCreated = async (
