@@ -2,7 +2,7 @@
 import { PrismaClient } from '../generated/prisma' // chỉnh path cho đúng
 // Reuse instance ở dev hot-reload
 const g = globalThis as unknown as { __basePrisma?: PrismaClient }
-const base = g.__basePrisma ?? new PrismaClient({ log: ['warn', 'error', 'query'] })
+const base = g.__basePrisma ?? new PrismaClient({ log: ['warn', 'error'] })
 if (process.env.NODE_ENV !== 'production') g.__basePrisma = base
 
 // CHỈ các model này mới có isDeleted
