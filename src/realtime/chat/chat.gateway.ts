@@ -3,6 +3,7 @@ import type { RemoteSocket, Server, Socket } from 'socket.io'
 
 import { prismaClient } from '~/config/prisma-client'
 import { redisClient } from '~/config/redis-client'
+import assetService from '~/services/asset.service'
 
 import {
 	ChatRealtimeEvent,
@@ -118,14 +119,49 @@ const getUsersPresence = async (userIds: string[]) => {
 }
 
 const cacheThreadMeta = async (threadId: string): Promise<ChatThreadSummary | null> => {
-	const cached = await redisClient.get(THREAD_META_CACHE_KEY(threadId))
-	if (cached) {
-		try {
-			return JSON.parse(cached) as ChatThreadSummary
-		} catch {
-			await redisClient.del(THREAD_META_CACHE_KEY(threadId))
-		}
-	}
+        const cached = await redisClient.get(THREAD_META_CACHE_KEY(threadId))
+        if (cached) {
+                try {
+                        const parsed = JSON.parse(cached) as ChatThreadSummary
+                        const participantsWithOptionalAvatar = parsed.participants as (
+                                ChatThreadSummary['participants'][number] & { avatar?: string | null }
+                        )[]
+
+                        const hasMissingAvatar = participantsWithOptionalAvatar.some(
+                                participant => typeof participant.avatar === 'undefined'
+                        )
+
+                        if (!hasMissingAvatar) {
+                                return parsed
+                        }
+
+                        const enrichedParticipants = await Promise.all(
+                                participantsWithOptionalAvatar.map(async participant => ({
+                                        ...participant,
+                                        avatar:
+                                                typeof participant.avatar === 'undefined'
+                                                        ? (await assetService.getProfileAvatarUrl(participant.userId)) ?? null
+                                                        : participant.avatar
+                                }))
+                        )
+
+                        const normalized: ChatThreadSummary = {
+                                ...parsed,
+                                participants: enrichedParticipants
+                        }
+
+                        await redisClient.set(
+                                THREAD_META_CACHE_KEY(threadId),
+                                JSON.stringify(normalized),
+                                'EX',
+                                THREAD_META_TTL_SECONDS
+                        )
+
+                        return normalized
+                } catch {
+                        await redisClient.del(THREAD_META_CACHE_KEY(threadId))
+                }
+        }
 
 	const thread = await prismaClient.chatThread.findUnique({
 		where: { id: threadId },
@@ -159,22 +195,27 @@ const cacheThreadMeta = async (threadId: string): Promise<ChatThreadSummary | nu
 		return null
 	}
 
-	const payload: ChatThreadSummary = {
-		id: thread.id,
-		type: thread.type,
-		subject: thread.subject,
-		jobPostId: thread.jobPostId ?? null,
-		contractId: thread.contractId ?? null,
-		participants: thread.participants.map(participant => ({
-			id: participant.id,
-			userId: participant.userId,
-			role: participant.role,
-			profile: {
-				firstName: participant.user.profile?.firstName ?? null,
-				lastName: participant.user.profile?.lastName ?? null
-			}
-		}))
-	}
+        const participants = await Promise.all(
+                thread.participants.map(async participant => ({
+                        id: participant.id,
+                        userId: participant.userId,
+                        role: participant.role,
+                        profile: {
+                                firstName: participant.user.profile?.firstName ?? null,
+                                lastName: participant.user.profile?.lastName ?? null
+                        },
+                        avatar: (await assetService.getProfileAvatarUrl(participant.userId)) ?? null
+                }))
+        )
+
+        const payload: ChatThreadSummary = {
+                id: thread.id,
+                type: thread.type,
+                subject: thread.subject,
+                jobPostId: thread.jobPostId ?? null,
+                contractId: thread.contractId ?? null,
+                participants
+        }
 
 	await redisClient.set(THREAD_META_CACHE_KEY(threadId), JSON.stringify(payload), 'EX', THREAD_META_TTL_SECONDS)
 

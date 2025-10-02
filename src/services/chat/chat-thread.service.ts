@@ -4,6 +4,7 @@ import {
         chatEventEmitter,
         type ChatThreadSummary
 } from '~/realtime/chat/chat.events'
+import assetService from '~/services/asset.service'
 
 const chatThreadSummarySelect = {
         id: true,
@@ -30,22 +31,29 @@ const chatThreadSummarySelect = {
         }
 } as const
 
-const mapThreadToSummary = (thread: any): ChatThreadSummary => ({
-        id: thread.id,
-        type: thread.type,
-        subject: thread.subject ?? null,
-        jobPostId: thread.jobPostId ?? null,
-        contractId: thread.contractId ?? null,
-        participants: (thread.participants ?? []).map((participant: any) => ({
-                id: participant.id,
-                userId: participant.userId,
-                role: participant.role,
-                profile: {
-                        firstName: participant.user.profile?.firstName ?? null,
-                        lastName: participant.user.profile?.lastName ?? null
-                }
-        }))
-})
+const mapThreadToSummary = async (thread: any): Promise<ChatThreadSummary> => {
+        const participants = await Promise.all(
+                (thread.participants ?? []).map(async (participant: any) => ({
+                        id: participant.id,
+                        userId: participant.userId,
+                        role: participant.role,
+                        profile: {
+                                firstName: participant.user.profile?.firstName ?? null,
+                                lastName: participant.user.profile?.lastName ?? null
+                        },
+                        avatar: (await assetService.getProfileAvatarUrl(participant.userId)) ?? null
+                }))
+        )
+
+        return {
+                id: thread.id,
+                type: thread.type,
+                subject: thread.subject ?? null,
+                jobPostId: thread.jobPostId ?? null,
+                contractId: thread.contractId ?? null,
+                participants
+        }
+}
 
 interface EnsureProjectThreadParams {
         jobPostId: string
@@ -99,7 +107,7 @@ const ensureProjectThreadForProposal = async ({
         })
 
         if (existing) {
-                return mapThreadToSummary(existing)
+                return await mapThreadToSummary(existing)
         }
 
         const created = await prisma.chatThread.create({
@@ -127,7 +135,7 @@ const ensureProjectThreadForProposal = async ({
                 select: chatThreadSummarySelect
         })
 
-        const summary = mapThreadToSummary(created)
+        const summary = await mapThreadToSummary(created)
 
         chatEventEmitter.emit(ChatRealtimeEvent.THREAD_CREATED, { thread: summary })
 
