@@ -1,4 +1,12 @@
-import type { ChatMessage, ChatMessageType, Role } from '~/generated/prisma'
+import {
+	AssetKind,
+	AssetOwnerType,
+	AssetProvider,
+	AssetRole,
+	type ChatMessage,
+	type ChatMessageType,
+	type Role
+} from '~/generated/prisma'
 import type { RemoteSocket, Server, Socket } from 'socket.io'
 
 import { prismaClient } from '~/config/prisma-client'
@@ -25,6 +33,20 @@ interface SendMessagePayload {
 	tempId?: string
 	type?: ChatMessageType
 	metadata?: Record<string, unknown>
+	attachments: {
+		provider: 'cloudinary' | 'r2'
+		kind: 'image' | 'video' | 'file'
+		url: string
+		publicId?: string
+		width?: number
+		height?: number
+		duration?: any
+		mime: string
+		name: string
+		size: number
+		key: string
+		bucket?: string
+	}[]
 }
 
 interface TypingPayload {
@@ -119,49 +141,44 @@ const getUsersPresence = async (userIds: string[]) => {
 }
 
 const cacheThreadMeta = async (threadId: string): Promise<ChatThreadSummary | null> => {
-        const cached = await redisClient.get(THREAD_META_CACHE_KEY(threadId))
-        if (cached) {
-                try {
-                        const parsed = JSON.parse(cached) as ChatThreadSummary
-                        const participantsWithOptionalAvatar = parsed.participants as (
-                                ChatThreadSummary['participants'][number] & { avatar?: string | null }
-                        )[]
+	const cached = await redisClient.get(THREAD_META_CACHE_KEY(threadId))
+	if (cached) {
+		try {
+			const parsed = JSON.parse(cached) as ChatThreadSummary
+			const participantsWithOptionalAvatar = parsed.participants as (ChatThreadSummary['participants'][number] & {
+				avatar?: string | null
+			})[]
 
-                        const hasMissingAvatar = participantsWithOptionalAvatar.some(
-                                participant => typeof participant.avatar === 'undefined'
-                        )
+			const hasMissingAvatar = participantsWithOptionalAvatar.some(
+				participant => typeof participant.avatar === 'undefined'
+			)
 
-                        if (!hasMissingAvatar) {
-                                return parsed
-                        }
+			if (!hasMissingAvatar) {
+				return parsed
+			}
 
-                        const enrichedParticipants = await Promise.all(
-                                participantsWithOptionalAvatar.map(async participant => ({
-                                        ...participant,
-                                        avatar:
-                                                typeof participant.avatar === 'undefined'
-                                                        ? (await assetService.getProfileAvatarUrl(participant.userId)) ?? null
-                                                        : participant.avatar
-                                }))
-                        )
+			const enrichedParticipants = await Promise.all(
+				participantsWithOptionalAvatar.map(async participant => ({
+					...participant,
+					avatar:
+						typeof participant.avatar === 'undefined'
+							? (await assetService.getProfileAvatarUrl(participant.userId)) ?? null
+							: participant.avatar
+				}))
+			)
 
-                        const normalized: ChatThreadSummary = {
-                                ...parsed,
-                                participants: enrichedParticipants
-                        }
+			const normalized: ChatThreadSummary = {
+				...parsed,
+				participants: enrichedParticipants
+			}
 
-                        await redisClient.set(
-                                THREAD_META_CACHE_KEY(threadId),
-                                JSON.stringify(normalized),
-                                'EX',
-                                THREAD_META_TTL_SECONDS
-                        )
+			await redisClient.set(THREAD_META_CACHE_KEY(threadId), JSON.stringify(normalized), 'EX', THREAD_META_TTL_SECONDS)
 
-                        return normalized
-                } catch {
-                        await redisClient.del(THREAD_META_CACHE_KEY(threadId))
-                }
-        }
+			return normalized
+		} catch {
+			await redisClient.del(THREAD_META_CACHE_KEY(threadId))
+		}
+	}
 
 	const thread = await prismaClient.chatThread.findUnique({
 		where: { id: threadId },
@@ -195,27 +212,27 @@ const cacheThreadMeta = async (threadId: string): Promise<ChatThreadSummary | nu
 		return null
 	}
 
-        const participants = await Promise.all(
-                thread.participants.map(async participant => ({
-                        id: participant.id,
-                        userId: participant.userId,
-                        role: participant.role,
-                        profile: {
-                                firstName: participant.user.profile?.firstName ?? null,
-                                lastName: participant.user.profile?.lastName ?? null
-                        },
-                        avatar: (await assetService.getProfileAvatarUrl(participant.userId)) ?? null
-                }))
-        )
+	const participants = await Promise.all(
+		thread.participants.map(async participant => ({
+			id: participant.id,
+			userId: participant.userId,
+			role: participant.role,
+			profile: {
+				firstName: participant.user.profile?.firstName ?? null,
+				lastName: participant.user.profile?.lastName ?? null
+			},
+			avatar: (await assetService.getProfileAvatarUrl(participant.userId)) ?? null
+		}))
+	)
 
-        const payload: ChatThreadSummary = {
-                id: thread.id,
-                type: thread.type,
-                subject: thread.subject,
-                jobPostId: thread.jobPostId ?? null,
-                contractId: thread.contractId ?? null,
-                participants
-        }
+	const payload: ChatThreadSummary = {
+		id: thread.id,
+		type: thread.type,
+		subject: thread.subject,
+		jobPostId: thread.jobPostId ?? null,
+		contractId: thread.contractId ?? null,
+		participants
+	}
 
 	await redisClient.set(THREAD_META_CACHE_KEY(threadId), JSON.stringify(payload), 'EX', THREAD_META_TTL_SECONDS)
 
@@ -473,6 +490,7 @@ export const registerChatGateway = (io: Server) => {
 
 		socket.on('chat:send-message', async (payload: SendMessagePayload, ack?: Acknowledgement) => {
 			try {
+				console.log('payload', payload)
 				const body = payload?.body?.trim() ?? ''
 
 				if (!payload?.threadId || body.length === 0) {
@@ -517,6 +535,48 @@ export const registerChatGateway = (io: Server) => {
 							}
 						}
 					})
+
+					if (payload?.attachments && payload?.attachments?.length > 0) {
+						const attachmentRes = []
+						for (let i = 0; i <= payload?.attachments?.length; i++) {
+							const a = payload.attachments[i]
+							if (!a) continue
+							const createdAsset = await tx.asset.create({
+								data: {
+									provider: a.provider === 'cloudinary' ? AssetProvider.CLOUDINARY : AssetProvider.R2,
+									kind: a.kind === 'image' ? AssetKind.IMAGE : a.kind === 'video' ? AssetKind.VIDEO : AssetKind.FILE,
+									url: a.url,
+									publicId: a.publicId ?? null,
+									mimeType: a.mime,
+									width: a.width ?? null,
+									height: a.height ?? null,
+									bytes: a.size ?? null,
+									storageKey: a.key ?? null,
+									createdBy: user.id!,
+									visibility: 'PUBLIC',
+									status: 'PENDING'
+								}
+							})
+
+							const createdassetLink = await tx.assetLink.create({
+								data: {
+									ownerType: AssetOwnerType.MESSAGE,
+									ownerId: createdMessage.id,
+									role: AssetRole.ATTACHMENT,
+									assetId: createdAsset.id
+								}
+							})
+
+							const chatMessageAttachment = await tx.chatMessageAttachment.create({
+								data: {
+									assetId: createdAsset.id,
+									messageId: createdMessage.id,
+									url: createdAsset.url,
+									size: createdAsset.bytes
+								}
+							})
+						}
+					}
 
 					const threadParticipants = await tx.chatParticipant.findMany({
 						where: { threadId: payload.threadId },
@@ -566,6 +626,13 @@ export const registerChatGateway = (io: Server) => {
 					}
 				})
 
+				const messageWithAttachment = await prismaClient.chatMessage.findFirst({
+					where: { id: message.id },
+					include: {
+						attachments: true
+					}
+				})
+
 				const responsePayload = {
 					tempId: payload.tempId,
 					message: {
@@ -577,7 +644,8 @@ export const registerChatGateway = (io: Server) => {
 						senderRole: message.senderRole ?? null,
 						metadata: message.metadata,
 						sentAt: message.sentAt,
-						sender: chatMessageSender
+						sender: chatMessageSender,
+						attachments: messageWithAttachment?.attachments
 					}
 				}
 
@@ -650,6 +718,7 @@ export const registerChatGateway = (io: Server) => {
 
 				respond(ack, { success: true })
 			} catch (error) {
+				console.log(error)
 				respond(ack, {
 					success: false,
 					message: error instanceof Error ? error.message : 'Không thể gửi tin nhắn'

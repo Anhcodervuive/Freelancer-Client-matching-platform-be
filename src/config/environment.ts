@@ -42,7 +42,8 @@ export const CLOUDINARY_CONFIG_INFO = {
 
 	PROFILE_FOLDER: 'user',
 	PORTFOLIO_FOLDER: 'portfolio',
-	JOB_ATTACHMENT_FOLDER: 'job-posts'
+	JOB_ATTACHMENT_FOLDER: 'job-posts',
+	MESSAGE_ATTACHMENT_FOLDER: 'messages'
 }
 
 export const R2_CONFIG = {
@@ -53,15 +54,16 @@ export const R2_CONFIG = {
 	SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
 	BUCKET: process.env.R2_BUCKET,
 	PUBLIC_BASE_URL: process.env.R2_PUBLIC_BASE_URL,
-	JOB_ATTACHMENT_PREFIX: process.env.R2_JOB_ATTACHMENT_PREFIX || 'job-posts'
+	JOB_ATTACHMENT_PREFIX: process.env.R2_JOB_ATTACHMENT_PREFIX || 'job-posts',
+	MESSAGE_ATTACHMENT_PREFIX: 'messages'
 }
 
 export const STRIPE_CONFIG_INFO = {
-        API_KEY: process.env.STRIPE_API_KEY
+	API_KEY: process.env.STRIPE_API_KEY
 }
 
 export const REDIS_CONFIG = {
-        HOST: process.env.REDIS_HOST ?? 'localhost',
-        PORT: Number(process.env.REDIS_PORT ?? '6379'),
-        PASSWORD: process.env.REDIS_PASSWORD
+	HOST: process.env.REDIS_HOST ?? 'localhost',
+	PORT: Number(process.env.REDIS_PORT ?? '6379'),
+	PASSWORD: process.env.REDIS_PASSWORD
 }

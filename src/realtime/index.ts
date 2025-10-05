@@ -7,12 +7,13 @@ import { registerNotificationGateway } from './notifications/notification.gatewa
 import { registerChatGateway } from './chat'
 
 export const registerRealtime = (httpServer: HttpServer) => {
-        const io = new SocketIOServer(httpServer, {
-                cors: corsOptions
-        })
+	const io = new SocketIOServer(httpServer, {
+		cors: corsOptions,
+		maxHttpBufferSize: 10 * 1024 * 1024
+	})
 
-        registerNotificationGateway(io)
-        registerChatGateway(io)
+	registerNotificationGateway(io)
+	registerChatGateway(io)
 
-        return io
+	return io
 }

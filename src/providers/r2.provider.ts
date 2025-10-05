@@ -22,11 +22,9 @@ let presignerModulePromise: Promise<PresignerModule> | null = null
 let cachedClient: any | null = null
 
 const createDependencyError = (pkg: string, cause: unknown) =>
-	new Error(`Không thể tải module "${pkg}". Hãy chạy \`npm install ${pkg}\` rồi thử lại.`, {
-		cause
-	})
+	new Error(`Không thể tải module "${pkg}". Hãy chạy \`npm install ${pkg}\` rồi thử lại.`)
 
-const loadS3Module = async (): Promise<S3Module> => {
+export const loadS3Module = async (): Promise<S3Module> => {
 	if (!s3ModulePromise) {
 		s3ModulePromise = import('@aws-sdk/client-s3').catch(error => {
 			s3ModulePromise = null
@@ -36,7 +34,7 @@ const loadS3Module = async (): Promise<S3Module> => {
 	return s3ModulePromise
 }
 
-const loadPresignerModule = async (): Promise<PresignerModule> => {
+export const loadPresignerModule = async (): Promise<PresignerModule> => {
 	if (!presignerModulePromise) {
 		presignerModulePromise = import('@aws-sdk/s3-request-presigner').catch(error => {
 			presignerModulePromise = null
@@ -86,7 +84,7 @@ const getCredentials = () => {
 	}
 }
 
-const getClient = async (): Promise<any> => {
+export const getClient = async (): Promise<any> => {
 	if (cachedClient) {
 		return cachedClient
 	}
