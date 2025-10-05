@@ -490,26 +490,26 @@ const chatService = {
 				}
 			})
 
-			const updatedReceipts = await tx.chatMessageReceipt.updateMany({
+			const updatedReceipts = await tx.chatMessageReceipt.upsert({
 				where: {
-					participantId: participant.id,
-					readAt: null,
-					message: {
-						threadId,
-						sentAt: {
-							lte: targetMessageSentAt ?? now
-						}
+					messageId_participantId: {
+						participantId: participant.id,
+						messageId: targetMessageId
 					}
 				},
-				data: {
+				update: {
 					readAt: now
+				},
+				create: {
+					participantId: participant.id,
+					readAt: now,
+					messageId: targetMessageId
 				}
 			})
 
 			return {
 				participant: updatedParticipant,
-				lastReadMessageId: targetMessageId,
-				updatedReceipts: updatedReceipts.count
+				lastReadMessageId: targetMessageId
 			}
 		})
 	}

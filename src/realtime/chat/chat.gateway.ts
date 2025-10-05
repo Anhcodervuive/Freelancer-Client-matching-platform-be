@@ -20,6 +20,7 @@ import {
 	type ChatThreadSummary
 } from './chat.events'
 import { authenticateSocket } from '../common/auth.middleware'
+import chatService from '~/services/chat.service'
 
 type Acknowledgement = (response: { success: boolean; message?: string; data?: unknown }) => void
 
@@ -417,6 +418,40 @@ export const registerChatGateway = (io: Server) => {
 					throw new Error('Bạn không có quyền truy cập cuộc hội thoại này')
 				}
 
+				const unReadMessages = await prismaClient.chatMessage.findMany({
+					where: {
+						threadId: payload.threadId,
+
+						OR: [
+							{
+								receipts: {
+									none: {
+										participantId: participant.id
+									}
+								}
+							},
+							{
+								receipts: {
+									some: {
+										participantId: participant.id,
+										readAt: null
+									}
+								}
+							}
+						]
+					}
+				})
+				console.log('unReadMessages', unReadMessages)
+
+				// Mỗi khi user tham giao vào 1 chat thì mặc định sẽ đánh dấu toàn bộ chat của thread đó đã được user này đọc
+				await Promise.all(
+					unReadMessages.map(m => {
+						return chatService.markThreadAsRead(user.id, payload.threadId, {
+							messageId: m.id
+						})
+					})
+				)
+
 				joinedThreads.add(payload.threadId)
 				socket.join(THREAD_ROOM(payload.threadId))
 
@@ -493,7 +528,7 @@ export const registerChatGateway = (io: Server) => {
 				console.log('payload', payload)
 				const body = payload?.body?.trim() ?? ''
 
-				if (!payload?.threadId || body.length === 0) {
+				if (!payload?.threadId || (body.length === 0 && payload.attachments.length === 0)) {
 					throw new Error('Thiếu dữ liệu tin nhắn')
 				}
 
@@ -537,7 +572,6 @@ export const registerChatGateway = (io: Server) => {
 					})
 
 					if (payload?.attachments && payload?.attachments?.length > 0) {
-						const attachmentRes = []
 						for (let i = 0; i <= payload?.attachments?.length; i++) {
 							const a = payload.attachments[i]
 							if (!a) continue
@@ -563,7 +597,8 @@ export const registerChatGateway = (io: Server) => {
 									ownerType: AssetOwnerType.MESSAGE,
 									ownerId: createdMessage.id,
 									role: AssetRole.ATTACHMENT,
-									assetId: createdAsset.id
+									assetId: createdAsset.id,
+									position: i
 								}
 							})
 
@@ -572,7 +607,9 @@ export const registerChatGateway = (io: Server) => {
 									assetId: createdAsset.id,
 									messageId: createdMessage.id,
 									url: createdAsset.url,
-									size: createdAsset.bytes
+									size: createdAsset.bytes,
+									mimeType: a.mime,
+									name: a.name
 								}
 							})
 						}
