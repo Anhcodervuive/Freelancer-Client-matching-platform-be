@@ -273,25 +273,56 @@ const chatService = {
 				: {})
 		}
 
-		const [threads, total] = await Promise.all([
-			prismaClient.chatThread.findMany({
-				where,
-				orderBy: {
-					updatedAt: Prisma.SortOrder.desc
-				},
-				skip,
-				take: limit,
-				include: threadInclude
-			}),
-			prismaClient.chatThread.count({ where })
-		])
+                const [threads, total] = await Promise.all([
+                        prismaClient.chatThread.findMany({
+                                where,
+                                orderBy: {
+                                        updatedAt: Prisma.SortOrder.desc
+                                },
+                                skip,
+                                take: limit,
+                                include: threadInclude
+                        }),
+                        prismaClient.chatThread.count({ where })
+                ])
 
-		const threadsWithAvatar = resolvedIncludeParticipants ? await attachAvatarToParticipants(threads) : threads
+                const threadIds = threads.map(thread => thread.id)
 
-		return {
-			page,
-			limit,
-			total,
+                const unreadMessagesCountMap = threadIds.length
+                        ? new Map(
+                                  (
+                                          await prismaClient.chatMessage.groupBy({
+                                                  by: ['threadId'],
+                                                  where: {
+                                                          threadId: { in: threadIds },
+                                                          receipts: {
+                                                                  some: {
+                                                                          readAt: null,
+                                                                          participant: {
+                                                                                  userId
+                                                                          }
+                                                                  }
+                                                          }
+                                                  },
+                                                  _count: { _all: true }
+                                          })
+                                  ).map(grouped => [grouped.threadId, grouped._count._all] as const)
+                          )
+                        : new Map<string, number>()
+
+                const threadsWithUnreadCount = threads.map(thread => ({
+                        ...thread,
+                        unreadMessagesCount: unreadMessagesCountMap.get(thread.id) ?? 0
+                }))
+
+                const threadsWithAvatar = resolvedIncludeParticipants
+                        ? await attachAvatarToParticipants(threadsWithUnreadCount)
+                        : threadsWithUnreadCount
+
+                return {
+                        page,
+                        limit,
+                        total,
 			hasMore: skip + threadsWithAvatar.length < total,
 			data: threadsWithAvatar
 		}
