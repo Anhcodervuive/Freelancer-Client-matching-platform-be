@@ -421,7 +421,6 @@ export const registerChatGateway = (io: Server) => {
 				const unReadMessages = await prismaClient.chatMessage.findMany({
 					where: {
 						threadId: payload.threadId,
-
 						OR: [
 							{
 								receipts: {
@@ -439,9 +438,11 @@ export const registerChatGateway = (io: Server) => {
 								}
 							}
 						]
+					},
+					orderBy: {
+						createdAt: 'asc'
 					}
 				})
-				console.log('unReadMessages', unReadMessages)
 
 				// Mỗi khi user tham giao vào 1 chat thì mặc định sẽ đánh dấu toàn bộ chat của thread đó đã được user này đọc
 				await Promise.all(
@@ -525,7 +526,6 @@ export const registerChatGateway = (io: Server) => {
 
 		socket.on('chat:send-message', async (payload: SendMessagePayload, ack?: Acknowledgement) => {
 			try {
-				console.log('payload', payload)
 				const body = payload?.body?.trim() ?? ''
 
 				if (!payload?.threadId || (body.length === 0 && payload.attachments.length === 0)) {
@@ -657,38 +657,35 @@ export const registerChatGateway = (io: Server) => {
 						participants: threadParticipants
 					}
 				})
-				const chatMessageSender = await prismaClient.user.findFirst({
-					where: {
-						id: message.senderId ?? ''
+
+				const messageWithFullInfo = await prismaClient.chatMessage.findFirst({
+					where: { id: message.id },
+					include: {
+						attachments: true,
+						receipts: {
+							include: {
+								participant: {
+									include: {
+										user: true
+									}
+								}
+							}
+						},
+						sender: true
 					}
 				})
 
-				const messageWithAttachment = await prismaClient.chatMessage.findFirst({
-					where: { id: message.id },
-					include: {
-						attachments: true
-					}
+				await messageWithFullInfo?.receipts.forEach(async m => {
+					;(m.participant.user as any).avatar = await assetService.getProfileAvatarUrl(m.participant.user.id)
+					return m
 				})
 
 				const responsePayload = {
 					tempId: payload.tempId,
-					message: {
-						id: message.id,
-						threadId: message.threadId,
-						body: message.body,
-						type: message.type,
-						senderId: message.senderId ?? null,
-						senderRole: message.senderRole ?? null,
-						metadata: message.metadata,
-						sentAt: message.sentAt,
-						sender: chatMessageSender,
-						attachments: messageWithAttachment?.attachments
-					}
+					message: messageWithFullInfo
 				}
 
 				const threadRoom = THREAD_ROOM(payload.threadId)
-
-				namespace.to(threadRoom).emit('chat:message', responsePayload)
 
 				await appendAnalyticsLog({
 					event: 'message_sent',
@@ -753,6 +750,8 @@ export const registerChatGateway = (io: Server) => {
 					}
 				}
 
+				namespace.to(threadRoom).emit('chat:message', responsePayload)
+
 				respond(ack, { success: true })
 			} catch (error) {
 				console.log(error)
@@ -780,31 +779,49 @@ export const registerChatGateway = (io: Server) => {
 					throw new Error('Bạn không thuộc cuộc hội thoại này')
 				}
 
-				await prismaClient.$transaction([
-					prismaClient.chatMessageReceipt.update({
+				const updatedChatChatMessageReceipt = await prismaClient.$transaction(async tx => {
+					const participant = await tx.chatParticipant.update({
+						where: {
+							threadId_userId: {
+								threadId: payload.threadId!,
+								userId: user.id
+							}
+						},
+						data: {
+							lastReadMessageId: payload.messageId,
+							lastReadAt: new Date()
+						}
+					})
+
+					// Bây giờ chắc chắn query sau "thấy" dữ liệu mới của participant
+					const receipt = await tx.chatMessageReceipt.update({
 						where: {
 							messageId_participantId: {
 								messageId: payload.messageId,
 								participantId: participant.id
 							}
 						},
-						data: {
-							readAt: new Date()
-						}
-					}),
-					prismaClient.chatParticipant.update({
-						where: { id: participant.id },
-						data: {
-							lastReadMessageId: payload.messageId,
-							lastReadAt: new Date()
+						data: { readAt: new Date() },
+						include: {
+							participant: {
+								include: {
+									user: true
+								}
+							} // ← sẽ là dữ liệu participant vừa update ở trên
 						}
 					})
-				])
+
+					;(receipt.participant.user as any).avatar = await assetService.getProfileAvatarUrl(
+						receipt.participant.user.id
+					)
+
+					return receipt
+				})
 
 				namespace.to(THREAD_ROOM(payload.threadId)).emit('chat:read', {
 					threadId: payload.threadId,
 					messageId: payload.messageId,
-					userId: user.id
+					receipt: updatedChatChatMessageReceipt
 				})
 
 				respond(ack, { success: true })

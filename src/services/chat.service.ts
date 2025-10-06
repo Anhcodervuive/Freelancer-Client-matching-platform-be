@@ -9,132 +9,131 @@ import { BadRequestException } from '~/exceptions/bad-request'
 import assetService from './asset.service'
 
 type ParticipantWithUser = {
-        participants?: Array<{
-                user?: {
-                        id: string
-                        [key: string]: any
-                }
-                [key: string]: any
-        }>
-        [key: string]: any
+	participants?: Array<{
+		user?: {
+			id: string
+			[key: string]: any
+		}
+		[key: string]: any
+	}>
+	[key: string]: any
 }
 
 type MessageWithRelatedUsers = {
-        sender?: {
-                id: string
-                [key: string]: any
-        }
-        receipts?: Array<{
-                participant?: {
-                        user?: {
-                                id: string
-                                [key: string]: any
-                        }
-                        [key: string]: any
-                }
-                [key: string]: any
-        }>
-        [key: string]: any
+	sender?: {
+		id: string
+		[key: string]: any
+	}
+	receipts?: Array<{
+		participant?: {
+			user?: {
+				id: string
+				[key: string]: any
+			}
+			[key: string]: any
+		}
+		[key: string]: any
+	}>
+	[key: string]: any
 }
 
 async function buildAvatarMap(userIds: Iterable<string>) {
-        const uniqueIds = Array.from(new Set(userIds))
+	const uniqueIds = Array.from(new Set(userIds))
 
-        if (uniqueIds.length === 0) {
-                return new Map<string, string | null>()
-        }
+	if (uniqueIds.length === 0) {
+		return new Map<string, string | null>()
+	}
 
-        const avatarEntries = await Promise.all(
-                uniqueIds.map(async userId => {
-                        const avatar = await assetService.getProfileAvatarUrl(userId)
-                        return [userId, avatar] as const
-                })
-        )
+	const avatarEntries = await Promise.all(
+		uniqueIds.map(async userId => {
+			const avatar = await assetService.getProfileAvatarUrl(userId)
+			return [userId, avatar] as const
+		})
+	)
 
-        return new Map<string, string | null>(avatarEntries)
+	return new Map<string, string | null>(avatarEntries)
 }
 
 async function attachAvatarToParticipants<T extends ParticipantWithUser>(data: T[]): Promise<T[]>
 async function attachAvatarToParticipants<T extends ParticipantWithUser>(data: T): Promise<T>
 async function attachAvatarToParticipants<T extends ParticipantWithUser>(data: T | T[]) {
-        const collection = Array.isArray(data) ? data : [data]
+	const collection = Array.isArray(data) ? data : [data]
 
-        const userIds = new Set<string>()
+	const userIds = new Set<string>()
 
-        collection.forEach(item => {
-                item.participants?.forEach(participant => {
-                        if (participant.user?.id) {
-                                userIds.add(participant.user.id)
-                        }
-                })
-        })
+	collection.forEach(item => {
+		item.participants?.forEach(participant => {
+			if (participant.user?.id) {
+				userIds.add(participant.user.id)
+			}
+		})
+	})
 
-        const avatarMap = await buildAvatarMap(userIds)
+	const avatarMap = await buildAvatarMap(userIds)
 
-        const result = collection.map(item => ({
-                ...item,
-                participants: item.participants?.map(participant => ({
-                        ...participant,
-                        user: participant.user
-                                ? {
-                                                ...participant.user,
-                                                avatar: avatarMap.get(participant.user.id) ?? null
-                                  }
-                                : participant.user
-                }))
-        })) as T[]
+	const result = collection.map(item => ({
+		...item,
+		participants: item.participants?.map(participant => ({
+			...participant,
+			user: participant.user
+				? {
+						...participant.user,
+						avatar: avatarMap.get(participant.user.id) ?? null
+				  }
+				: participant.user
+		}))
+	})) as T[]
 
-        return Array.isArray(data) ? result : result[0]
+	return Array.isArray(data) ? result : result[0]
 }
 
 async function attachAvatarToMessages<T extends MessageWithRelatedUsers>(data: T[]): Promise<T[]>
 async function attachAvatarToMessages<T extends MessageWithRelatedUsers>(data: T): Promise<T>
 async function attachAvatarToMessages<T extends MessageWithRelatedUsers>(data: T | T[]) {
-        const collection = Array.isArray(data) ? data : [data]
+	const collection = Array.isArray(data) ? data : [data]
 
-        const userIds = new Set<string>()
+	const userIds = new Set<string>()
 
-        collection.forEach(message => {
-                if (message.sender?.id) {
-                        userIds.add(message.sender.id)
-                }
+	collection.forEach(message => {
+		if (message.sender?.id) {
+			userIds.add(message.sender.id)
+		}
 
-                message.receipts?.forEach(receipt => {
-                        const userId = receipt.participant?.user?.id
-                        if (userId) {
-                                userIds.add(userId)
-                        }
-                })
-        })
+		message.receipts?.forEach(receipt => {
+			const userId = receipt.participant?.user?.id
+			if (userId) {
+				userIds.add(userId)
+			}
+		})
+	})
 
-        const avatarMap = await buildAvatarMap(userIds)
+	const avatarMap = await buildAvatarMap(userIds)
 
-        const result = collection.map(message => ({
-                ...message,
-                sender: message.sender
-                        ? {
-                                        ...message.sender,
-                                        avatar: avatarMap.get(message.sender.id) ?? null
-                          }
-                        : message.sender,
-                receipts: message.receipts?.map(receipt => ({
-                        ...receipt,
-                        participant: receipt.participant
-                                ? {
-                                                ...receipt.participant,
-                                                user: receipt.participant.user
-                                                        ? {
-                                                                        ...receipt.participant.user,
-                                                                        avatar:
-                                                                                avatarMap.get(receipt.participant.user.id) ?? null
-                                                          }
-                                                        : receipt.participant.user
-                                  }
-                                : receipt.participant
-                }))
-        })) as T[]
+	const result = collection.map(message => ({
+		...message,
+		sender: message.sender
+			? {
+					...message.sender,
+					avatar: avatarMap.get(message.sender.id) ?? null
+			  }
+			: message.sender,
+		receipts: message.receipts?.map(receipt => ({
+			...receipt,
+			participant: receipt.participant
+				? {
+						...receipt.participant,
+						user: receipt.participant.user
+							? {
+									...receipt.participant.user,
+									avatar: avatarMap.get(receipt.participant.user.id) ?? null
+							  }
+							: receipt.participant.user
+				  }
+				: receipt.participant
+		}))
+	})) as T[]
 
-        return Array.isArray(data) ? result : result[0]
+	return Array.isArray(data) ? result : result[0]
 }
 
 const chatService = {
@@ -459,24 +458,24 @@ const chatService = {
 		const hasMore = messages.length > limit
 		const sliced = hasMore ? messages.slice(0, limit) : messages
 
-                const normalized = direction === 'after' ? sliced : [...sliced].reverse()
-                const normalizedWithAvatar = await attachAvatarToMessages(normalized)
+		const normalized = direction === 'after' ? sliced : [...sliced].reverse()
+		const normalizedWithAvatar = await attachAvatarToMessages(normalized)
 
-                const nextCursor = (() => {
-                        if (normalizedWithAvatar.length === 0) return null
-                        if (direction === 'after') {
-                                return normalizedWithAvatar[normalizedWithAvatar.length - 1]?.id ?? null
-                        }
-                        return normalizedWithAvatar[0]?.id ?? null
-                })()
+		const nextCursor = (() => {
+			if (normalizedWithAvatar.length === 0) return null
+			if (direction === 'after') {
+				return normalizedWithAvatar[normalizedWithAvatar.length - 1]?.id ?? null
+			}
+			return normalizedWithAvatar[0]?.id ?? null
+		})()
 
-                return {
-                        data: normalizedWithAvatar,
-                        limit,
-                        direction,
-                        hasMore,
-                        nextCursor
-                }
+		return {
+			data: normalizedWithAvatar,
+			limit,
+			direction,
+			hasMore,
+			nextCursor
+		}
 	},
 
 	async markThreadAsRead(userId: string, threadId: string, rawBody: unknown) {
@@ -505,6 +504,7 @@ const chatService = {
 
 			let targetMessageId = parsed.messageId ?? null
 			let targetMessageSentAt: Date | null = null
+			console.log(targetMessageId)
 
 			if (targetMessageId) {
 				const message = await tx.chatMessage.findFirst({
