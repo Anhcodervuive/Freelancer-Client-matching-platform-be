@@ -20,7 +20,6 @@ import {
         type JobOfferPayload
 } from '~/services/job-offer/shared'
 import notificationService from '~/services/notification.service'
-import { JobOfferRealtimeEvent, jobOfferEventEmitter } from '~/realtime/job-offers'
 
 const ensureClientUser = async (userId: string) => {
 	const client = await prismaClient.client.findUnique({
@@ -159,22 +158,13 @@ const notifyOfferSent = async (clientUserId: string, offer: JobOfferPayload) => 
                         resourceId: offer.id,
                         payload: {
                                 jobId: offer.jobId,
-                                offerId: offer.id
+                                offerId: offer.id,
+                                offer: serializedOffer
                         }
                 })
         } catch (notificationError) {
                 // eslint-disable-next-line no-console
                 console.error('Không thể tạo thông báo khi gửi offer', notificationError)
-        }
-
-        try {
-                jobOfferEventEmitter.emit(JobOfferRealtimeEvent.SENT, {
-                        recipientId: offer.freelancerId,
-                        offer: serializedOffer
-                })
-        } catch (realtimeError) {
-                // eslint-disable-next-line no-console
-                console.error('Không thể gửi real-time job offer', realtimeError)
         }
 }
 
