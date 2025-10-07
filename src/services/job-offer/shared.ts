@@ -178,10 +178,13 @@ const serializeJobOffer = (offer: JobOfferPayload | JobOfferSummaryPayload) => {
         }
 }
 
+type SerializedJobOffer = ReturnType<typeof serializeJobOffer>
+
 export {
         jobOfferInclude,
         jobOfferSummaryInclude,
         serializeJobOffer,
         type JobOfferPayload,
-        type JobOfferSummaryPayload
+        type JobOfferSummaryPayload,
+        type SerializedJobOffer
 }

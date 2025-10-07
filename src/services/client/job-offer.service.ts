@@ -13,8 +13,14 @@ import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { CreateJobOfferInput, JobOfferFilterInput, UpdateJobOfferInput } from '~/schema/job-offer.schema'
-import { jobOfferInclude, jobOfferSummaryInclude, serializeJobOffer } from '~/services/job-offer/shared'
+import {
+        jobOfferInclude,
+        jobOfferSummaryInclude,
+        serializeJobOffer,
+        type JobOfferPayload
+} from '~/services/job-offer/shared'
 import notificationService from '~/services/notification.service'
+import { JobOfferRealtimeEvent, jobOfferEventEmitter } from '~/realtime/job-offers'
 
 const ensureClientUser = async (userId: string) => {
 	const client = await prismaClient.client.findUnique({
@@ -140,7 +146,9 @@ const ensureNoExistingOfferForFreelancerOnJob = async (
         }
 }
 
-const notifyOfferSent = async (clientUserId: string, offer: { id: string; freelancerId: string; jobId: string | null }) => {
+const notifyOfferSent = async (clientUserId: string, offer: JobOfferPayload) => {
+        const serializedOffer = serializeJobOffer(offer)
+
         try {
                 await notificationService.create({
                         recipientId: offer.freelancerId,
@@ -157,6 +165,16 @@ const notifyOfferSent = async (clientUserId: string, offer: { id: string; freela
         } catch (notificationError) {
                 // eslint-disable-next-line no-console
                 console.error('Không thể tạo thông báo khi gửi offer', notificationError)
+        }
+
+        try {
+                jobOfferEventEmitter.emit(JobOfferRealtimeEvent.SENT, {
+                        recipientId: offer.freelancerId,
+                        offer: serializedOffer
+                })
+        } catch (realtimeError) {
+                // eslint-disable-next-line no-console
+                console.error('Không thể gửi real-time job offer', realtimeError)
         }
 }
 
@@ -501,7 +519,7 @@ const updateJobOffer = async (clientUserId: string, offerId: string, payload: Up
         })
 
         if (shouldNotify) {
-                await notifyOfferSent(clientUserId, { id: updated.id, freelancerId, jobId })
+                await notifyOfferSent(clientUserId, updated)
         }
 
         return serializeJobOffer(updated)

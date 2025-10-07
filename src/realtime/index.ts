@@ -5,6 +5,7 @@ import { corsOptions } from '~/config/cors'
 
 import { registerNotificationGateway } from './notifications/notification.gateway'
 import { registerChatGateway } from './chat'
+import { registerJobOfferGateway } from './job-offers'
 
 export const registerRealtime = (httpServer: HttpServer) => {
 	const io = new SocketIOServer(httpServer, {
@@ -13,7 +14,8 @@ export const registerRealtime = (httpServer: HttpServer) => {
 	})
 
 	registerNotificationGateway(io)
-	registerChatGateway(io)
+        registerChatGateway(io)
+        registerJobOfferGateway(io)
 
 	return io
 }
