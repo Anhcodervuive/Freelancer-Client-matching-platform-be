@@ -456,6 +456,35 @@ export const registerChatGateway = (io: Server) => {
 				joinedThreads.add(payload.threadId)
 				socket.join(THREAD_ROOM(payload.threadId))
 
+				if (unReadMessages.length > 0) {
+					console.log(unReadMessages[unReadMessages.length - 1]?.id)
+					const updatedReceipt = await prismaClient.chatMessageReceipt.findFirst({
+						where: {
+							messageId: unReadMessages[unReadMessages.length - 1]?.id ?? ''
+						},
+						include: {
+							participant: {
+								include: {
+									user: true
+								}
+							} // ← sẽ là dữ liệu participant vừa update ở trên
+						}
+					})
+					console.log(unReadMessages.length)
+					if (updatedReceipt) {
+						;(updatedReceipt.participant.user as any).avatar = await assetService.getProfileAvatarUrl(
+							updatedReceipt.participant.user.id
+						)
+						console.log(updatedReceipt)
+
+						namespace.to(THREAD_ROOM(payload.threadId)).emit('chat:read', {
+							threadId: payload.threadId,
+							messageId: updatedReceipt.messageId,
+							receipt: updatedReceipt
+						})
+					}
+				}
+
 				const threadMeta = await cacheThreadMeta(payload.threadId)
 				if (!threadMeta) {
 					throw new Error('Không tìm thấy cuộc hội thoại')
