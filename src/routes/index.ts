@@ -16,8 +16,10 @@ import freelancerJobPostRoute from './freelancer-job-post.route'
 import clientFreelancerRoute from './client-freelancer.route'
 import clientJobInvitationRoute from './client-job-invitation.route'
 import clientJobProposalRoute from './client-job-proposal.route'
+import clientJobOfferRoute from './client-job-offer.route'
 import freelancerJobInvitationRoute from './freelancer-job-invitation.route'
 import freelancerJobProposalRoute from './freelancer-job-proposal.route'
+import freelancerJobOfferRoute from './freelancer-job-offer.route'
 import notificationRoute from './notification.route'
 import chatRoute from './chat.route'
 import uploadRoute from './upload.route'
@@ -36,10 +38,12 @@ rootRouter.use('/freelancer/connect-account', freelancerConnectAccountRoute)
 rootRouter.use('/freelancer/job-posts', freelancerJobPostRoute)
 rootRouter.use('/freelancer/job-invitations', freelancerJobInvitationRoute)
 rootRouter.use('/freelancer/job-proposals', freelancerJobProposalRoute)
+rootRouter.use('/freelancer/job-offers', freelancerJobOfferRoute)
 rootRouter.use('/job-posts', jobPostRoute)
 rootRouter.use('/client', clientFreelancerRoute)
 rootRouter.use('/client', clientJobInvitationRoute)
 rootRouter.use('/client', clientJobProposalRoute)
+rootRouter.use('/client', clientJobOfferRoute)
 rootRouter.use('/notification', notificationRoute)
 rootRouter.use('/chat', chatRoute)
 rootRouter.use('/upload', uploadRoute)
