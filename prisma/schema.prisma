@@ -133,6 +133,7 @@ model Freelancer {
   portfolios                   PortfolioProject[]
   jobProposals                 JobProposal[]
   jobInvitations               JobInvitation[]
+  jobOffers                    JobOffer[]
   matchInteractions            MatchInteraction[]
   savedJobs                    FreelancerSavedJob[]
   savedByClients               ClientSavedFreelancer[]
@@ -265,6 +266,7 @@ model Client {
 
   jobPosts          JobPost[]
   jobInvitations    JobInvitation[]
+  jobOffers         JobOffer[]
   contracts         Contract[]
   matchInteractions MatchInteraction[]
   savedFreelancers  ClientSavedFreelancer[]
@@ -444,6 +446,19 @@ enum JobInvitationStatus {
   EXPIRED
 }
 
+enum JobOfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum JobOfferType {
+  FIXED_PRICE
+}
+
 model JobPost {
   id                 String                 @id @default(cuid())
   clientId           String                 @map("client_id")
@@ -479,6 +494,7 @@ model JobPost {
   screeningQuestions JobScreeningQuestion[]
   proposals          JobProposal[]
   invitations        JobInvitation[]
+  offers             JobOffer[]
   activityLogs       JobActivityLog[]
   matchInteractions  MatchInteraction[]
   contracts          Contract[]
@@ -578,6 +594,7 @@ model JobInvitation {
   freelancer        Freelancer         @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
   proposal          JobProposal?       @relation("InvitationProposal")
   matchInteractions MatchInteraction[]
+  offers            JobOffer[]
 
   @@unique([jobId, freelancerId])
   @@index([freelancerId, status])
@@ -603,6 +620,7 @@ model JobProposal {
   freelancer        Freelancer         @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
   invitation        JobInvitation?     @relation("InvitationProposal", fields: [invitationId], references: [id], onDelete: SetNull)
   contract          Contract?          @relation("ContractProposal")
+  offers            JobOffer[]
   matchInteractions MatchInteraction[]
 
   @@unique([jobId, freelancerId])
@@ -626,6 +644,44 @@ model JobActivityLog {
 
   @@index([jobId, createdAt])
   @@map("job_activity_log")
+}
+
+model JobOffer {
+  id           String         @id @default(cuid())
+  jobId        String?        @map("job_id")
+  clientId     String         @map("client_id")
+  freelancerId String         @map("freelancer_id")
+  proposalId   String?        @map("proposal_id")
+  invitationId String?        @map("invitation_id")
+  title        String
+  message      String?        @db.MediumText
+  type         JobOfferType   @default(FIXED_PRICE)
+  currency     String
+  fixedPrice   Decimal        @map("fixed_price") @db.Decimal(12, 2)
+  startDate    DateTime?      @map("start_date")
+  expireAt     DateTime?      @map("expire_at")
+  status       JobOfferStatus @default(DRAFT)
+  sentAt       DateTime?      @map("sent_at")
+  respondedAt  DateTime?      @map("responded_at")
+  isDeleted    Boolean        @default(false) @map("is_deleted")
+  deletedAt    DateTime?      @map("deleted_at")
+  deletedBy    String?        @map("deleted_by")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  job        JobPost?       @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  client     Client         @relation(fields: [clientId], references: [userId], onDelete: Cascade)
+  freelancer Freelancer     @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+  proposal   JobProposal?   @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  invitation JobInvitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+  contract   Contract?      @relation("OfferContract")
+
+  @@index([jobId], name: "idx_job_offer_job")
+  @@index([clientId, status, isDeleted], name: "idx_job_offer_client_status")
+  @@index([freelancerId, status, isDeleted], name: "idx_job_offer_freelancer_status")
+  @@index([proposalId], name: "idx_job_offer_proposal")
+  @@index([invitationId], name: "idx_job_offer_invitation")
+  @@map("job_offer")
 }
 
 enum MatchInteractionType {
@@ -785,6 +841,7 @@ model Contract {
   freelancerId String   @map("freelancer_id")
   jobPostId    String?  @map("job_post_id")
   proposalId   String?  @unique @map("proposal_id")
+  offerId      String?  @unique @map("offer_id")
   title        String
   currency     String // "usd", ...
   createdAt    DateTime @default(now()) @map("created_at")
@@ -794,6 +851,7 @@ model Contract {
   freelancer  Freelancer   @relation(fields: [freelancerId], references: [userId])
   jobPost     JobPost?     @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
   proposal    JobProposal? @relation("ContractProposal", fields: [proposalId], references: [id], onDelete: SetNull)
+  offer       JobOffer?    @relation("OfferContract", fields: [offerId], references: [id], onDelete: SetNull)
   milestones  Milestone[]
   chatThreads ChatThread[]
 
