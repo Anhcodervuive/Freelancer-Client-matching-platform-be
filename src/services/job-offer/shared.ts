@@ -8,6 +8,18 @@ const jobOfferInclude = Prisma.validator<Prisma.JobOfferInclude>()({
                         status: true
                 }
         },
+        client: {
+                select: {
+                        userId: true,
+                        companyName: true,
+                        profile: {
+                                select: {
+                                        firstName: true,
+                                        lastName: true
+                                }
+                        }
+                }
+        },
         freelancer: {
                 select: {
                         userId: true,
@@ -42,6 +54,18 @@ const jobOfferSummaryInclude = Prisma.validator<Prisma.JobOfferInclude>()({
                         id: true,
                         title: true,
                         status: true
+                }
+        },
+        client: {
+                select: {
+                        userId: true,
+                        companyName: true,
+                        profile: {
+                                select: {
+                                        firstName: true,
+                                        lastName: true
+                                }
+                        }
                 }
         },
         freelancer: {
@@ -113,6 +137,16 @@ const serializeJobOffer = (offer: JobOfferPayload | JobOfferSummaryPayload) => {
                                   id: offer.job.id,
                                   title: offer.job.title,
                                   status: offer.job.status
+                          }
+                        : null,
+                client: offer.client
+                        ? {
+                                  id: offer.client.userId,
+                                  companyName: offer.client.companyName ?? null,
+                                  profile: {
+                                          firstName: offer.client.profile?.firstName ?? null,
+                                          lastName: offer.client.profile?.lastName ?? null
+                                  }
                           }
                         : null,
                 freelancer: serializeFreelancerSummary(offer.freelancer),

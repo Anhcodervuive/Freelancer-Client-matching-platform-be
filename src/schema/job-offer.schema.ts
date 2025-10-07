@@ -28,6 +28,13 @@ const MessageSchema = z
         .trim()
         .max(5000, 'Tin nhắn quá dài')
 
+const OfferStatusParamSchema = z.preprocess((value) => {
+        if (typeof value === 'string') {
+                return value.toUpperCase()
+        }
+        return value
+}, z.nativeEnum(JobOfferStatus))
+
 export const CreateJobOfferSchema = z
         .object({
                 jobId: z.string().min(1).optional(),
@@ -144,10 +151,45 @@ export const JobOfferFilterSchema = z.object({
         limit: z.coerce.number().int().min(1).max(100).default(20),
         jobId: z.string().min(1).optional(),
         freelancerId: z.string().min(1).optional(),
-        status: z.nativeEnum(JobOfferStatus).optional(),
+        status: OfferStatusParamSchema.optional(),
         search: z.string().trim().min(1).optional(),
         includeExpired: z.preprocess(parseBoolean, z.boolean().optional()).optional(),
         sortBy: z.enum(['newest', 'oldest', 'price-high', 'price-low']).optional()
 })
 
 export type JobOfferFilterInput = z.infer<typeof JobOfferFilterSchema>
+
+export const FreelancerJobOfferFilterSchema = z.object({
+        page: z.coerce.number().int().min(1).default(1),
+        limit: z.coerce.number().int().min(1).max(100).default(20),
+        jobId: z.string().min(1).optional(),
+        status: OfferStatusParamSchema.optional(),
+        statuses: z
+                .preprocess((value) => {
+                        if (Array.isArray(value)) {
+                                return value.map((item) =>
+                                        typeof item === 'string' ? item.trim().toUpperCase() : item
+                                )
+                        }
+                        if (typeof value === 'string' && value.length > 0) {
+                                return value
+                                        .split(',')
+                                        .map((item) => item.trim())
+                                        .filter((item) => item.length > 0)
+                                        .map((item) => item.toUpperCase())
+                        }
+                        return value
+                }, z.array(z.nativeEnum(JobOfferStatus)).optional())
+                .optional(),
+        includeExpired: z.preprocess(parseBoolean, z.boolean().optional()).optional(),
+        search: z.string().trim().min(1).optional(),
+        sortBy: z.enum(['newest', 'oldest', 'price-high', 'price-low']).optional()
+})
+
+export type FreelancerJobOfferFilterInput = z.infer<typeof FreelancerJobOfferFilterSchema>
+
+export const RespondJobOfferSchema = z.object({
+        action: z.enum(['ACCEPT', 'DECLINE'])
+})
+
+export type RespondJobOfferInput = z.infer<typeof RespondJobOfferSchema>
