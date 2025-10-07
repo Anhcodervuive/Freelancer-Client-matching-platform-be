@@ -149,11 +149,12 @@ const createJobOffer = async (clientUserId: string, payload: CreateJobOfferInput
 			title: payload.title,
 			message: payload.message && payload.message.length > 0 ? payload.message : null,
 			currency: payload.currency.toUpperCase(),
-			fixedPrice: new Prisma.Decimal(payload.fixedPrice),
-			type: JobOfferType.FIXED_PRICE,
-			startDate: payload.startDate ?? null,
-			expireAt: payload.expireAt ?? null,
-			status: sendNow ? JobOfferStatus.SENT : JobOfferStatus.DRAFT,
+                        fixedPrice: new Prisma.Decimal(payload.fixedPrice),
+                        type: JobOfferType.FIXED_PRICE,
+                        startDate: payload.startDate ?? null,
+                        endDate: payload.endDate ?? null,
+                        expireAt: payload.expireAt ?? null,
+                        status: sendNow ? JobOfferStatus.SENT : JobOfferStatus.DRAFT,
 			sentAt: sendNow ? now : null
 		},
 		include: jobOfferInclude
@@ -378,13 +379,17 @@ const updateJobOffer = async (clientUserId: string, offerId: string, payload: Up
 		data.fixedPrice = new Prisma.Decimal(payload.fixedPrice)
 	}
 
-	if (payload.startDate !== undefined) {
-		data.startDate = payload.startDate ?? null
-	}
+        if (payload.startDate !== undefined) {
+                data.startDate = payload.startDate ?? null
+        }
 
-	if (payload.expireAt !== undefined) {
-		data.expireAt = payload.expireAt ?? null
-	}
+        if (payload.endDate !== undefined) {
+                data.endDate = payload.endDate ?? null
+        }
+
+        if (payload.expireAt !== undefined) {
+                data.expireAt = payload.expireAt ?? null
+        }
 
 	const sendNow = payload.sendNow === true
 	const now = new Date()

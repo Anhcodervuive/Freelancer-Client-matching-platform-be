@@ -46,6 +46,7 @@ export const CreateJobOfferSchema = z
                 currency: CurrencySchema,
                 fixedPrice: z.coerce.number().positive('Giá phải lớn hơn 0'),
                 startDate: z.preprocess(coerceDate, z.date().optional()),
+                endDate: z.preprocess(coerceDate, z.date().optional()),
                 expireAt: z.preprocess(coerceDate, z.date().optional()),
                 sendNow: z.preprocess(parseBoolean, z.boolean().optional()).optional()
         })
@@ -66,10 +67,10 @@ export const CreateJobOfferSchema = z
                         })
                 }
 
-                if (data.startDate && data.expireAt && data.startDate > data.expireAt) {
+                if (data.startDate && data.endDate && data.startDate > data.endDate) {
                         ctx.addIssue({
                                 code: z.ZodIssueCode.custom,
-                                message: 'startDate phải trước expireAt',
+                                message: 'startDate phải trước endDate',
                                 path: ['startDate']
                         })
                 }
@@ -94,6 +95,7 @@ export const UpdateJobOfferSchema = z
                 currency: CurrencySchema.optional(),
                 fixedPrice: z.coerce.number().positive('Giá phải lớn hơn 0').optional(),
                 startDate: z.preprocess(coerceDate, z.date().nullable().optional()),
+                endDate: z.preprocess(coerceDate, z.date().nullable().optional()),
                 expireAt: z.preprocess(coerceDate, z.date().nullable().optional()),
                 status: z.nativeEnum(JobOfferStatus).optional(),
                 sendNow: z.preprocess(parseBoolean, z.boolean().optional()).optional()
@@ -133,13 +135,21 @@ export const UpdateJobOfferSchema = z
 
                 if (
                         data.startDate instanceof Date &&
-                        data.expireAt instanceof Date &&
-                        data.startDate > data.expireAt
+                        data.endDate instanceof Date &&
+                        data.startDate > data.endDate
                 ) {
                         ctx.addIssue({
                                 code: z.ZodIssueCode.custom,
-                                message: 'startDate phải trước expireAt',
+                                message: 'startDate phải trước endDate',
                                 path: ['startDate']
+                        })
+                }
+
+                if (data.endDate && !(data.endDate instanceof Date) && data.endDate !== null) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'endDate không hợp lệ',
+                                path: ['endDate']
                         })
                 }
         })

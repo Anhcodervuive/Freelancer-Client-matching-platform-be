@@ -168,6 +168,7 @@ const serializeJobOffer = (offer: JobOfferPayload | JobOfferSummaryPayload) => {
                 fixedPrice: offer.fixedPrice ? Number(offer.fixedPrice) : null,
                 type: offer.type,
                 startDate: offer.startDate ?? null,
+                endDate: offer.endDate ?? null,
                 expireAt: offer.expireAt ?? null,
                 status: offer.status,
                 sentAt: offer.sentAt ?? null,

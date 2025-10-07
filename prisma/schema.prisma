@@ -659,6 +659,7 @@ model JobOffer {
   currency     String
   fixedPrice   Decimal        @map("fixed_price") @db.Decimal(12, 2)
   startDate    DateTime?      @map("start_date")
+  endDate      DateTime?      @map("end_date")
   expireAt     DateTime?      @map("expire_at")
   status       JobOfferStatus @default(DRAFT)
   sentAt       DateTime?      @map("sent_at")
