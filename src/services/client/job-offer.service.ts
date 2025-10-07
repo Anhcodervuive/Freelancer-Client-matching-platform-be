@@ -1,4 +1,11 @@
-import { Prisma, JobOfferStatus, JobOfferType } from '~/generated/prisma'
+import {
+        Prisma,
+        JobOfferStatus,
+        JobOfferType,
+        NotificationCategory,
+        NotificationEvent,
+        NotificationResource
+} from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
@@ -7,6 +14,7 @@ import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { CreateJobOfferInput, JobOfferFilterInput, UpdateJobOfferInput } from '~/schema/job-offer.schema'
 import { jobOfferInclude, jobOfferSummaryInclude, serializeJobOffer } from '~/services/job-offer/shared'
+import notificationService from '~/services/notification.service'
 
 const ensureClientUser = async (userId: string) => {
 	const client = await prismaClient.client.findUnique({
@@ -34,9 +42,9 @@ const ensureFreelancerExists = async (freelancerId: string) => {
 }
 
 const ensureJobOwnedByClient = async (jobId: string, clientId: string) => {
-	const job = await prismaClient.jobPost.findUnique({
-		where: { id: jobId },
-		select: {
+        const job = await prismaClient.jobPost.findUnique({
+                where: { id: jobId },
+                select: {
 			id: true,
 			clientId: true,
 			isDeleted: true
@@ -96,9 +104,65 @@ const ensureInvitationBelongsToClient = async (invitationId: string, clientId: s
 	return invitation
 }
 
+const ensureNoExistingOfferForFreelancerOnJob = async (
+        clientId: string,
+        freelancerId: string,
+        jobId: string | null,
+        excludeOfferId?: string
+) => {
+        if (!jobId) {
+                return
+        }
+
+        const existingOffer = await prismaClient.jobOffer.findFirst({
+                where: {
+                        clientId,
+                        freelancerId,
+                        jobId,
+                        isDeleted: false,
+                        status: { not: JobOfferStatus.DRAFT },
+                        ...(excludeOfferId
+                                ? {
+                                          id: {
+                                                  not: excludeOfferId
+                                          }
+                                  }
+                                : {})
+                },
+                select: { id: true }
+        })
+
+        if (existingOffer) {
+                throw new BadRequestException(
+                        'Bạn đã tạo offer cho freelancer này trong công việc này, vui lòng chỉnh sửa offer hiện có',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+}
+
+const notifyOfferSent = async (clientUserId: string, offer: { id: string; freelancerId: string; jobId: string | null }) => {
+        try {
+                await notificationService.create({
+                        recipientId: offer.freelancerId,
+                        actorId: clientUserId,
+                        category: NotificationCategory.JOB,
+                        event: NotificationEvent.JOB_OFFER_SENT,
+                        resourceType: NotificationResource.JOB_OFFER,
+                        resourceId: offer.id,
+                        payload: {
+                                jobId: offer.jobId,
+                                offerId: offer.id
+                        }
+                })
+        } catch (notificationError) {
+                // eslint-disable-next-line no-console
+                console.error('Không thể tạo thông báo khi gửi offer', notificationError)
+        }
+}
+
 const createJobOffer = async (clientUserId: string, payload: CreateJobOfferInput) => {
-	await ensureClientUser(clientUserId)
-	await ensureFreelancerExists(payload.freelancerId)
+        await ensureClientUser(clientUserId)
+        await ensureFreelancerExists(payload.freelancerId)
 
 	let jobId = payload.jobId ?? null
 	let proposalId = payload.proposalId ?? null
@@ -132,14 +196,16 @@ const createJobOffer = async (clientUserId: string, payload: CreateJobOfferInput
 		jobId = invitation.jobId
 	}
 
-	if (jobId) {
-		await ensureJobOwnedByClient(jobId, clientUserId)
-	}
+        if (jobId) {
+                await ensureJobOwnedByClient(jobId, clientUserId)
+        }
 
-	const sendNow = payload.sendNow === true
-	const now = new Date()
+        await ensureNoExistingOfferForFreelancerOnJob(clientUserId, payload.freelancerId, jobId)
 
-	const offer = await prismaClient.jobOffer.create({
+        const sendNow = payload.sendNow === true
+        const now = new Date()
+
+        const offer = await prismaClient.jobOffer.create({
 		data: {
 			jobId,
 			clientId: clientUserId,
@@ -157,10 +223,14 @@ const createJobOffer = async (clientUserId: string, payload: CreateJobOfferInput
                         status: sendNow ? JobOfferStatus.SENT : JobOfferStatus.DRAFT,
 			sentAt: sendNow ? now : null
 		},
-		include: jobOfferInclude
-	})
+                include: jobOfferInclude
+        })
 
-	return serializeJobOffer(offer)
+        if (sendNow) {
+                await notifyOfferSent(clientUserId, offer)
+        }
+
+        return serializeJobOffer(offer)
 }
 
 const listJobOffers = async (clientUserId: string, filters: JobOfferFilterInput) => {
@@ -341,14 +411,16 @@ const updateJobOffer = async (clientUserId: string, offerId: string, payload: Up
 		}
 	}
 
-	if (jobId) {
-		await ensureJobOwnedByClient(jobId, clientUserId)
-	}
+        if (jobId) {
+                await ensureJobOwnedByClient(jobId, clientUserId)
+        }
 
-	const data: any = {}
+        await ensureNoExistingOfferForFreelancerOnJob(clientUserId, freelancerId, jobId, existing.id)
 
-	if (freelancerId !== existing.freelancerId) {
-		data.freelancerId = freelancerId
+        const data: any = {}
+
+        if (freelancerId !== existing.freelancerId) {
+                data.freelancerId = freelancerId
 	}
 
 	if (shouldUpdateJobId) {
@@ -394,35 +466,45 @@ const updateJobOffer = async (clientUserId: string, offerId: string, payload: Up
 	const sendNow = payload.sendNow === true
 	const now = new Date()
 
-	if (payload.status) {
-		if (payload.status === JobOfferStatus.SENT) {
-			data.status = JobOfferStatus.SENT
-			data.sentAt = now
-			data.respondedAt = null
-		} else if (payload.status === JobOfferStatus.DRAFT) {
-			data.status = JobOfferStatus.DRAFT
-			data.sentAt = null
-			data.respondedAt = null
-		} else if (payload.status === JobOfferStatus.WITHDRAWN) {
-			data.status = JobOfferStatus.WITHDRAWN
-			data.respondedAt = now
-		}
-	} else if (sendNow) {
-		if (existing.status === JobOfferStatus.SENT) {
-			data.sentAt = now
-		} else {
-			data.status = JobOfferStatus.SENT
-			data.sentAt = now
-		}
-	}
+        let shouldNotify = false
 
-	const updated = await prismaClient.jobOffer.update({
-		where: { id: offerId },
-		data,
-		include: jobOfferInclude
-	})
+        if (payload.status) {
+                if (payload.status === JobOfferStatus.SENT) {
+                        data.status = JobOfferStatus.SENT
+                        data.sentAt = now
+                        data.respondedAt = null
+                        if (existing.status !== JobOfferStatus.SENT) {
+                                shouldNotify = true
+                        }
+                } else if (payload.status === JobOfferStatus.DRAFT) {
+                        data.status = JobOfferStatus.DRAFT
+                        data.sentAt = null
+                        data.respondedAt = null
+                } else if (payload.status === JobOfferStatus.WITHDRAWN) {
+                        data.status = JobOfferStatus.WITHDRAWN
+                        data.respondedAt = now
+                }
+        } else if (sendNow) {
+                if (existing.status === JobOfferStatus.SENT) {
+                        data.sentAt = now
+                } else {
+                        data.status = JobOfferStatus.SENT
+                        data.sentAt = now
+                        shouldNotify = true
+                }
+        }
 
-	return serializeJobOffer(updated)
+        const updated = await prismaClient.jobOffer.update({
+                where: { id: offerId },
+                data,
+                include: jobOfferInclude
+        })
+
+        if (shouldNotify) {
+                await notifyOfferSent(clientUserId, { id: updated.id, freelancerId, jobId })
+        }
+
+        return serializeJobOffer(updated)
 }
 
 const deleteJobOffer = async (clientUserId: string, offerId: string) => {
