@@ -5,41 +5,69 @@ import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import { ContractListFilterInput } from '~/schema/contract.schema'
 
+const contractJobSummarySelect = Prisma.validator<Prisma.JobPostSelect>()({
+        id: true,
+        title: true,
+        status: true,
+        paymentMode: true,
+        budgetAmount: true,
+        budgetCurrency: true
+})
+
+const contractClientSelect = Prisma.validator<Prisma.ClientSelect>()({
+        userId: true,
+        companyName: true,
+        profile: {
+                select: {
+                        firstName: true,
+                        lastName: true,
+                        country: true,
+                        city: true
+                }
+        }
+})
+
+const contractFreelancerSelect = Prisma.validator<Prisma.FreelancerSelect>()({
+        userId: true,
+        title: true,
+        profile: {
+                select: {
+                        firstName: true,
+                        lastName: true,
+                        country: true,
+                        city: true
+                }
+        }
+})
+
 const contractSummaryInclude = Prisma.validator<Prisma.ContractInclude>()({
         jobPost: {
-                select: {
-                        id: true,
-                        title: true,
-                        status: true,
-                        paymentMode: true,
-                        budgetAmount: true,
-                        budgetCurrency: true
-                }
+                select: contractJobSummarySelect
         },
         client: {
-                select: {
-                        userId: true,
-                        companyName: true,
-                        profile: {
-                                select: {
-                                        firstName: true,
-                                        lastName: true,
-                                        country: true,
-                                        city: true
-                                }
-                        }
-                }
+                select: contractClientSelect
         },
         freelancer: {
-                select: {
-                        userId: true,
-                        title: true,
-                        profile: {
-                                select: {
-                                        firstName: true,
-                                        lastName: true,
-                                        country: true,
-                                        city: true
+                select: contractFreelancerSelect
+        }
+})
+
+const contractJobDetailInclude = Prisma.validator<Prisma.JobPostInclude>()({
+        specialty: {
+                include: {
+                        category: true
+                }
+        },
+        languages: true,
+        requiredSkills: {
+                include: { skill: true }
+        },
+        screeningQuestions: true,
+        attachments: {
+                include: {
+                        assetLink: {
+                                include: {
+                                        asset: true
                                 }
                         }
                 }
@@ -47,7 +75,15 @@ const contractSummaryInclude = Prisma.validator<Prisma.ContractInclude>()({
 })
 
 const contractDetailInclude = Prisma.validator<Prisma.ContractInclude>()({
-        ...contractSummaryInclude,
+        jobPost: {
+                include: contractJobDetailInclude
+        },
+        client: {
+                select: contractClientSelect
+        },
+        freelancer: {
+                select: contractFreelancerSelect
+        },
         proposal: {
                 select: {
                         id: true,
@@ -82,6 +118,7 @@ const milestoneInclude = Prisma.validator<Prisma.MilestoneInclude>()({
 type ContractSummaryPayload = Prisma.ContractGetPayload<{ include: typeof contractSummaryInclude }>
 type ContractDetailPayload = Prisma.ContractGetPayload<{ include: typeof contractDetailInclude }>
 type MilestonePayload = Prisma.MilestoneGetPayload<{ include: typeof milestoneInclude }>
+type ContractJobSkillRelation = NonNullable<ContractDetailPayload['jobPost']>['requiredSkills'][number]
 
 type ProfileSummary = ContractSummaryPayload['client']['profile'] | null
 
@@ -133,7 +170,7 @@ const serializeFreelancer = (freelancer: ContractSummaryPayload['freelancer']) =
         }
 }
 
-const serializeJobPost = (jobPost: ContractSummaryPayload['jobPost']) => {
+const serializeJobPostSummary = (jobPost: ContractSummaryPayload['jobPost']) => {
         if (!jobPost) return null
 
         return {
@@ -143,6 +180,129 @@ const serializeJobPost = (jobPost: ContractSummaryPayload['jobPost']) => {
                 paymentMode: jobPost.paymentMode,
                 budgetAmount: jobPost.budgetAmount ? Number(jobPost.budgetAmount) : null,
                 budgetCurrency: jobPost.budgetCurrency ?? null
+        }
+}
+
+const sortScreeningQuestions = <T extends { orderIndex: number; createdAt: Date }>(
+        questions: readonly T[]
+) => {
+        return [...questions].sort((a, b) => {
+                if (a.orderIndex !== b.orderIndex) return a.orderIndex - b.orderIndex
+                return a.createdAt.getTime() - b.createdAt.getTime()
+        })
+}
+
+const mapJobSkills = (relations: readonly ContractJobSkillRelation[]) => {
+        const required: { id: string; name: string; slug: string; orderHint: number | null }[] = []
+        const preferred: { id: string; name: string; slug: string; orderHint: number | null }[] = []
+
+        const sorted = [...relations].sort((a, b) => {
+                if (a.isPreferred !== b.isPreferred) {
+                        return a.isPreferred ? 1 : -1
+                }
+
+                const hintA = a.orderHint ?? Number.MAX_SAFE_INTEGER
+                const hintB = b.orderHint ?? Number.MAX_SAFE_INTEGER
+
+                if (hintA !== hintB) {
+                        return hintA - hintB
+                }
+
+                return 0
+        })
+
+        for (const relation of sorted) {
+                const view = {
+                        id: relation.skill.id,
+                        name: relation.skill.name,
+                        slug: relation.skill.slug,
+                        orderHint: relation.orderHint ?? null
+                }
+
+                if (relation.isPreferred) {
+                        preferred.push(view)
+                } else {
+                        required.push(view)
+                }
+        }
+
+        return { required, preferred }
+}
+
+const serializeJobPostDetail = (jobPost: ContractDetailPayload['jobPost']) => {
+        if (!jobPost) return null
+
+        const skills = mapJobSkills(jobPost.requiredSkills)
+        const attachments = jobPost.attachments
+                .map(attachment => ({
+                        id: attachment.id,
+                        assetLinkId: attachment.assetLinkId,
+                        addedBy: attachment.addedBy ?? null,
+                        createdAt: attachment.createdAt,
+                        updatedAt: attachment.updatedAt,
+                        position: attachment.assetLink.position,
+                        isPrimary: attachment.assetLink.isPrimary,
+                        label: attachment.assetLink.label ?? null,
+                        caption: attachment.assetLink.caption ?? null,
+                        asset: {
+                                id: attachment.assetLink.assetId,
+                                kind: attachment.assetLink.asset.kind,
+                                url: attachment.assetLink.asset.url ?? null,
+                                publicId: attachment.assetLink.asset.publicId ?? null,
+                                mimeType: attachment.assetLink.asset.mimeType ?? null,
+                                bytes: attachment.assetLink.asset.bytes ?? null,
+                                width: attachment.assetLink.asset.width ?? null,
+                                height: attachment.assetLink.asset.height ?? null
+                        }
+                }))
+                .sort((a, b) => a.position - b.position)
+
+        const specialty = jobPost.specialty
+                ? {
+                          id: jobPost.specialty.id,
+                          name: jobPost.specialty.name,
+                          category: jobPost.specialty.category
+                                  ? {
+                                            id: jobPost.specialty.category.id,
+                                            name: jobPost.specialty.category.name
+                                    }
+                                  : null
+                  }
+                : null
+
+        return {
+                id: jobPost.id,
+                title: jobPost.title,
+                status: jobPost.status,
+                paymentMode: jobPost.paymentMode,
+                budgetAmount: jobPost.budgetAmount ? Number(jobPost.budgetAmount) : null,
+                budgetCurrency: jobPost.budgetCurrency ?? null,
+                description: jobPost.description,
+                duration: jobPost.duration ?? null,
+                experienceLevel: jobPost.experienceLevel,
+                locationType: jobPost.locationType,
+                preferredLocations: Array.isArray(jobPost.preferredLocations)
+                        ? jobPost.preferredLocations
+                        : [],
+                customTerms: (jobPost.customTerms ?? null) as Record<string, unknown> | null,
+                visibility: jobPost.visibility,
+                publishedAt: jobPost.publishedAt ?? null,
+                closedAt: jobPost.closedAt ?? null,
+                createdAt: jobPost.createdAt,
+                updatedAt: jobPost.updatedAt,
+                specialty,
+                languages: jobPost.languages.map(language => ({
+                        languageCode: language.languageCode,
+                        proficiency: language.proficiency
+                })),
+                skills,
+                screeningQuestions: sortScreeningQuestions(jobPost.screeningQuestions).map(question => ({
+                        id: question.id,
+                        question: question.question,
+                        isRequired: question.isRequired,
+                        orderIndex: question.orderIndex
+                })),
+                attachments
         }
 }
 
@@ -156,7 +316,7 @@ const serializeContractSummary = (contract: ContractSummaryPayload) => {
                 jobPostId: contract.jobPostId,
                 proposalId: contract.proposalId,
                 offerId: contract.offerId,
-                jobPost: serializeJobPost(contract.jobPost),
+                jobPost: serializeJobPostSummary(contract.jobPost),
                 client: serializeClient(contract.client),
                 freelancer: serializeFreelancer(contract.freelancer),
                 createdAt: contract.createdAt,
@@ -169,6 +329,7 @@ const serializeContractDetail = (contract: ContractDetailPayload) => {
 
         return {
                 ...base,
+                jobPost: serializeJobPostDetail(contract.jobPost),
                 proposal: contract.proposal
                         ? {
                                   id: contract.proposal.id,
