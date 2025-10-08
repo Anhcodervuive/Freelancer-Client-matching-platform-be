@@ -54,37 +54,40 @@ async function buildAvatarMap(userIds: Iterable<string>) {
 	return new Map<string, string | null>(avatarEntries)
 }
 
-async function attachAvatarToParticipants<T extends ParticipantWithUser>(data: T[]): Promise<T[]>
-async function attachAvatarToParticipants<T extends ParticipantWithUser>(data: T): Promise<T>
-async function attachAvatarToParticipants<T extends ParticipantWithUser>(data: T | T[]) {
-	const collection = Array.isArray(data) ? data : [data]
+async function attachAvatarToParticipants<T extends ParticipantWithUser>(data: T[]): Promise<T[]> {
+        if (data.length === 0) {
+                return data
+        }
 
-	const userIds = new Set<string>()
+        const userIds = new Set<string>()
 
-	collection.forEach(item => {
-		item.participants?.forEach(participant => {
-			if (participant.user?.id) {
-				userIds.add(participant.user.id)
-			}
-		})
-	})
+        data.forEach(item => {
+                item.participants?.forEach(participant => {
+                        if (participant.user?.id) {
+                                userIds.add(participant.user.id)
+                        }
+                })
+        })
 
-	const avatarMap = await buildAvatarMap(userIds)
+        const avatarMap = await buildAvatarMap(userIds)
 
-	const result = collection.map(item => ({
-		...item,
-		participants: item.participants?.map(participant => ({
-			...participant,
-			user: participant.user
-				? {
-						...participant.user,
-						avatar: avatarMap.get(participant.user.id) ?? null
-				  }
-				: participant.user
-		}))
-	})) as T[]
+        return data.map(item => ({
+                ...item,
+                participants: item.participants?.map(participant => ({
+                        ...participant,
+                        user: participant.user
+                                ? {
+                                                ...participant.user,
+                                                avatar: avatarMap.get(participant.user.id) ?? null
+                                  }
+                                : participant.user
+                }))
+        })) as T[]
+}
 
-	return Array.isArray(data) ? result : result[0]
+async function attachAvatarToParticipant<T extends ParticipantWithUser>(data: T): Promise<T> {
+        const [result] = await attachAvatarToParticipants([data])
+        return result!
 }
 
 async function attachAvatarToMessages<T extends MessageWithRelatedUsers>(data: T[]): Promise<T[]>
@@ -400,7 +403,7 @@ const chatService = {
 			throw new ForbiddenException('You are not a participant of this chat thread', ErrorCode.FORBIDDEN)
 		}
 
-		const threadWithAvatar = await attachAvatarToParticipants(thread)
+                const threadWithAvatar = await attachAvatarToParticipant(thread)
 
 		return threadWithAvatar
 	},
