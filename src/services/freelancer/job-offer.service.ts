@@ -1,4 +1,11 @@
-import { Prisma, JobOfferStatus, JobProposalStatus } from '~/generated/prisma'
+import {
+        Prisma,
+        JobOfferStatus,
+        JobProposalStatus,
+        NotificationCategory,
+        NotificationEvent,
+        NotificationResource
+} from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
@@ -13,6 +20,7 @@ import {
 	type JobOfferPayload
 } from '~/services/job-offer/shared'
 import chatThreadService from '~/services/chat/chat-thread.service'
+import notificationService from '~/services/notification.service'
 
 const uniquePreserveOrder = <T>(items: readonly T[]): T[] => {
 	const seen = new Set<T>()
@@ -182,25 +190,48 @@ const getJobOfferDetail = async (freelancerUserId: string, offerId: string) => {
 }
 
 const ensureOfferRespondable = (offer: JobOfferPayload) => {
-	if (offer.status === JobOfferStatus.DRAFT) {
-		throw new BadRequestException('Offer chưa được gửi cho bạn', ErrorCode.PARAM_QUERY_ERROR)
-	}
+        if (offer.status === JobOfferStatus.DRAFT) {
+                throw new BadRequestException('Offer chưa được gửi cho bạn', ErrorCode.PARAM_QUERY_ERROR)
+        }
 
-	if (offer.status === JobOfferStatus.ACCEPTED) {
-		throw new BadRequestException('Offer đã được chấp thuận trước đó', ErrorCode.PARAM_QUERY_ERROR)
-	}
+        if (offer.status === JobOfferStatus.ACCEPTED) {
+                throw new BadRequestException('Offer đã được chấp thuận trước đó', ErrorCode.PARAM_QUERY_ERROR)
+        }
 
-	if (offer.status === JobOfferStatus.DECLINED) {
-		throw new BadRequestException('Offer đã bị từ chối trước đó', ErrorCode.PARAM_QUERY_ERROR)
-	}
+        if (offer.status === JobOfferStatus.DECLINED) {
+                throw new BadRequestException('Offer đã bị từ chối trước đó', ErrorCode.PARAM_QUERY_ERROR)
+        }
 
-	if (offer.status === JobOfferStatus.WITHDRAWN) {
-		throw new BadRequestException('Offer đã bị client rút lại', ErrorCode.PARAM_QUERY_ERROR)
-	}
+        if (offer.status === JobOfferStatus.WITHDRAWN) {
+                throw new BadRequestException('Offer đã bị client rút lại', ErrorCode.PARAM_QUERY_ERROR)
+        }
 
-	if (offer.status === JobOfferStatus.EXPIRED) {
-		throw new BadRequestException('Offer đã hết hạn', ErrorCode.PARAM_QUERY_ERROR)
-	}
+        if (offer.status === JobOfferStatus.EXPIRED) {
+                throw new BadRequestException('Offer đã hết hạn', ErrorCode.PARAM_QUERY_ERROR)
+        }
+}
+
+const notifyClientOfferDeclined = async (freelancerId: string, offer: JobOfferPayload) => {
+        const serializedOffer = serializeJobOffer(offer)
+
+        try {
+                await notificationService.create({
+                        recipientId: offer.clientId,
+                        actorId: freelancerId,
+                        category: NotificationCategory.JOB,
+                        event: NotificationEvent.JOB_OFFER_DECLINED,
+                        resourceType: NotificationResource.JOB_OFFER,
+                        resourceId: offer.id,
+                        payload: {
+                                jobId: offer.jobId,
+                                offerId: offer.id,
+                                offer: serializedOffer
+                        }
+                })
+        } catch (notificationError) {
+                // eslint-disable-next-line no-console
+                console.error('Không thể tạo thông báo khi freelancer từ chối offer', notificationError)
+        }
 }
 
 const respondToJobOffer = async (freelancerUserId: string, offerId: string, payload: RespondJobOfferInput) => {
@@ -286,16 +317,18 @@ const respondToJobOffer = async (freelancerUserId: string, offerId: string, payl
 		return serializeJobOffer(result.updatedOffer)
 	}
 
-	const declined = await prismaClient.jobOffer.update({
-		where: { id: offer.id },
-		data: {
-			status: JobOfferStatus.DECLINED,
-			respondedAt: now
-		},
-		include: jobOfferInclude
-	})
+        const declined = await prismaClient.jobOffer.update({
+                where: { id: offer.id },
+                data: {
+                        status: JobOfferStatus.DECLINED,
+                        respondedAt: now
+                },
+                include: jobOfferInclude
+        })
 
-	return serializeJobOffer(declined)
+        await notifyClientOfferDeclined(freelancerUserId, declined)
+
+        return serializeJobOffer(declined)
 }
 
 const freelancerJobOfferService = {

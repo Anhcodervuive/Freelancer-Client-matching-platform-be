@@ -125,7 +125,7 @@ const ensureNoExistingOfferForFreelancerOnJob = async (
                         freelancerId,
                         jobId,
                         isDeleted: false,
-                        status: { not: JobOfferStatus.DRAFT },
+                        status: { notIn: [JobOfferStatus.DRAFT, JobOfferStatus.DECLINED] },
                         ...(excludeOfferId
                                 ? {
                                           id: {
@@ -145,7 +145,12 @@ const ensureNoExistingOfferForFreelancerOnJob = async (
         }
 }
 
-const notifyOfferSent = async (clientUserId: string, offer: JobOfferPayload) => {
+const notifyFreelancerAboutOffer = async (
+        clientUserId: string,
+        offer: JobOfferPayload,
+        event: NotificationEvent,
+        extraPayload: Record<string, unknown> = {}
+) => {
         const serializedOffer = serializeJobOffer(offer)
 
         try {
@@ -153,18 +158,19 @@ const notifyOfferSent = async (clientUserId: string, offer: JobOfferPayload) => 
                         recipientId: offer.freelancerId,
                         actorId: clientUserId,
                         category: NotificationCategory.JOB,
-                        event: NotificationEvent.JOB_OFFER_SENT,
+                        event,
                         resourceType: NotificationResource.JOB_OFFER,
                         resourceId: offer.id,
                         payload: {
                                 jobId: offer.jobId,
                                 offerId: offer.id,
-                                offer: serializedOffer
+                                offer: serializedOffer,
+                                ...extraPayload
                         }
                 })
         } catch (notificationError) {
                 // eslint-disable-next-line no-console
-                console.error('Không thể tạo thông báo khi gửi offer', notificationError)
+                console.error('Không thể tạo thông báo cho offer', notificationError)
         }
 }
 
@@ -235,7 +241,9 @@ const createJobOffer = async (clientUserId: string, payload: CreateJobOfferInput
         })
 
         if (sendNow) {
-                await notifyOfferSent(clientUserId, offer)
+                await notifyFreelancerAboutOffer(clientUserId, offer, NotificationEvent.JOB_OFFER_SENT, {
+                        action: 'sent'
+                })
         }
 
         return serializeJobOffer(offer)
@@ -471,18 +479,23 @@ const updateJobOffer = async (clientUserId: string, offerId: string, payload: Up
                 data.expireAt = payload.expireAt ?? null
         }
 
-	const sendNow = payload.sendNow === true
-	const now = new Date()
+        const sendNow = payload.sendNow === true
+        const now = new Date()
 
-        let shouldNotify = false
+        let notificationEvent: NotificationEvent | null = null
+        let notificationPayload: Record<string, unknown> | null = null
 
         if (payload.status) {
                 if (payload.status === JobOfferStatus.SENT) {
                         data.status = JobOfferStatus.SENT
                         data.sentAt = now
                         data.respondedAt = null
-                        if (existing.status !== JobOfferStatus.SENT) {
-                                shouldNotify = true
+                        if (existing.status === JobOfferStatus.SENT) {
+                                notificationEvent = NotificationEvent.JOB_OFFER_UPDATED
+                                notificationPayload = { action: 'updated' }
+                        } else {
+                                notificationEvent = NotificationEvent.JOB_OFFER_SENT
+                                notificationPayload = { action: 'sent' }
                         }
                 } else if (payload.status === JobOfferStatus.DRAFT) {
                         data.status = JobOfferStatus.DRAFT
@@ -491,14 +504,20 @@ const updateJobOffer = async (clientUserId: string, offerId: string, payload: Up
                 } else if (payload.status === JobOfferStatus.WITHDRAWN) {
                         data.status = JobOfferStatus.WITHDRAWN
                         data.respondedAt = now
+                        notificationEvent = NotificationEvent.JOB_OFFER_WITHDRAWN
+                        notificationPayload = { action: 'withdrawn' }
                 }
         } else if (sendNow) {
                 if (existing.status === JobOfferStatus.SENT) {
                         data.sentAt = now
+                        notificationEvent = NotificationEvent.JOB_OFFER_UPDATED
+                        notificationPayload = { action: 'updated' }
                 } else {
                         data.status = JobOfferStatus.SENT
                         data.sentAt = now
-                        shouldNotify = true
+                        data.respondedAt = null
+                        notificationEvent = NotificationEvent.JOB_OFFER_SENT
+                        notificationPayload = { action: 'sent' }
                 }
         }
 
@@ -508,8 +527,13 @@ const updateJobOffer = async (clientUserId: string, offerId: string, payload: Up
                 include: jobOfferInclude
         })
 
-        if (shouldNotify) {
-                await notifyOfferSent(clientUserId, updated)
+        if (notificationEvent) {
+                await notifyFreelancerAboutOffer(
+                        clientUserId,
+                        updated,
+                        notificationEvent,
+                        notificationPayload ?? {}
+                )
         }
 
         return serializeJobOffer(updated)
