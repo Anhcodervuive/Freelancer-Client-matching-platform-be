@@ -129,6 +129,8 @@ const serializeFreelancerSummary = (
         }
 }
 
+const AUTO_WITHDRAW_REASON_HIRED = 'Đã chọn được freelancer khác cho công việc này'
+
 const serializeJobOffer = (offer: JobOfferPayload | JobOfferSummaryPayload) => {
         return {
                 id: offer.id,
@@ -173,6 +175,7 @@ const serializeJobOffer = (offer: JobOfferPayload | JobOfferSummaryPayload) => {
                 status: offer.status,
                 sentAt: offer.sentAt ?? null,
                 respondedAt: offer.respondedAt ?? null,
+                withdrawReason: offer.withdrawReason ?? null,
                 createdAt: offer.createdAt,
                 updatedAt: offer.updatedAt
         }
@@ -186,5 +189,6 @@ export {
         serializeJobOffer,
         type JobOfferPayload,
         type JobOfferSummaryPayload,
-        type SerializedJobOffer
+        type SerializedJobOffer,
+        AUTO_WITHDRAW_REASON_HIRED
 }

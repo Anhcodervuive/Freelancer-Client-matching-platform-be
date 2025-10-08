@@ -490,6 +490,7 @@ const updateJobOffer = async (clientUserId: string, offerId: string, payload: Up
                         data.status = JobOfferStatus.SENT
                         data.sentAt = now
                         data.respondedAt = null
+                        data.withdrawReason = null
                         if (existing.status === JobOfferStatus.SENT) {
                                 notificationEvent = NotificationEvent.JOB_OFFER_UPDATED
                                 notificationPayload = { action: 'updated' }
@@ -501,21 +502,28 @@ const updateJobOffer = async (clientUserId: string, offerId: string, payload: Up
                         data.status = JobOfferStatus.DRAFT
                         data.sentAt = null
                         data.respondedAt = null
+                        data.withdrawReason = null
                 } else if (payload.status === JobOfferStatus.WITHDRAWN) {
                         data.status = JobOfferStatus.WITHDRAWN
                         data.respondedAt = now
+                        data.withdrawReason = typeof payload.withdrawReason === 'string' ? payload.withdrawReason : null
                         notificationEvent = NotificationEvent.JOB_OFFER_WITHDRAWN
-                        notificationPayload = { action: 'withdrawn' }
+                        notificationPayload = {
+                                action: 'withdrawn',
+                                withdrawReason: data.withdrawReason ?? undefined
+                        }
                 }
         } else if (sendNow) {
                 if (existing.status === JobOfferStatus.SENT) {
                         data.sentAt = now
+                        data.withdrawReason = null
                         notificationEvent = NotificationEvent.JOB_OFFER_UPDATED
                         notificationPayload = { action: 'updated' }
                 } else {
                         data.status = JobOfferStatus.SENT
                         data.sentAt = now
                         data.respondedAt = null
+                        data.withdrawReason = null
                         notificationEvent = NotificationEvent.JOB_OFFER_SENT
                         notificationPayload = { action: 'sent' }
                 }

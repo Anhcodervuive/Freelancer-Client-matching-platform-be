@@ -14,10 +14,11 @@ import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { FreelancerJobOfferFilterInput, RespondJobOfferInput } from '~/schema/job-offer.schema'
 import {
-	jobOfferInclude,
-	jobOfferSummaryInclude,
-	serializeJobOffer,
-	type JobOfferPayload
+        jobOfferInclude,
+        jobOfferSummaryInclude,
+        serializeJobOffer,
+        type JobOfferPayload,
+        AUTO_WITHDRAW_REASON_HIRED
 } from '~/services/job-offer/shared'
 import chatThreadService from '~/services/chat/chat-thread.service'
 import notificationService from '~/services/notification.service'
@@ -234,6 +235,34 @@ const notifyClientOfferDeclined = async (freelancerId: string, offer: JobOfferPa
         }
 }
 
+const notifyFreelancerOfferWithdrawn = async (
+        clientId: string,
+        offer: JobOfferPayload,
+        extraPayload: Record<string, unknown> = {}
+) => {
+        const serializedOffer = serializeJobOffer(offer)
+
+        try {
+                await notificationService.create({
+                        recipientId: offer.freelancerId,
+                        actorId: clientId,
+                        category: NotificationCategory.JOB,
+                        event: NotificationEvent.JOB_OFFER_WITHDRAWN,
+                        resourceType: NotificationResource.JOB_OFFER,
+                        resourceId: offer.id,
+                        payload: {
+                                jobId: offer.jobId,
+                                offerId: offer.id,
+                                offer: serializedOffer,
+                                ...extraPayload
+                        }
+                })
+        } catch (notificationError) {
+                // eslint-disable-next-line no-console
+                console.error('Không thể tạo thông báo khi offer bị rút tự động', notificationError)
+        }
+}
+
 const respondToJobOffer = async (freelancerUserId: string, offerId: string, payload: RespondJobOfferInput) => {
 	await ensureFreelancerUser(freelancerUserId)
 
@@ -291,50 +320,97 @@ const respondToJobOffer = async (freelancerUserId: string, offerId: string, payl
                                 }
                         }
 
+                        let withdrawnOffers: JobOfferPayload[] = []
+
+                        if (offer.jobId) {
+                                const offersToWithdraw = await tx.jobOffer.findMany({
+                                        where: {
+                                                jobId: offer.jobId,
+                                                status: JobOfferStatus.SENT,
+                                                isDeleted: false,
+                                                id: { not: offer.id }
+                                        },
+                                        include: jobOfferInclude
+                                })
+
+                                if (offersToWithdraw.length > 0) {
+                                        const withdrawIds = offersToWithdraw.map((item) => item.id)
+                                        await tx.jobOffer.updateMany({
+                                                where: { id: { in: withdrawIds } },
+                                                data: {
+                                                        status: JobOfferStatus.WITHDRAWN,
+                                                        respondedAt: now,
+                                                        withdrawReason: AUTO_WITHDRAW_REASON_HIRED
+                                                }
+                                        })
+
+                                        withdrawnOffers = offersToWithdraw.map((item) => ({
+                                                ...item,
+                                                status: JobOfferStatus.WITHDRAWN,
+                                                respondedAt: now,
+                                                withdrawReason: AUTO_WITHDRAW_REASON_HIRED
+                                        })) as JobOfferPayload[]
+                                }
+                        }
+
                         if (offer.proposalId) {
                                 await tx.jobProposal.update({
                                         where: { id: offer.proposalId },
                                         data: { status: JobProposalStatus.HIRED }
                                 })
-			}
+                        }
 
-			const updatedOffer = await tx.jobOffer.update({
-				where: { id: offer.id },
-				data: {
-					status: JobOfferStatus.ACCEPTED,
-					respondedAt: now
-				},
-				include: jobOfferInclude
-			})
+                        const updatedOffer = await tx.jobOffer.update({
+                                where: { id: offer.id },
+                                data: {
+                                        status: JobOfferStatus.ACCEPTED,
+                                        respondedAt: now,
+                                        withdrawReason: null
+                                },
+                                include: jobOfferInclude
+                        })
 
-			const contract = await tx.contract.create({
-				data: {
-					clientId: offer.clientId,
-					freelancerId: offer.freelancerId,
-					jobPostId: offer.jobId ?? null,
-					proposalId: offer.proposalId ?? null,
-					offerId: offer.id,
-					title: offer.title,
-					currency: offer.currency
-				}
-			})
+                        const contract = await tx.contract.create({
+                                data: {
+                                        clientId: offer.clientId,
+                                        freelancerId: offer.freelancerId,
+                                        jobPostId: offer.jobId ?? null,
+                                        proposalId: offer.proposalId ?? null,
+                                        offerId: offer.id,
+                                        title: offer.title,
+                                        currency: offer.currency
+                                }
+                        })
 
-			return { updatedOffer, contract }
-		})
+                        return { updatedOffer, contract, withdrawnOffers }
+                })
 
-		if (offer.jobId && offer.proposalId) {
-			await chatThreadService.ensureProjectThreadForProposal({
-				jobPostId: offer.jobId,
-				proposalId: offer.proposalId,
+                if (offer.jobId && offer.proposalId) {
+                        await chatThreadService.ensureProjectThreadForProposal({
+                                jobPostId: offer.jobId,
+                                proposalId: offer.proposalId,
 				clientId: offer.clientId,
 				freelancerId: offer.freelancerId,
 				jobTitle: offer.job?.title ?? offer.title,
-				contractId: result.contract.id
-			})
-		}
+                                contractId: result.contract.id
+                        })
+                }
 
-		return serializeJobOffer(result.updatedOffer)
-	}
+                if (result.withdrawnOffers.length > 0) {
+                        await Promise.all(
+                                result.withdrawnOffers.map((withdrawnOffer) =>
+                                        notifyFreelancerOfferWithdrawn(result.updatedOffer.clientId, withdrawnOffer, {
+                                                action: 'withdrawn',
+                                                withdrawReason:
+                                                        withdrawnOffer.withdrawReason ?? AUTO_WITHDRAW_REASON_HIRED,
+                                                autoWithdraw: true
+                                        })
+                                )
+                        )
+                }
+
+                return serializeJobOffer(result.updatedOffer)
+        }
 
         const declined = await prismaClient.jobOffer.update({
                 where: { id: offer.id },

@@ -98,7 +98,10 @@ export const UpdateJobOfferSchema = z
                 endDate: z.preprocess(coerceDate, z.date().nullable().optional()),
                 expireAt: z.preprocess(coerceDate, z.date().nullable().optional()),
                 status: z.nativeEnum(JobOfferStatus).optional(),
-                sendNow: z.preprocess(parseBoolean, z.boolean().optional()).optional()
+                sendNow: z.preprocess(parseBoolean, z.boolean().optional()).optional(),
+                withdrawReason: z
+                        .union([z.string().trim().min(1).max(255), z.null()])
+                        .optional()
         })
         .superRefine((data, ctx) => {
                 if (data.status && !ClientUpdatableStatuses.includes(data.status)) {
@@ -150,6 +153,25 @@ export const UpdateJobOfferSchema = z
                                 code: z.ZodIssueCode.custom,
                                 message: 'endDate không hợp lệ',
                                 path: ['endDate']
+                        })
+                }
+
+                if (data.status === JobOfferStatus.WITHDRAWN) {
+                        const reason = data.withdrawReason
+                        if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+                                ctx.addIssue({
+                                        code: z.ZodIssueCode.custom,
+                                        message: 'Cần cung cấp lý do khi rút offer',
+                                        path: ['withdrawReason']
+                                })
+                        }
+                }
+
+                if (data.withdrawReason !== undefined && data.status !== JobOfferStatus.WITHDRAWN) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'withdrawReason chỉ áp dụng khi status là WITHDRAWN',
+                                path: ['withdrawReason']
                         })
                 }
         })

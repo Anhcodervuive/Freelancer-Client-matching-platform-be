@@ -664,6 +664,7 @@ model JobOffer {
   status       JobOfferStatus @default(DRAFT)
   sentAt       DateTime?      @map("sent_at")
   respondedAt  DateTime?      @map("responded_at")
+  withdrawReason String?      @map("withdraw_reason") @db.VarChar(255)
   isDeleted    Boolean        @default(false) @map("is_deleted")
   deletedAt    DateTime?      @map("deleted_at")
   deletedBy    String?        @map("deleted_by")
