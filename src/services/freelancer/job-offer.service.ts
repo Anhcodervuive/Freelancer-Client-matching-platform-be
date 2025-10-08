@@ -262,21 +262,40 @@ const respondToJobOffer = async (freelancerUserId: string, offerId: string, payl
 		throw new BadRequestException('Offer đã hết hạn', ErrorCode.PARAM_QUERY_ERROR)
 	}
 
-	if (payload.action === 'ACCEPT') {
-		const existingContract = await prismaClient.contract.findFirst({
-			where: { offerId: offer.id }
-		})
+        if (payload.action === 'ACCEPT') {
+                const existingContract = await prismaClient.contract.findFirst({
+                        where: { offerId: offer.id }
+                })
 
-		if (existingContract) {
-			throw new BadRequestException('Offer đã có hợp đồng trước đó', ErrorCode.PARAM_QUERY_ERROR)
-		}
+                if (existingContract) {
+                        throw new BadRequestException('Offer đã có hợp đồng trước đó', ErrorCode.PARAM_QUERY_ERROR)
+                }
 
-		const result = await prismaClient.$transaction(async tx => {
-			if (offer.proposalId) {
-				await tx.jobProposal.update({
-					where: { id: offer.proposalId },
-					data: { status: JobProposalStatus.HIRED }
-				})
+                const result = await prismaClient.$transaction(async tx => {
+                        if (offer.jobId) {
+                                const hiredOffer = await tx.jobOffer.findFirst({
+                                        where: {
+                                                jobId: offer.jobId,
+                                                status: JobOfferStatus.ACCEPTED,
+                                                isDeleted: false,
+                                                id: { not: offer.id }
+                                        },
+                                        select: { id: true }
+                                })
+
+                                if (hiredOffer) {
+                                        throw new BadRequestException(
+                                                'Công việc đã có freelancer được thuê trước đó',
+                                                ErrorCode.PARAM_QUERY_ERROR
+                                        )
+                                }
+                        }
+
+                        if (offer.proposalId) {
+                                await tx.jobProposal.update({
+                                        where: { id: offer.proposalId },
+                                        data: { status: JobProposalStatus.HIRED }
+                                })
 			}
 
 			const updatedOffer = await tx.jobOffer.update({
