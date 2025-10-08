@@ -125,7 +125,7 @@ const ensureNoExistingOfferForFreelancerOnJob = async (
                         freelancerId,
                         jobId,
                         isDeleted: false,
-                        status: { notIn: [JobOfferStatus.DRAFT, JobOfferStatus.DECLINED] },
+                        status: { notIn: [JobOfferStatus.DRAFT, JobOfferStatus.DECLINED, JobOfferStatus.WITHDRAWN] },
                         ...(excludeOfferId
                                 ? {
                                           id: {
