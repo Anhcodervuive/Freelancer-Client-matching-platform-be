@@ -23,6 +23,7 @@ import freelancerJobOfferRoute from './freelancer-job-offer.route'
 import notificationRoute from './notification.route'
 import chatRoute from './chat.route'
 import uploadRoute from './upload.route'
+import contractRoute from './contract.route'
 
 const rootRouter: Router = Router()
 
@@ -47,5 +48,6 @@ rootRouter.use('/client', clientJobOfferRoute)
 rootRouter.use('/notification', notificationRoute)
 rootRouter.use('/chat', chatRoute)
 rootRouter.use('/upload', uploadRoute)
+rootRouter.use('/contracts', contractRoute)
 
 export default rootRouter
