@@ -61,7 +61,8 @@ const normalizeStatuses = (filters: FreelancerJobOfferFilterInput): JobOfferStat
 	}
 
 	const unique = uniquePreserveOrder(statuses)
-	return unique.length > 0 ? unique : undefined
+	const sanitized = unique.filter((status) => status !== JobOfferStatus.DRAFT)
+	return sanitized.length > 0 ? sanitized : undefined
 }
 
 const listJobOffers = async (freelancerUserId: string, filters: FreelancerJobOfferFilterInput) => {
@@ -73,7 +74,9 @@ const listJobOffers = async (freelancerUserId: string, filters: FreelancerJobOff
 	const includeExpired = filters.includeExpired === true
 	const statuses = normalizeStatuses(filters)
 
-	const andConditions: Prisma.JobOfferWhereInput[] = []
+	const andConditions: Prisma.JobOfferWhereInput[] = [
+		{ status: { not: JobOfferStatus.DRAFT } }
+	]
 
 	if (filters.jobId) {
 		andConditions.push({ jobId: filters.jobId })
@@ -183,7 +186,7 @@ const getJobOfferDetail = async (freelancerUserId: string, offerId: string) => {
 		include: jobOfferInclude
 	})
 
-	if (!offer || offer.freelancerId !== freelancerUserId || offer.isDeleted) {
+	if (!offer || offer.freelancerId !== freelancerUserId || offer.isDeleted || offer.status === JobOfferStatus.DRAFT) {
 		throw new NotFoundException('Offer không tồn tại', ErrorCode.ITEM_NOT_FOUND)
 	}
 
