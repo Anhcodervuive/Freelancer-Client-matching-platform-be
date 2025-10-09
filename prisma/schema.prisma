@@ -46,7 +46,6 @@ model User {
   chatParticipants      ChatParticipant[]
   chatMessagesSent      ChatMessage[]        @relation("ChatMessageSender")
   chatAdminAccessLogs   ChatAdminAccessLog[] @relation("ChatAdminAccessLogAdmin")
-
   @@index([email])
   @@map("user")
 }
@@ -331,6 +330,7 @@ model Asset {
   links                          AssetLink[]
   chatMessageAttachments         ChatMessageAttachment[]
   milestoneSubmissionAttachments MilestoneSubmissionAttachment[]
+  milestoneResources             MilestoneResource[]
 
   @@index([provider, bucket, storageKey])
   @@index([status])
@@ -903,10 +903,30 @@ model Milestone {
   escrow             Escrow?               @relation(fields: [escrowId], references: [id])
   submissions        MilestoneSubmission[]
   approvedSubmission MilestoneSubmission?  @relation("MilestoneApprovedSubmission", fields: [approvedSubmissionId], references: [id])
+  resources          MilestoneResource[]
 
   @@unique([escrowId])
   @@index([approvedSubmissionId])
   @@index([contractId, isDeleted])
+}
+
+model MilestoneResource {
+  id           String   @id @default(cuid())
+  milestoneId  String   @map("milestone_id")
+  assetId      String?  @map("asset_id")
+  url          String?  @db.VarChar(2048)
+  name         String?  @db.VarChar(255)
+  mimeType     String?  @map("mime_type") @db.VarChar(255)
+  size         Int?     @map("size_bytes")
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  asset     Asset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([milestoneId])
+  @@map("milestone_resource")
 }
 
 model MilestoneSubmission {

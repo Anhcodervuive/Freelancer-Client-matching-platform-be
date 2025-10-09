@@ -47,15 +47,16 @@ export const CLOUDINARY_CONFIG_INFO = {
 }
 
 export const R2_CONFIG = {
-	ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
-	ENDPOINT: process.env.R2_ENDPOINT,
-	REGION: process.env.R2_REGION,
-	ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
-	SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
-	BUCKET: process.env.R2_BUCKET,
-	PUBLIC_BASE_URL: process.env.R2_PUBLIC_BASE_URL,
-	JOB_ATTACHMENT_PREFIX: process.env.R2_JOB_ATTACHMENT_PREFIX || 'job-posts',
-	MESSAGE_ATTACHMENT_PREFIX: 'messages'
+        ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
+        ENDPOINT: process.env.R2_ENDPOINT,
+        REGION: process.env.R2_REGION,
+        ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+        SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+        BUCKET: process.env.R2_BUCKET,
+        PUBLIC_BASE_URL: process.env.R2_PUBLIC_BASE_URL,
+        JOB_ATTACHMENT_PREFIX: process.env.R2_JOB_ATTACHMENT_PREFIX || 'job-posts',
+        MESSAGE_ATTACHMENT_PREFIX: 'messages',
+        MILESTONE_RESOURCE_PREFIX: process.env.R2_MILESTONE_RESOURCE_PREFIX || 'contract-milestones'
 }
 
 export const STRIPE_CONFIG_INFO = {

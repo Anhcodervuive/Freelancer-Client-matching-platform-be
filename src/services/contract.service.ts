@@ -1,11 +1,18 @@
-import { Prisma } from '~/generated/prisma'
+import path from 'node:path'
+import { randomUUID } from 'node:crypto'
+
+import type { Express } from 'express'
+
+import { AssetKind, AssetProvider, AssetStatus, Prisma } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
+import { R2_CONFIG } from '~/config/environment'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { ContractListFilterInput, CreateContractMilestoneInput } from '~/schema/contract.schema'
+import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 
 const contractJobSummarySelect = Prisma.validator<Prisma.JobPostSelect>()({
 	id: true,
@@ -77,49 +84,66 @@ const contractJobDetailInclude = Prisma.validator<Prisma.JobPostInclude>()({
 })
 
 const contractDetailInclude = Prisma.validator<Prisma.ContractInclude>()({
-	jobPost: {
-		include: contractJobDetailInclude
-	},
-	client: {
-		select: contractClientSelect
-	},
-	freelancer: {
-		select: contractFreelancerSelect
-	},
-	proposal: {
-		select: {
-			id: true,
-			status: true,
-			submittedAt: true
-		}
-	},
-	offer: {
-		select: {
-			id: true,
-			status: true,
-			sentAt: true
-		}
-	}
+        jobPost: {
+                include: contractJobDetailInclude
+        },
+        client: {
+                select: contractClientSelect
+        },
+        freelancer: {
+                select: contractFreelancerSelect
+        },
+        proposal: {
+                select: {
+                        id: true,
+                        status: true,
+                        submittedAt: true
+                }
+        },
+        offer: {
+                select: {
+                        id: true,
+                        status: true,
+                        sentAt: true
+                }
+        }
+})
+
+const milestoneResourceInclude = Prisma.validator<Prisma.MilestoneResourceInclude>()({
+        asset: {
+                select: {
+                        id: true,
+                        kind: true,
+                        url: true,
+                        mimeType: true,
+                        bytes: true,
+                        status: true
+                }
+        }
 })
 
 const milestoneInclude = Prisma.validator<Prisma.MilestoneInclude>()({
-	escrow: {
-		select: {
-			id: true,
-			status: true,
-			currency: true,
-			amountFunded: true,
-			amountReleased: true,
-			amountRefunded: true,
-			createdAt: true,
-			updatedAt: true
-		}
-	}
+        escrow: {
+                select: {
+                        id: true,
+                        status: true,
+                        currency: true,
+                        amountFunded: true,
+                        amountReleased: true,
+                        amountRefunded: true,
+                        createdAt: true,
+                        updatedAt: true
+                }
+        },
+        resources: {
+                include: milestoneResourceInclude
+        }
 })
 
 type ContractSummaryPayload = Prisma.ContractGetPayload<{ include: typeof contractSummaryInclude }>
 type ContractDetailPayload = Prisma.ContractGetPayload<{ include: typeof contractDetailInclude }>
 type MilestonePayload = Prisma.MilestoneGetPayload<{ include: typeof milestoneInclude }>
+type MilestoneResourcePayload = Prisma.MilestoneResourceGetPayload<{ include: typeof milestoneResourceInclude }>
 type ContractJobSkillRelation = NonNullable<ContractDetailPayload['jobPost']>['requiredSkills'][number]
 
 const ensureClientUser = async (userId: string) => {
@@ -136,10 +160,10 @@ const ensureClientUser = async (userId: string) => {
 }
 
 const ensureContractBelongsToClient = async (contractId: string, clientId: string) => {
-	const contract = await prismaClient.contract.findUnique({
-		where: { id: contractId },
-		select: {
-			id: true,
+        const contract = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: {
+                        id: true,
 			clientId: true,
 			currency: true
 		}
@@ -149,7 +173,27 @@ const ensureContractBelongsToClient = async (contractId: string, clientId: strin
 		throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
 	}
 
-	return contract
+        return contract
+}
+
+const ensureMilestoneBelongsToContract = async (milestoneId: string, contractId: string) => {
+        const milestone = await prismaClient.milestone.findFirst({
+                where: {
+                        id: milestoneId,
+                        contractId,
+                        isDeleted: false
+                },
+                select: {
+                        id: true,
+                        contractId: true
+                }
+        })
+
+        if (!milestone) {
+                throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        return milestone
 }
 
 type ProfileSummary = ContractSummaryPayload['client']['profile'] | null
@@ -354,42 +398,146 @@ const serializeContractSummary = (contract: ContractSummaryPayload) => {
 }
 
 const serializeContractDetail = (contract: ContractDetailPayload) => {
-	const base = serializeContractSummary(contract)
+        const base = serializeContractSummary(contract)
 
-	return {
-		...base,
-		jobPost: serializeJobPostDetail(contract.jobPost),
-		proposal: contract.proposal
-			? {
-					id: contract.proposal.id,
-					status: contract.proposal.status,
-					submittedAt: contract.proposal.submittedAt
-			  }
-			: null,
-		offer: contract.offer
-			? {
-					id: contract.offer.id,
-					status: contract.offer.status,
-					sentAt: contract.offer.sentAt
-			  }
-			: null
-	}
+        return {
+                ...base,
+                jobPost: serializeJobPostDetail(contract.jobPost),
+                proposal: contract.proposal
+                        ? {
+                                        id: contract.proposal.id,
+                                        status: contract.proposal.status,
+                                        submittedAt: contract.proposal.submittedAt
+                          }
+                        : null,
+                offer: contract.offer
+                        ? {
+                                        id: contract.offer.id,
+                                        status: contract.offer.status,
+                                        sentAt: contract.offer.sentAt
+                          }
+                        : null
+        }
+}
+
+const extractOriginalName = (metadata: Prisma.JsonValue | null | undefined): string | null => {
+        if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+                return null
+        }
+        const record = metadata as Record<string, unknown>
+        const value = record.originalName
+        return typeof value === 'string' ? value : null
+}
+
+const determineAssetKind = (mime: string): AssetKind =>
+        mime.startsWith('image/') ? 'IMAGE' : mime.startsWith('video/') ? 'VIDEO' : 'FILE'
+
+const slugifyFileName = (name: string) => {
+        const normalized = name
+                .normalize('NFKD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-zA-Z0-9]+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '')
+                .toLowerCase()
+        return normalized.length > 0 ? normalized : 'file'
+}
+
+const milestoneResourceFolder = (contractId: string, milestoneId: string) => {
+        const base = R2_CONFIG.MILESTONE_RESOURCE_PREFIX || 'contract-milestones'
+        return [base, contractId, milestoneId].filter(Boolean).join('/')
+}
+
+const buildMilestoneResourceKey = (contractId: string, milestoneId: string, originalName: string) => {
+        const folder = milestoneResourceFolder(contractId, milestoneId)
+        const ext = path.extname(originalName)
+        const base = path.basename(originalName, ext)
+        const safeBase = slugifyFileName(base)
+        const extension = ext ? ext.toLowerCase() : ''
+        return [folder, `${safeBase}-${randomUUID()}${extension}`].filter(Boolean).join('/')
+}
+
+type UploadedMilestoneResource = {
+        file: Express.Multer.File
+        object: Awaited<ReturnType<typeof uploadBufferToR2>>
+}
+
+const cleanupMilestoneResourceUploads = async (uploads: readonly UploadedMilestoneResource[]) => {
+        if (uploads.length === 0) return
+
+        const tasks = uploads.map(item =>
+                deleteR2Object(item.object.bucket, item.object.key).catch(() => undefined)
+        )
+
+        await Promise.allSettled(tasks)
+}
+
+const uploadMilestoneResourceFiles = async (
+        contractId: string,
+        milestoneId: string,
+        files: readonly Express.Multer.File[]
+): Promise<UploadedMilestoneResource[]> => {
+        if (!files || files.length === 0) return []
+
+        const uploads: UploadedMilestoneResource[] = []
+
+        try {
+                for (const file of files) {
+                        const key = buildMilestoneResourceKey(contractId, milestoneId, file.originalname || 'file')
+                        const object = await uploadBufferToR2(file.buffer, {
+                                key,
+                                contentType: file.mimetype
+                        })
+                        uploads.push({ file, object })
+                }
+
+                return uploads
+        } catch (error) {
+                await cleanupMilestoneResourceUploads(uploads)
+                throw error
+        }
+}
+
+const serializeMilestoneResource = (resource: MilestoneResourcePayload) => {
+        const originalName = extractOriginalName(resource.metadata)
+        return {
+                id: resource.id,
+                milestoneId: resource.milestoneId,
+                assetId: resource.assetId ?? null,
+                name: resource.name ?? originalName ?? null,
+                url: resource.url ?? resource.asset?.url ?? null,
+                mimeType: resource.mimeType ?? resource.asset?.mimeType ?? null,
+                size: resource.size ?? resource.asset?.bytes ?? null,
+                createdAt: resource.createdAt,
+                updatedAt: resource.updatedAt,
+                asset: resource.asset
+                        ? {
+                                        id: resource.asset.id,
+                                        kind: resource.asset.kind,
+                                        url: resource.asset.url,
+                                        mimeType: resource.asset.mimeType,
+                                        bytes: resource.asset.bytes,
+                                        status: resource.asset.status
+                          }
+                        : null
+        }
 }
 
 const serializeMilestone = (milestone: MilestonePayload) => {
-	return {
-		id: milestone.id,
-		contractId: milestone.contractId,
-		title: milestone.title,
-		amount: Number(milestone.amount),
-		currency: milestone.currency,
-		status: milestone.status,
-		updatedAt: milestone.updatedAt,
-		escrow: milestone.escrow
-			? {
-					id: milestone.escrow.id,
-					status: milestone.escrow.status,
-					currency: milestone.escrow.currency,
+        return {
+                id: milestone.id,
+                contractId: milestone.contractId,
+                title: milestone.title,
+                amount: Number(milestone.amount),
+                currency: milestone.currency,
+                status: milestone.status,
+                updatedAt: milestone.updatedAt,
+                resources: milestone.resources.map(resource => serializeMilestoneResource(resource)),
+                escrow: milestone.escrow
+                        ? {
+                                        id: milestone.escrow.id,
+                                        status: milestone.escrow.status,
+                                        currency: milestone.escrow.currency,
 					amountFunded: Number(milestone.escrow.amountFunded),
 					amountReleased: Number(milestone.escrow.amountReleased),
 					amountRefunded: Number(milestone.escrow.amountRefunded),
@@ -491,21 +639,45 @@ const getContractDetail = async (userId: string, contractId: string) => {
 }
 
 const listContractMilestones = async (userId: string, contractId: string) => {
-	await ensureContractAccess(contractId, userId)
+        await ensureContractAccess(contractId, userId)
 
-	const milestones = await prismaClient.milestone.findMany({
-		where: { contractId, isDeleted: false },
-		include: milestoneInclude,
-		orderBy: { updatedAt: 'desc' }
-	})
+        const milestones = await prismaClient.milestone.findMany({
+                where: { contractId, isDeleted: false },
+                include: milestoneInclude,
+                orderBy: { updatedAt: 'desc' }
+        })
 
-	return milestones.map(serializeMilestone)
+        return milestones.map(serializeMilestone)
+}
+
+const listMilestoneResources = async (userId: string, contractId: string, milestoneId: string) => {
+        await ensureContractAccess(contractId, userId)
+
+        const milestone = await prismaClient.milestone.findFirst({
+                where: {
+                        id: milestoneId,
+                        contractId,
+                        isDeleted: false
+                },
+                include: {
+                        resources: {
+                                include: milestoneResourceInclude,
+                                orderBy: { createdAt: 'desc' }
+                        }
+                }
+        })
+
+        if (!milestone) {
+                throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        return milestone.resources.map(resource => serializeMilestoneResource(resource))
 }
 
 const createContractMilestone = async (
-	clientUserId: string,
-	contractId: string,
-	payload: CreateContractMilestoneInput
+        clientUserId: string,
+        contractId: string,
+        payload: CreateContractMilestoneInput
 ) => {
 	await ensureClientUser(clientUserId)
 	const contract = await ensureContractBelongsToClient(contractId, clientUserId)
@@ -533,14 +705,125 @@ const createContractMilestone = async (
 		include: milestoneInclude
 	})
 
-	return serializeMilestone(milestone)
+        return serializeMilestone(milestone)
+}
+
+const uploadMilestoneResources = async (
+        clientUserId: string,
+        contractId: string,
+        milestoneId: string,
+        files: readonly Express.Multer.File[] | undefined
+) => {
+        await ensureClientUser(clientUserId)
+        await ensureContractBelongsToClient(contractId, clientUserId)
+        await ensureMilestoneBelongsToContract(milestoneId, contractId)
+
+        if (!files || files.length === 0) {
+                throw new BadRequestException(
+                        'Bạn cần tải lên ít nhất một file tài nguyên',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const uploads = await uploadMilestoneResourceFiles(contractId, milestoneId, files)
+
+        try {
+                const resources = await prismaClient.$transaction(async tx => {
+                        const created: MilestoneResourcePayload[] = []
+
+                        for (const item of uploads) {
+                                const meta: Prisma.JsonObject = { originalName: item.file.originalname }
+                                const asset = await tx.asset.create({
+                                        data: {
+                                                provider: AssetProvider.R2,
+                                                kind: determineAssetKind(item.file.mimetype),
+                                                bucket: item.object.bucket,
+                                                storageKey: item.object.key,
+                                                url: item.object.url,
+                                                mimeType: item.file.mimetype,
+                                                bytes: item.file.size ?? null,
+                                                createdBy: clientUserId,
+                                                status: AssetStatus.READY,
+                                                meta
+                                        }
+                                })
+
+                                const resource = await tx.milestoneResource.create({
+                                        data: {
+                                                milestoneId,
+                                                assetId: asset.id,
+                                                url: item.object.url,
+                                                name: item.file.originalname,
+                                                mimeType: item.file.mimetype,
+                                                size: item.file.size ?? null,
+                                                metadata: meta
+                                        },
+                                        include: milestoneResourceInclude
+                                })
+
+                                created.push(resource)
+                        }
+
+                        return created
+                })
+
+                return resources.map(resource => serializeMilestoneResource(resource))
+        } catch (error) {
+                await cleanupMilestoneResourceUploads(uploads)
+                throw error
+        }
+}
+
+const deleteMilestoneResource = async (
+        clientUserId: string,
+        contractId: string,
+        milestoneId: string,
+        resourceId: string
+) => {
+        await ensureClientUser(clientUserId)
+        await ensureContractBelongsToClient(contractId, clientUserId)
+        await ensureMilestoneBelongsToContract(milestoneId, contractId)
+
+        const resource = await prismaClient.milestoneResource.findFirst({
+                where: {
+                        id: resourceId,
+                        milestoneId,
+                        milestone: {
+                                contractId
+                        }
+                },
+                include: {
+                        asset: true
+                }
+        })
+
+        if (!resource) {
+                throw new NotFoundException('Không tìm thấy tài nguyên', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const asset = resource.asset
+
+        await prismaClient.$transaction(async tx => {
+                await tx.milestoneResource.delete({ where: { id: resource.id } })
+
+                if (asset) {
+                        await tx.asset.delete({ where: { id: asset.id } })
+                }
+        })
+
+        if (asset?.provider === AssetProvider.R2 && asset.bucket && asset.storageKey) {
+                await deleteR2Object(asset.bucket, asset.storageKey)
+        }
 }
 
 const contractService = {
-	listContracts,
-	getContractDetail,
-	listContractMilestones,
-	createContractMilestone
+        listContracts,
+        getContractDetail,
+        listContractMilestones,
+        listMilestoneResources,
+        createContractMilestone,
+        uploadMilestoneResources,
+        deleteMilestoneResource
 }
 
 export default contractService
