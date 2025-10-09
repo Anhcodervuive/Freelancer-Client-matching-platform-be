@@ -4,7 +4,7 @@ import { StatusCodes } from 'http-status-codes'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
-import { ContractListFilterSchema } from '~/schema/contract.schema'
+import { ContractListFilterSchema, CreateContractMilestoneSchema } from '~/schema/contract.schema'
 import contractService from '~/services/contract.service'
 
 export const listContracts = async (req: Request, res: Response) => {
@@ -55,4 +55,22 @@ export const listContractMilestones = async (req: Request, res: Response) => {
                 contractId,
                 milestones
         })
+}
+
+export const createContractMilestone = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để tạo milestone', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId) {
+                throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = CreateContractMilestoneSchema.parse(req.body)
+        const milestone = await contractService.createContractMilestone(userId, contractId, payload)
+
+        return res.status(StatusCodes.CREATED).json(milestone)
 }

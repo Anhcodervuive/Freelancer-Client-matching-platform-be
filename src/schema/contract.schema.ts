@@ -24,3 +24,18 @@ export const ContractListFilterSchema = z.object({
 })
 
 export type ContractListFilterInput = z.infer<typeof ContractListFilterSchema>
+
+const CurrencySchema = z
+        .string()
+        .trim()
+        .min(3, 'Currency phải có 3 ký tự')
+        .max(3, 'Currency phải có 3 ký tự')
+        .transform(value => value.toUpperCase())
+
+export const CreateContractMilestoneSchema = z.object({
+        title: z.string().trim().min(1).max(255),
+        amount: z.coerce.number().positive('Số tiền phải lớn hơn 0'),
+        currency: CurrencySchema
+})
+
+export type CreateContractMilestoneInput = z.infer<typeof CreateContractMilestoneSchema>

@@ -1,9 +1,11 @@
 import { Prisma } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
+import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
-import { ContractListFilterInput } from '~/schema/contract.schema'
+import { UnauthorizedException } from '~/exceptions/unauthoried'
+import { ContractListFilterInput, CreateContractMilestoneInput } from '~/schema/contract.schema'
 
 const contractJobSummarySelect = Prisma.validator<Prisma.JobPostSelect>()({
         id: true,
@@ -119,6 +121,36 @@ type ContractSummaryPayload = Prisma.ContractGetPayload<{ include: typeof contra
 type ContractDetailPayload = Prisma.ContractGetPayload<{ include: typeof contractDetailInclude }>
 type MilestonePayload = Prisma.MilestoneGetPayload<{ include: typeof milestoneInclude }>
 type ContractJobSkillRelation = NonNullable<ContractDetailPayload['jobPost']>['requiredSkills'][number]
+
+const ensureClientUser = async (userId: string) => {
+        const client = await prismaClient.client.findUnique({
+                where: { userId },
+                select: { userId: true }
+        })
+
+        if (!client) {
+                throw new UnauthorizedException('Chỉ client mới có thể quản lý milestone', ErrorCode.USER_NOT_AUTHORITY)
+        }
+
+        return client
+}
+
+const ensureContractBelongsToClient = async (contractId: string, clientId: string) => {
+        const contract = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: {
+                        id: true,
+                        clientId: true,
+                        currency: true
+                }
+        })
+
+        if (!contract || contract.clientId !== clientId) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        return contract
+}
 
 type ProfileSummary = ContractSummaryPayload['client']['profile'] | null
 
@@ -472,7 +504,7 @@ const listContractMilestones = async (userId: string, contractId: string) => {
         await ensureContractAccess(contractId, userId)
 
         const milestones = await prismaClient.milestone.findMany({
-                where: { contractId },
+                where: { contractId, isDeleted: false },
                 include: milestoneInclude,
                 orderBy: { updatedAt: 'desc' }
         })
@@ -480,10 +512,43 @@ const listContractMilestones = async (userId: string, contractId: string) => {
         return milestones.map(serializeMilestone)
 }
 
+const createContractMilestone = async (
+        clientUserId: string,
+        contractId: string,
+        payload: CreateContractMilestoneInput
+) => {
+        await ensureClientUser(clientUserId)
+        const contract = await ensureContractBelongsToClient(contractId, clientUserId)
+
+        const currency = payload.currency.toUpperCase()
+
+        if (contract.currency.toUpperCase() !== currency) {
+                throw new BadRequestException('Currency của milestone phải trùng với hợp đồng', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const milestone = await prismaClient.milestone.create({
+                data: {
+                        contractId,
+                        title: payload.title,
+                        amount: new Prisma.Decimal(payload.amount),
+                        currency,
+                        escrow: {
+                                create: {
+                                        currency
+                                }
+                        }
+                },
+                include: milestoneInclude
+        })
+
+        return serializeMilestone(milestone)
+}
+
 const contractService = {
         listContracts,
         getContractDetail,
-        listContractMilestones
+        listContractMilestones,
+        createContractMilestone
 }
 
 export default contractService
