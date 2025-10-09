@@ -311,6 +311,7 @@ const serializeContractSummary = (contract: ContractSummaryPayload) => {
                 id: contract.id,
                 title: contract.title,
                 currency: contract.currency,
+                status: contract.status,
                 clientId: contract.clientId,
                 freelancerId: contract.freelancerId,
                 jobPostId: contract.jobPostId,
@@ -407,6 +408,10 @@ const buildContractWhere = (
                                 { jobPost: { title: { contains: search } } }
                         ]
                 })
+        }
+
+        if (filters.status) {
+                andConditions.push({ status: filters.status })
         }
 
         if (andConditions.length === 1) {

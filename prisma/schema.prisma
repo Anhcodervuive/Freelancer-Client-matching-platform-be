@@ -810,6 +810,14 @@ enum MilestoneStatus {
   CANCELED
 }
 
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
 enum EscrowStatus {
   UNFUNDED
   FUNDED
@@ -851,6 +859,7 @@ model Contract {
   offerId      String?  @unique @map("offer_id")
   title        String
   currency     String // "usd", ...
+  status       ContractStatus @default(ACTIVE)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
