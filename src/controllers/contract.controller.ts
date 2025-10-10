@@ -150,3 +150,20 @@ export const deleteMilestoneResource = async (req: Request, res: Response) => {
 
         return res.status(StatusCodes.NO_CONTENT).send()
 }
+
+export const deleteContractMilestone = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để xóa milestone', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId) {
+                throw new BadRequestException('Thiếu tham số contractId hoặc milestoneId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        await contractService.deleteContractMilestone(userId, contractId, milestoneId)
+
+        return res.status(StatusCodes.NO_CONTENT).send()
+}

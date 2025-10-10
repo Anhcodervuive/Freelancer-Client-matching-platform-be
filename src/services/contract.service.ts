@@ -84,16 +84,19 @@ const contractJobDetailInclude = Prisma.validator<Prisma.JobPostInclude>()({
 })
 
 const milestoneResourceInclude = Prisma.validator<Prisma.MilestoneResourceInclude>()({
-	asset: {
-		select: {
-			id: true,
-			kind: true,
-			url: true,
-			mimeType: true,
-			bytes: true,
-			status: true
-		}
-	}
+        asset: {
+                select: {
+                        id: true,
+                        kind: true,
+                        url: true,
+                        mimeType: true,
+                        bytes: true,
+                        status: true,
+                        provider: true,
+                        bucket: true,
+                        storageKey: true
+                }
+        }
 })
 
 const milestoneInclude = Prisma.validator<Prisma.MilestoneInclude>()({
@@ -776,10 +779,10 @@ const uploadMilestoneResources = async (
 }
 
 const deleteMilestoneResource = async (
-	clientUserId: string,
-	contractId: string,
-	milestoneId: string,
-	resourceId: string
+        clientUserId: string,
+        contractId: string,
+        milestoneId: string,
+        resourceId: string
 ) => {
 	await ensureClientUser(clientUserId)
 	await ensureContractBelongsToClient(contractId, clientUserId)
@@ -812,19 +815,98 @@ const deleteMilestoneResource = async (
 		}
 	})
 
-	if (asset?.provider === AssetProvider.R2 && asset.bucket && asset.storageKey) {
-		await deleteR2Object(asset.bucket, asset.storageKey)
-	}
+        if (asset?.provider === AssetProvider.R2 && asset.bucket && asset.storageKey) {
+                await deleteR2Object(asset.bucket, asset.storageKey)
+        }
+}
+
+const deleteContractMilestone = async (
+        clientUserId: string,
+        contractId: string,
+        milestoneId: string
+) => {
+        await ensureClientUser(clientUserId)
+        await ensureContractBelongsToClient(contractId, clientUserId)
+
+        const milestone = await prismaClient.milestone.findFirst({
+                where: {
+                        id: milestoneId,
+                        contractId,
+                        isDeleted: false
+                },
+                include: {
+                        resources: {
+                                include: milestoneResourceInclude
+                        }
+                }
+        })
+
+        if (!milestone) {
+                throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const resourceIds = milestone.resources.map(resource => resource.id)
+        const assetIds = milestone.resources
+                .map(resource => resource.asset?.id ?? null)
+                .filter((id): id is string => Boolean(id))
+        const r2Objects = milestone.resources
+                .map(resource => {
+                        const asset = resource.asset
+                        if (asset?.provider === AssetProvider.R2 && asset.bucket && asset.storageKey) {
+                                return { bucket: asset.bucket, key: asset.storageKey }
+                        }
+                        return null
+                })
+                .filter(
+                        (object): object is { bucket: string; key: string } =>
+                                Boolean(object?.bucket && object?.key)
+                )
+
+        await prismaClient.$transaction(async tx => {
+                if (resourceIds.length > 0) {
+                        await tx.milestoneResource.deleteMany({
+                                where: {
+                                        id: { in: resourceIds }
+                                }
+                        })
+                }
+
+                if (assetIds.length > 0) {
+                        await tx.asset.deleteMany({
+                                where: {
+                                        id: { in: assetIds }
+                                }
+                        })
+                }
+
+                await tx.milestone.update({
+                        where: { id: milestone.id },
+                        data: {
+                                isDeleted: true,
+                                deletedAt: new Date(),
+                                deletedBy: clientUserId
+                        }
+                })
+        })
+
+        if (r2Objects.length > 0) {
+                await Promise.allSettled(
+                        r2Objects.map(object =>
+                                deleteR2Object(object.bucket, object.key).catch(() => undefined)
+                        )
+                )
+        }
 }
 
 const contractService = {
-	listContracts,
-	getContractDetail,
-	listContractMilestones,
-	listMilestoneResources,
-	createContractMilestone,
-	uploadMilestoneResources,
-	deleteMilestoneResource
+        listContracts,
+        getContractDetail,
+        listContractMilestones,
+        listMilestoneResources,
+        createContractMilestone,
+        uploadMilestoneResources,
+        deleteMilestoneResource,
+        deleteContractMilestone
 }
 
 export default contractService

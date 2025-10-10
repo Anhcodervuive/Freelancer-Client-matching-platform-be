@@ -2,6 +2,7 @@ import { Router } from 'express'
 
 import {
         createContractMilestone,
+        deleteContractMilestone,
         deleteMilestoneResource,
         getContractDetail,
         listMilestoneResources,
@@ -19,6 +20,7 @@ router.get('/', authenticateMiddleware, errorHandler(listContracts))
 router.get('/:contractId', authenticateMiddleware, errorHandler(getContractDetail))
 router.get('/:contractId/milestones', authenticateMiddleware, errorHandler(listContractMilestones))
 router.post('/:contractId/milestones', authenticateMiddleware, errorHandler(createContractMilestone))
+router.delete('/:contractId/milestones/:milestoneId', authenticateMiddleware, errorHandler(deleteContractMilestone))
 router.get(
         '/:contractId/milestones/:milestoneId/resources',
         authenticateMiddleware,
