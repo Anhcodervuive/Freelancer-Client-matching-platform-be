@@ -897,6 +897,7 @@ model Milestone {
   isDeleted            Boolean         @default(false) @map("is_deleted")
   deletedAt            DateTime?       @map("deleted_at")
   deletedBy            String?         @map("deleted_by")
+  createdAt            DateTime        @default(now()) @map("created_at")
   updatedAt            DateTime        @updatedAt @map("updated_at")
 
   contract           Contract              @relation(fields: [contractId], references: [id])
