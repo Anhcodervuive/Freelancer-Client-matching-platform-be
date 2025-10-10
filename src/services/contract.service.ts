@@ -106,6 +106,11 @@ const contractDetailInclude = Prisma.validator<Prisma.ContractInclude>()({
                         status: true,
                         sentAt: true
                 }
+        },
+        milestones: {
+                where: { isDeleted: false },
+                include: milestoneInclude,
+                orderBy: { updatedAt: 'desc' }
         }
 })
 
@@ -416,7 +421,8 @@ const serializeContractDetail = (contract: ContractDetailPayload) => {
                                         status: contract.offer.status,
                                         sentAt: contract.offer.sentAt
                           }
-                        : null
+                        : null,
+                milestones: contract.milestones.map(milestone => serializeMilestone(milestone))
         }
 }
 
