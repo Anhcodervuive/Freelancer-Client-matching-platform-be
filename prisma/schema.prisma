@@ -312,7 +312,7 @@ model Asset {
   publicId   String?         @unique @map("public_id") // Cloudinary…
   bucket     String? // S3/R2
   storageKey String?         @unique // object key (path) trên S3/R2
-  url        String? // có thể không lưu nếu build từ provider
+  url        String?         @db.VarChar(2048)  // có thể không lưu nếu build từ provider
   mimeType   String?
   bytes      Int?
   width      Int?
