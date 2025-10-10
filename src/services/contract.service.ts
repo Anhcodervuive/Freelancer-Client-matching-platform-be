@@ -91,10 +91,7 @@ const milestoneResourceInclude = Prisma.validator<Prisma.MilestoneResourceInclud
                         url: true,
                         mimeType: true,
                         bytes: true,
-                        status: true,
-                        provider: true,
-                        bucket: true,
-                        storageKey: true
+                        status: true
                 }
         }
 })
@@ -836,7 +833,16 @@ const deleteContractMilestone = async (
                 },
                 include: {
                         resources: {
-                                include: milestoneResourceInclude
+                                include: {
+                                        asset: {
+                                                select: {
+                                                        id: true,
+                                                        provider: true,
+                                                        bucket: true,
+                                                        storageKey: true
+                                                }
+                                        }
+                                }
                         }
                 }
         })
