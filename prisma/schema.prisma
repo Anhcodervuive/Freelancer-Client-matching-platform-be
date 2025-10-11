@@ -838,18 +838,22 @@ enum EscrowStatus {
 }
 
 enum PaymentStatus {
-  REQUIRES_PAYMENT
-  SUCCEEDED_REFUNDED
+  REQUIRES_ACTION
+  SUCCEEDED
+  REFUNDED
   FAILED
 }
 
 enum TransferStatus {
-  PENDING_SUCCEEDED
-  FAILED_REVERSED
+  PENDING
+  SUCCEEDED
+  FAILED
+  REVERSED
 }
 
 enum RefundStatus {
-  PENDING_SUCCEEDED
+  PENDING
+  SUCCEEDED
   FAILED
 }
 
@@ -894,6 +898,7 @@ model Milestone {
   submittedAt          DateTime?       @map("submitted_at")
   approvedSubmissionId String?         @unique @map("approved_submission_id")
   approvedAt           DateTime?       @map("approved_at")
+  releasedAt           DateTime?       @map("released_at")
   isDeleted            Boolean         @default(false) @map("is_deleted")
   deletedAt            DateTime?       @map("deleted_at")
   deletedBy            String?         @map("deleted_by")
@@ -937,6 +942,7 @@ model MilestoneSubmission {
   message      String?                   @db.MediumText
   status       MilestoneSubmissionStatus @default(PENDING)
   reviewNote   String?                   @map("review_note") @db.MediumText
+  reviewRating Int?                      @map("review_rating") @db.UnsignedTinyInt
   reviewedAt   DateTime?                 @map("reviewed_at")
   reviewedById String?                   @map("reviewed_by_id")
   createdAt    DateTime                  @default(now()) @map("created_at")

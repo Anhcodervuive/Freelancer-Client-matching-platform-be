@@ -56,7 +56,9 @@ export const R2_CONFIG = {
         PUBLIC_BASE_URL: process.env.R2_PUBLIC_BASE_URL,
         JOB_ATTACHMENT_PREFIX: process.env.R2_JOB_ATTACHMENT_PREFIX || 'job-posts',
         MESSAGE_ATTACHMENT_PREFIX: 'messages',
-        MILESTONE_RESOURCE_PREFIX: process.env.R2_MILESTONE_RESOURCE_PREFIX || 'contract-milestones'
+        MILESTONE_RESOURCE_PREFIX: process.env.R2_MILESTONE_RESOURCE_PREFIX || 'contract-milestones',
+        MILESTONE_SUBMISSION_PREFIX:
+                process.env.R2_MILESTONE_SUBMISSION_PREFIX || 'contract-milestone-submissions'
 }
 
 export const STRIPE_CONFIG_INFO = {

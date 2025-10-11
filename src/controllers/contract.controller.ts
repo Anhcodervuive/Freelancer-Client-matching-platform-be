@@ -5,10 +5,18 @@ import { StatusCodes } from 'http-status-codes'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
-import { ContractListFilterSchema, CreateContractMilestoneSchema } from '~/schema/contract.schema'
+import {
+        ApproveMilestoneSubmissionSchema,
+        ContractListFilterSchema,
+        CreateContractMilestoneSchema,
+        DeclineMilestoneSubmissionSchema,
+        PayMilestoneSchema,
+        SubmitMilestoneSchema
+} from '~/schema/contract.schema'
 import contractService from '~/services/contract.service'
 
 const RESOURCE_FILE_FIELD_NAMES = new Set(['resourceFiles', 'resourceFiles[]', 'files', 'files[]'])
+const SUBMISSION_FILE_FIELD_NAMES = new Set(['attachments', 'attachments[]', 'files', 'files[]'])
 
 const extractResourceFiles = (files: Request['files']): Express.Multer.File[] => {
         if (!files) return []
@@ -20,6 +28,18 @@ const extractResourceFiles = (files: Request['files']): Express.Multer.File[] =>
         const map = files as Record<string, Express.Multer.File[] | undefined>
 
         return Array.from(RESOURCE_FILE_FIELD_NAMES).flatMap(fieldName => map[fieldName] ?? [])
+}
+
+const extractSubmissionFiles = (files: Request['files']): Express.Multer.File[] => {
+        if (!files) return []
+
+        if (Array.isArray(files)) {
+                return (files as Express.Multer.File[]).filter(file => SUBMISSION_FILE_FIELD_NAMES.has(file.fieldname))
+        }
+
+        const map = files as Record<string, Express.Multer.File[] | undefined>
+
+        return Array.from(SUBMISSION_FILE_FIELD_NAMES).flatMap(fieldName => map[fieldName] ?? [])
 }
 
 export const listContracts = async (req: Request, res: Response) => {
@@ -166,4 +186,102 @@ export const deleteContractMilestone = async (req: Request, res: Response) => {
         await contractService.deleteContractMilestone(userId, contractId, milestoneId)
 
         return res.status(StatusCodes.NO_CONTENT).send()
+}
+
+export const payMilestone = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để thanh toán milestone', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId) {
+                throw new BadRequestException('Thiếu tham số contractId hoặc milestoneId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = PayMilestoneSchema.parse(req.body)
+        const result = await contractService.payMilestone(userId, contractId, milestoneId, payload)
+
+        return res.status(StatusCodes.OK).json(result)
+}
+
+export const submitMilestoneWork = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để gửi kết quả milestone', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId) {
+                throw new BadRequestException('Thiếu tham số contractId hoặc milestoneId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = SubmitMilestoneSchema.parse(req.body)
+        const files = extractSubmissionFiles(req.files)
+
+        const submission = await contractService.submitMilestoneWork(
+                userId,
+                contractId,
+                milestoneId,
+                payload,
+                files
+        )
+
+        return res.status(StatusCodes.CREATED).json(submission)
+}
+
+export const approveMilestoneSubmission = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId, submissionId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để duyệt kết quả milestone', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId || !submissionId) {
+                throw new BadRequestException(
+                        'Thiếu tham số contractId, milestoneId hoặc submissionId',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const payload = ApproveMilestoneSubmissionSchema.parse(req.body)
+        const submission = await contractService.approveMilestoneSubmission(
+                userId,
+                contractId,
+                milestoneId,
+                submissionId,
+                payload
+        )
+
+        return res.status(StatusCodes.OK).json(submission)
+}
+
+export const declineMilestoneSubmission = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId, submissionId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để từ chối milestone', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId || !submissionId) {
+                throw new BadRequestException(
+                        'Thiếu tham số contractId, milestoneId hoặc submissionId',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const payload = DeclineMilestoneSubmissionSchema.parse(req.body)
+        const submission = await contractService.declineMilestoneSubmission(
+                userId,
+                contractId,
+                milestoneId,
+                submissionId,
+                payload
+        )
+
+        return res.status(StatusCodes.OK).json(submission)
 }
