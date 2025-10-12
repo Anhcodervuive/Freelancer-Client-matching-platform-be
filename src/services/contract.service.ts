@@ -1277,7 +1277,10 @@ const payMilestone = async (
         const stripe = getStripeClient()
         const currency = milestoneRecord.currency.toLowerCase()
         const amountInMinorUnit = toMinorUnitAmount(milestoneRecord.amount, currency)
-        const idempotencyKey = payload.idempotencyKey?.trim()
+        const requestIdemKey = payload.idempotencyKey?.trim()
+        const effectiveIdemKey = requestIdemKey && requestIdemKey.length > 0
+                ? requestIdemKey
+                : `milestone_${milestoneRecord.id}_fund`
 
         try {
                 const paymentIntent = await stripe.paymentIntents.create(
@@ -1298,7 +1301,7 @@ const payMilestone = async (
                                 },
                                 expand: ['latest_charge.payment_method_details.card']
                         },
-                        idempotencyKey ? { idempotencyKey } : undefined
+                        { idempotencyKey: effectiveIdemKey }
                 )
 
                 const latestCharge = paymentIntent.latest_charge
@@ -1311,7 +1314,15 @@ const payMilestone = async (
                         cardDetails = charge.payment_method_details?.card ?? null
                 }
 
-                const paymentRecord = await prismaClient.$transaction(async tx => {
+                const { payment: paymentRecord } = await prismaClient.$transaction(async tx => {
+                        const existingPayment = await tx.payment.findFirst({
+                                where: { paymentIntentId: paymentIntent.id }
+                        })
+
+                        if (existingPayment) {
+                                return { payment: existingPayment }
+                        }
+
                         const payment = await tx.payment.create({
                                 data: {
                                         escrowId: escrow.id,
@@ -1325,19 +1336,21 @@ const payMilestone = async (
                                         cardExpMonth: cardDetails?.exp_month ?? paymentMethod.expMonth ?? null,
                                         cardExpYear: cardDetails?.exp_year ?? paymentMethod.expYear ?? null,
                                         cardFingerprint: cardDetails?.fingerprint ?? null,
-                                        idemKey: idempotencyKey ?? null
+                                        idemKey: effectiveIdemKey
                                 }
                         })
 
                         await tx.escrow.update({
                                 where: { id: escrow.id },
                                 data: {
-                                        amountFunded: escrow.amountFunded.plus(milestoneRecord.amount),
+                                        amountFunded: {
+                                                increment: milestoneRecord.amount
+                                        },
                                         status: EscrowStatus.FUNDED
                                 }
                         })
 
-                        return payment
+                        return { payment }
                 })
 
                 const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
@@ -1367,11 +1380,11 @@ const payMilestone = async (
                                                 cardExpMonth: paymentMethod.expMonth ?? null,
                                                 cardExpYear: paymentMethod.expYear ?? null,
                                                 cardFingerprint: null,
-                                                idemKey: idempotencyKey ?? null
+                                                idemKey: effectiveIdemKey
                                         },
                                         update: {
                                                 status: PaymentStatus.REQUIRES_ACTION,
-                                                ...(idempotencyKey ? { idemKey: idempotencyKey } : {})
+                                                idemKey: effectiveIdemKey
                                         }
                                 })
 
@@ -1590,6 +1603,7 @@ const approveMilestoneSubmission = async (
         }
 
         const stripe = getStripeClient()
+        const transferIdemKey = `milestone_${milestoneRecord.id}_release`
         let transfer: Stripe.Transfer
 
         try {
@@ -1603,7 +1617,7 @@ const approveMilestoneSubmission = async (
                                 milestoneId,
                                 submissionId
                         }
-                })
+                }, { idempotencyKey: transferIdemKey })
         } catch (error) {
                 if (error instanceof Stripe.errors.StripeError) {
                         throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
@@ -1615,17 +1629,71 @@ const approveMilestoneSubmission = async (
         const now = new Date()
 
         const { submission, transfer: transferRecord } = await prismaClient.$transaction(async tx => {
-                const approvedSubmission = await tx.milestoneSubmission.update({
-                        where: { id: submissionRecord.id },
+                const loadCommittedResult = async () => {
+                        const committedSubmission = await tx.milestoneSubmission.findFirst({
+                                where: { id: submissionRecord.id },
+                                include: milestoneSubmissionInclude
+                        })
+
+                        const committedTransfer = await tx.transfer.findFirst({
+                                where: { transferId: transfer.id }
+                        })
+
+                        if (committedSubmission && committedTransfer) {
+                                return { submission: committedSubmission, transfer: committedTransfer }
+                        }
+
+                        return null
+                }
+
+                const existingTransfer = await tx.transfer.findFirst({
+                        where: { transferId: transfer.id }
+                })
+
+                if (existingTransfer) {
+                        const committedSubmission = await tx.milestoneSubmission.findFirst({
+                                where: { id: submissionRecord.id },
+                                include: milestoneSubmissionInclude
+                        })
+
+                        return {
+                                submission: committedSubmission ?? submissionRecord,
+                                transfer: existingTransfer
+                        }
+                }
+
+                const approvedSubmissionUpdate = await tx.milestoneSubmission.updateMany({
+                        where: {
+                                id: submissionRecord.id,
+                                status: MilestoneSubmissionStatus.PENDING
+                        },
                         data: {
                                 status: MilestoneSubmissionStatus.APPROVED,
                                 reviewNote: payload.reviewNote ?? null,
                                 reviewRating: payload.reviewRating,
                                 reviewedAt: now,
                                 reviewedById: clientUserId
-                        },
+                        }
+                })
+
+                if (!approvedSubmissionUpdate.count) {
+                        const committed = await loadCommittedResult()
+
+                        if (committed) {
+                                return committed
+                        }
+
+                        throw new BadRequestException('Submission không ở trạng thái chờ duyệt', ErrorCode.PARAM_QUERY_ERROR)
+                }
+
+                const approvedSubmission = await tx.milestoneSubmission.findFirst({
+                        where: { id: submissionRecord.id },
                         include: milestoneSubmissionInclude
                 })
+
+                if (!approvedSubmission) {
+                        throw new NotFoundException('Không tìm thấy submission', ErrorCode.ITEM_NOT_FOUND)
+                }
 
                 await tx.milestoneSubmission.updateMany({
                         where: {
@@ -1638,8 +1706,12 @@ const approveMilestoneSubmission = async (
                         }
                 })
 
-                await tx.milestone.update({
-                        where: { id: milestoneRecord.id },
+                const milestoneUpdate = await tx.milestone.updateMany({
+                        where: {
+                                id: milestoneRecord.id,
+                                status: MilestoneStatus.SUBMITTED,
+                                approvedSubmissionId: null
+                        },
                         data: {
                                 status: MilestoneStatus.RELEASED,
                                 approvedSubmissionId: submissionRecord.id,
@@ -1648,10 +1720,22 @@ const approveMilestoneSubmission = async (
                         }
                 })
 
+                if (!milestoneUpdate.count) {
+                        const committed = await loadCommittedResult()
+
+                        if (committed) {
+                                return committed
+                        }
+
+                        throw new BadRequestException('Milestone đã được duyệt trước đó', ErrorCode.PARAM_QUERY_ERROR)
+                }
+
                 const escrowUpdate = await tx.escrow.update({
                         where: { id: escrow.id },
                         data: {
-                                amountReleased: escrow.amountReleased.plus(milestoneRecord.amount),
+                                amountReleased: {
+                                        increment: milestoneRecord.amount
+                                },
                                 status: EscrowStatus.RELEASED
                         }
                 })
