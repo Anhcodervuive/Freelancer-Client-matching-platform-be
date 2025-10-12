@@ -5,15 +5,18 @@ import type { Express } from 'express'
 import Stripe from 'stripe'
 
 import {
-	AssetKind,
-	AssetProvider,
-	AssetStatus,
-	EscrowStatus,
-	MilestoneStatus,
-	MilestoneSubmissionStatus,
-	PaymentStatus,
-	Prisma,
-	TransferStatus
+        AssetKind,
+        AssetProvider,
+        AssetStatus,
+        EscrowStatus,
+        MilestoneStatus,
+        MilestoneSubmissionStatus,
+        NotificationCategory,
+        NotificationEvent,
+        NotificationResource,
+        PaymentStatus,
+        Prisma,
+        TransferStatus
 } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
@@ -32,6 +35,7 @@ import {
 } from '~/schema/contract.schema'
 import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 import { InternalServerException } from '~/exceptions/internal-server'
+import notificationService from '~/services/notification.service'
 
 const contractJobSummarySelect = Prisma.validator<Prisma.JobPostSelect>()({
 	id: true,
@@ -241,14 +245,15 @@ const ensureFreelancerUser = async (userId: string) => {
 }
 
 const ensureContractBelongsToClient = async (contractId: string, clientId: string) => {
-	const contract = await prismaClient.contract.findUnique({
-		where: { id: contractId },
-		select: {
-			id: true,
-			clientId: true,
-			currency: true
-		}
-	})
+        const contract = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: {
+                        id: true,
+                        clientId: true,
+                        currency: true,
+                        freelancerId: true
+                }
+        })
 
 	if (!contract || contract.clientId !== clientId) {
 		throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
@@ -258,14 +263,15 @@ const ensureContractBelongsToClient = async (contractId: string, clientId: strin
 }
 
 const ensureContractBelongsToFreelancer = async (contractId: string, freelancerId: string) => {
-	const contract = await prismaClient.contract.findUnique({
-		where: { id: contractId },
-		select: {
-			id: true,
-			freelancerId: true,
-			currency: true
-		}
-	})
+        const contract = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: {
+                        id: true,
+                        freelancerId: true,
+                        currency: true,
+                        clientId: true
+                }
+        })
 
 	if (!contract || contract.freelancerId !== freelancerId) {
 		throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
@@ -989,12 +995,12 @@ const listMilestoneResources = async (userId: string, contractId: string, milest
 }
 
 const createContractMilestone = async (
-	clientUserId: string,
-	contractId: string,
-	payload: CreateContractMilestoneInput
+        clientUserId: string,
+        contractId: string,
+        payload: CreateContractMilestoneInput
 ) => {
-	await ensureClientUser(clientUserId)
-	const contract = await ensureContractBelongsToClient(contractId, clientUserId)
+        await ensureClientUser(clientUserId)
+        const contract = await ensureContractBelongsToClient(contractId, clientUserId)
 
 	const currency = payload.currency.toUpperCase()
 
@@ -1002,10 +1008,10 @@ const createContractMilestone = async (
 		throw new BadRequestException('Currency của milestone phải trùng với hợp đồng', ErrorCode.PARAM_QUERY_ERROR)
 	}
 
-	const milestone = await prismaClient.milestone.create({
-		data: {
-			contract: {
-				connect: { id: contractId }
+        const milestone = await prismaClient.milestone.create({
+                data: {
+                        contract: {
+                                connect: { id: contractId }
 			},
 			title: payload.title,
 			amount: new Prisma.Decimal(payload.amount),
@@ -1018,10 +1024,31 @@ const createContractMilestone = async (
 				}
 			}
 		},
-		include: milestoneInclude
-	})
+                include: milestoneInclude
+        })
 
-	return serializeMilestone(milestone)
+        if (contract.freelancerId) {
+                try {
+                        await notificationService.create({
+                                recipientId: contract.freelancerId,
+                                actorId: clientUserId,
+                                category: NotificationCategory.CONTRACT,
+                                event: NotificationEvent.CONTRACT_MILESTONE_CREATED,
+                                resourceType: NotificationResource.CONTRACT_MILESTONE,
+                                resourceId: milestone.id,
+                                payload: {
+                                        contractId,
+                                        milestoneId: milestone.id,
+                                        milestoneTitle: milestone.title
+                                }
+                        })
+                } catch (notificationError) {
+                        // eslint-disable-next-line no-console
+                        console.error('Không thể tạo thông báo khi tạo milestone', notificationError)
+                }
+        }
+
+        return serializeMilestone(milestone)
 }
 
 const uploadMilestoneResources = async (
@@ -1382,14 +1409,14 @@ const payMilestone = async (
 }
 
 const submitMilestoneWork = async (
-	freelancerUserId: string,
-	contractId: string,
-	milestoneId: string,
-	payload: SubmitMilestoneInput,
-	files: readonly Express.Multer.File[]
+        freelancerUserId: string,
+        contractId: string,
+        milestoneId: string,
+        payload: SubmitMilestoneInput,
+        files: readonly Express.Multer.File[]
 ) => {
-	await ensureFreelancerUser(freelancerUserId)
-	await ensureContractBelongsToFreelancer(contractId, freelancerUserId)
+        await ensureFreelancerUser(freelancerUserId)
+        const contract = await ensureContractBelongsToFreelancer(contractId, freelancerUserId)
 
 	const milestoneRecord = await prismaClient.milestone.findFirst({
 		where: {
@@ -1478,28 +1505,49 @@ const submitMilestoneWork = async (
 			return hydratedSubmission
 		})
 
-		const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+                const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-		return {
-			contractId,
-			milestone: serializeMilestone(updatedMilestone),
-			submission: serializeMilestoneSubmission(submissionRecord)
-		}
-	} catch (error) {
-		await cleanupMilestoneSubmissionUploads(uploads)
-		throw error
-	}
+                if (contract.clientId) {
+                        try {
+                                await notificationService.create({
+                                        recipientId: contract.clientId,
+                                        actorId: freelancerUserId,
+                                        category: NotificationCategory.CONTRACT,
+                                        event: NotificationEvent.CONTRACT_MILESTONE_SUBMITTED,
+                                        resourceType: NotificationResource.MILESTONE_SUBMISSION,
+                                        resourceId: submissionRecord.id,
+                                        payload: {
+                                                contractId,
+                                                milestoneId,
+                                                submissionId: submissionRecord.id
+                                        }
+                                })
+                        } catch (notificationError) {
+                                // eslint-disable-next-line no-console
+                                console.error('Không thể tạo thông báo khi freelancer gửi kết quả milestone', notificationError)
+                        }
+                }
+
+                return {
+                        contractId,
+                        milestone: serializeMilestone(updatedMilestone),
+                        submission: serializeMilestoneSubmission(submissionRecord)
+                }
+        } catch (error) {
+                await cleanupMilestoneSubmissionUploads(uploads)
+                throw error
+        }
 }
 
 const approveMilestoneSubmission = async (
-	clientUserId: string,
-	contractId: string,
-	milestoneId: string,
-	submissionId: string,
-	payload: ApproveMilestoneSubmissionInput
+        clientUserId: string,
+        contractId: string,
+        milestoneId: string,
+        submissionId: string,
+        payload: ApproveMilestoneSubmissionInput
 ) => {
-	await ensureClientUser(clientUserId)
-	await ensureContractBelongsToClient(contractId, clientUserId)
+        await ensureClientUser(clientUserId)
+        const contract = await ensureContractBelongsToClient(contractId, clientUserId)
 
 	const milestoneRecord = await prismaClient.milestone.findFirst({
 		where: {
@@ -1647,25 +1695,47 @@ const approveMilestoneSubmission = async (
 		return { submission: approvedSubmission, transfer: createdTransfer }
 	})
 
-	const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+        const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-	return {
-		contractId,
-		milestone: serializeMilestone(updatedMilestone),
-		submission: serializeMilestoneSubmission(submission),
-		transfer: serializeTransfer(transferRecord)
-	}
+        if (contract.clientId) {
+                try {
+                        await notificationService.create({
+                                recipientId: contract.clientId,
+                                actorId: clientUserId,
+                                category: NotificationCategory.CONTRACT,
+                                event: NotificationEvent.CONTRACT_MILESTONE_APPROVED,
+                                resourceType: NotificationResource.MILESTONE_SUBMISSION,
+                                resourceId: submission.id,
+                                payload: {
+                                        contractId,
+                                        milestoneId,
+                                        submissionId: submission.id,
+                                        action: 'approved'
+                                }
+                        })
+                } catch (notificationError) {
+                        // eslint-disable-next-line no-console
+                        console.error('Không thể tạo thông báo khi client duyệt kết quả milestone', notificationError)
+                }
+        }
+
+        return {
+                contractId,
+                milestone: serializeMilestone(updatedMilestone),
+                submission: serializeMilestoneSubmission(submission),
+                transfer: serializeTransfer(transferRecord)
+        }
 }
 
 const declineMilestoneSubmission = async (
-	clientUserId: string,
-	contractId: string,
-	milestoneId: string,
-	submissionId: string,
-	payload: DeclineMilestoneSubmissionInput
+        clientUserId: string,
+        contractId: string,
+        milestoneId: string,
+        submissionId: string,
+        payload: DeclineMilestoneSubmissionInput
 ) => {
-	await ensureClientUser(clientUserId)
-	await ensureContractBelongsToClient(contractId, clientUserId)
+        await ensureClientUser(clientUserId)
+        const contract = await ensureContractBelongsToClient(contractId, clientUserId)
 
 	const milestoneRecord = await prismaClient.milestone.findFirst({
 		where: {
@@ -1728,13 +1798,35 @@ const declineMilestoneSubmission = async (
 		return updated
 	})
 
-	const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+        const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-	return {
-		contractId,
-		milestone: serializeMilestone(updatedMilestone),
-		submission: serializeMilestoneSubmission(declinedSubmission)
-	}
+        if (contract.clientId) {
+                try {
+                        await notificationService.create({
+                                recipientId: contract.clientId,
+                                actorId: clientUserId,
+                                category: NotificationCategory.CONTRACT,
+                                event: NotificationEvent.CONTRACT_MILESTONE_DECLINED,
+                                resourceType: NotificationResource.MILESTONE_SUBMISSION,
+                                resourceId: declinedSubmission.id,
+                                payload: {
+                                        contractId,
+                                        milestoneId,
+                                        submissionId: declinedSubmission.id,
+                                        action: 'declined'
+                                }
+                        })
+                } catch (notificationError) {
+                        // eslint-disable-next-line no-console
+                        console.error('Không thể tạo thông báo khi client từ chối kết quả milestone', notificationError)
+                }
+        }
+
+        return {
+                contractId,
+                milestone: serializeMilestone(updatedMilestone),
+                submission: serializeMilestoneSubmission(declinedSubmission)
+        }
 }
 
 const contractService = {
