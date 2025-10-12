@@ -1010,8 +1010,8 @@ const createContractMilestone = async (
                         title: payload.title,
                         amount: new Prisma.Decimal(payload.amount),
                         currency,
-                        startAt: payload.startAt ?? undefined,
-                        endAt: payload.endAt ?? undefined,
+                        startAt: payload.startAt ?? null,
+                        endAt: payload.endAt ?? null,
                         escrow: {
                                 create: {
                                         currency
