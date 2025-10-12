@@ -792,16 +792,16 @@ const serializeMilestoneSubmission = (submission: MilestoneSubmissionPayload) =>
 }
 
 const serializeMilestone = (milestone: MilestonePayload) => {
-        return {
-                id: milestone.id,
-                contractId: milestone.contractId,
-                title: milestone.title,
-                amount: Number(milestone.amount),
-                currency: milestone.currency,
-                startAt: milestone.startAt ?? null,
-                endAt: milestone.endAt ?? null,
-                status: milestone.status,
-                submittedAt: milestone.submittedAt ?? null,
+	return {
+		id: milestone.id,
+		contractId: milestone.contractId,
+		title: milestone.title,
+		amount: Number(milestone.amount),
+		currency: milestone.currency,
+		startAt: milestone.startAt ?? null,
+		endAt: milestone.endAt ?? null,
+		status: milestone.status,
+		submittedAt: milestone.submittedAt ?? null,
 		approvedSubmissionId: milestone.approvedSubmissionId ?? null,
 		approvedAt: milestone.approvedAt ?? null,
 		releasedAt: milestone.releasedAt ?? null,
@@ -1002,19 +1002,19 @@ const createContractMilestone = async (
 		throw new BadRequestException('Currency của milestone phải trùng với hợp đồng', ErrorCode.PARAM_QUERY_ERROR)
 	}
 
-        const milestone = await prismaClient.milestone.create({
-                data: {
-                        contract: {
-                                connect: { id: contractId }
-                        },
-                        title: payload.title,
-                        amount: new Prisma.Decimal(payload.amount),
-                        currency,
-                        startAt: payload.startAt ?? null,
-                        endAt: payload.endAt ?? null,
-                        escrow: {
-                                create: {
-                                        currency
+	const milestone = await prismaClient.milestone.create({
+		data: {
+			contract: {
+				connect: { id: contractId }
+			},
+			title: payload.title,
+			amount: new Prisma.Decimal(payload.amount),
+			currency,
+			startAt: payload.startAt ?? null,
+			endAt: payload.endAt ?? null,
+			escrow: {
+				create: {
+					currency
 				}
 			}
 		},
