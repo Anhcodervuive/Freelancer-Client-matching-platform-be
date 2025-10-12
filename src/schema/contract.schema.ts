@@ -2,6 +2,12 @@ import { z } from 'zod'
 
 import { ContractStatus } from '~/generated/prisma'
 
+const coerceDate = (value: unknown) => {
+        if (value === undefined || value === null || value instanceof Date) return value
+        const parsed = new Date(value as string | number)
+        return Number.isNaN(parsed.getTime()) ? value : parsed
+}
+
 const RoleParamSchema = z
         .string()
         .trim()
@@ -32,11 +38,23 @@ const CurrencySchema = z
         .max(3, 'Currency phải có 3 ký tự')
         .transform(value => value.toUpperCase())
 
-export const CreateContractMilestoneSchema = z.object({
-        title: z.string().trim().min(1).max(255),
-        amount: z.coerce.number().positive('Số tiền phải lớn hơn 0'),
-        currency: CurrencySchema
-})
+export const CreateContractMilestoneSchema = z
+        .object({
+                title: z.string().trim().min(1).max(255),
+                amount: z.coerce.number().positive('Số tiền phải lớn hơn 0'),
+                currency: CurrencySchema,
+                startAt: z.preprocess(coerceDate, z.date().nullable().optional()),
+                endAt: z.preprocess(coerceDate, z.date().nullable().optional())
+        })
+        .superRefine((data, ctx) => {
+                if (data.startAt && data.endAt && data.startAt > data.endAt) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'startAt phải nhỏ hơn hoặc bằng endAt',
+                                path: ['startAt']
+                        })
+                }
+        })
 
 export type CreateContractMilestoneInput = z.infer<typeof CreateContractMilestoneSchema>
 
