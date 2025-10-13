@@ -45,8 +45,8 @@ const CLIENT_BUSINESS_PROFILE_URL =
 		? CLIENT_BASE_URL
 		: undefined
 
-const DEFAULT_RETURN_URL = CLIENT_BASE_URL ? `${CLIENT_BASE_URL}/settings/payouts` : undefined
-const DEFAULT_REFRESH_URL = CLIENT_BASE_URL ? `${CLIENT_BASE_URL}/settings/payouts/refresh` : undefined
+const DEFAULT_RETURN_URL = CLIENT_BASE_URL ? `${CLIENT_BASE_URL}/me/settings/payouts` : undefined
+const DEFAULT_REFRESH_URL = CLIENT_BASE_URL ? `${CLIENT_BASE_URL}/me/settings/payouts/refresh` : undefined
 
 type AccountLinkMode = 'onboarding' | 'update'
 
@@ -328,60 +328,60 @@ const createAccountLink = async (userId: string, input: ConnectAccountLinkInput)
  * only meaningful once onboarding has already been completed at least once.
  */
 const createLoginLink = async (userId: string, input: ConnectAccountLoginLinkInput) => {
-        const result = await ensureStripeAccount(userId, { createIfMissing: false })
+	const result = await ensureStripeAccount(userId, { createIfMissing: false })
 
-        const { account, accountRecord } = result
+	const { account, accountRecord } = result
 
-        if (!account || !accountRecord) {
-                throw new BadRequestException('Stripe Connect account not found', ErrorCode.ITEM_NOT_FOUND)
-        }
+	if (!account || !accountRecord) {
+		throw new BadRequestException('Stripe Connect account not found', ErrorCode.ITEM_NOT_FOUND)
+	}
 
-        try {
-                const params: Stripe.AccountCreateLoginLinkParams & { redirect_url?: string } = {}
-                if (input.redirectUrl) {
-                        params.redirect_url = input.redirectUrl
-                }
+	try {
+		const params: Stripe.AccountCreateLoginLinkParams & { redirect_url?: string } = {}
+		if (input.redirectUrl) {
+			params.redirect_url = input.redirectUrl
+		}
 
-                const loginLink = await stripe.accounts.createLoginLink(account.id, params)
+		const loginLink = await stripe.accounts.createLoginLink(account.id, params)
 
-                return {
-                        url: loginLink.url,
-                        connectAccount: accountRecord
-                }
-        } catch (error) {
-                handleStripeError(error)
-        }
+		return {
+			url: loginLink.url,
+			connectAccount: accountRecord
+		}
+	} catch (error) {
+		handleStripeError(error)
+	}
 }
 
 const deleteConnectAccount = async (userId: string) => {
-        await ensureFreelancerContext(userId)
+	await ensureFreelancerContext(userId)
 
-        const accountRecord = await prismaClient.freelancerConnectAccount.findUnique({
-                where: { freelancerId: userId }
-        })
+	const accountRecord = await prismaClient.freelancerConnectAccount.findUnique({
+		where: { freelancerId: userId }
+	})
 
-        if (!accountRecord) {
-                throw new BadRequestException('Stripe Connect account not found', ErrorCode.ITEM_NOT_FOUND)
-        }
+	if (!accountRecord) {
+		throw new BadRequestException('Stripe Connect account not found', ErrorCode.ITEM_NOT_FOUND)
+	}
 
-        try {
-                await stripe.accounts.del(accountRecord.stripeAccountId)
-        } catch (error) {
-                if (error instanceof Stripe.errors.StripeError && error.code === 'resource_missing') {
-                        // The account may have already been deleted on Stripe. Remove our record regardless.
-                } else {
-                        handleStripeError(error)
-                }
-        }
+	try {
+		await stripe.accounts.del(accountRecord.stripeAccountId)
+	} catch (error) {
+		if (error instanceof Stripe.errors.StripeError && error.code === 'resource_missing') {
+			// The account may have already been deleted on Stripe. Remove our record regardless.
+		} else {
+			handleStripeError(error)
+		}
+	}
 
-        await prismaClient.freelancerConnectAccount.delete({
-                where: { freelancerId: userId }
-        })
+	await prismaClient.freelancerConnectAccount.delete({
+		where: { freelancerId: userId }
+	})
 }
 
 export default {
-        getConnectAccount,
-        createAccountLink,
-        createLoginLink,
-        deleteConnectAccount
+	getConnectAccount,
+	createAccountLink,
+	createLoginLink,
+	deleteConnectAccount
 }
