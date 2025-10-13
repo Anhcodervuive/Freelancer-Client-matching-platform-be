@@ -1359,12 +1359,24 @@ const payMilestone = async (
 
 		const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
+                const responseMeta = {
+                        status: paymentIntent.status ?? null,
+                        paymentStatus: paymentRecord.status,
+                        requiresAction: false,
+                        clientSecret: paymentIntent.client_secret ?? null,
+                        client_secret: paymentIntent.client_secret ?? null,
+                        idempotencyKey: idempotencyKey ?? paymentRecord.idemKey ?? null,
+                        idemKey: paymentRecord.idemKey ?? idempotencyKey ?? null,
+                        paymentIntentId: paymentIntent.id,
+                        payment_intent_id: paymentIntent.id
+                }
+
                 return {
                         contractId,
                         milestone: serializeMilestone(updatedMilestone),
                         payment: serializePayment(paymentRecord),
-                        requiresAction: false,
-                        nextAction: paymentIntent.next_action ?? null
+                        nextAction: paymentIntent.next_action ?? null,
+                        ...responseMeta
                 }
         } catch (error) {
                 if (error instanceof Stripe.errors.StripeCardError) {
@@ -1395,13 +1407,24 @@ const payMilestone = async (
 
 				const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
+                                const metaPayload = {
+                                        status: paymentIntent.status ?? null,
+                                        paymentStatus: pendingPayment.status,
+                                        requiresAction: true,
+                                        clientSecret: paymentIntent.client_secret ?? null,
+                                        client_secret: paymentIntent.client_secret ?? null,
+                                        idempotencyKey: idempotencyKey ?? pendingPayment.idemKey ?? null,
+                                        idemKey: pendingPayment.idemKey ?? idempotencyKey ?? null,
+                                        paymentIntentId: paymentIntent.id,
+                                        payment_intent_id: paymentIntent.id
+                                }
+
                                 return {
                                         contractId,
                                         milestone: serializeMilestone(updatedMilestone),
                                         payment: serializePayment(pendingPayment),
-                                        requiresAction: true,
-                                        clientSecret: paymentIntent.client_secret,
-                                        nextAction: paymentIntent.next_action ?? null
+                                        nextAction: paymentIntent.next_action ?? null,
+                                        ...metaPayload
                                 }
                         }
 
