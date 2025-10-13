@@ -1290,29 +1290,35 @@ const payMilestone = async (
 	const amountInMinorUnit = toMinorUnitAmount(milestoneRecord.amount, currency)
 	const idempotencyKey = payload.idempotencyKey?.trim()
 
-	try {
-		const paymentIntent = await stripe.paymentIntents.create(
-			{
-				amount: amountInMinorUnit,
-				currency,
-				customer: paymentMethod.stripeCustomerId,
-				payment_method: paymentMethod.paymentMethodId,
-				confirm: true,
-				off_session: true,
-				description: `Funding milestone ${milestoneRecord.title}`,
-				transfer_group: `milestone_${milestoneRecord.id}`,
-				metadata: {
-					contractId,
-					milestoneId,
-					clientId: clientUserId,
-					paymentMethodRefId: paymentMethod.id
-				},
-				expand: ['latest_charge.payment_method_details.card']
-			},
-			idempotencyKey ? { idempotencyKey } : undefined
-		)
+        try {
+                const requireThreeDS = Boolean(STRIPE_CONFIG_INFO.FORCE_3DS)
+                const paymentIntent = await stripe.paymentIntents.create(
+                        {
+                                amount: amountInMinorUnit,
+                                currency,
+                                customer: paymentMethod.stripeCustomerId,
+                                payment_method: paymentMethod.paymentMethodId,
+                                confirm: true,
+                                off_session: true,
+                                description: `Funding milestone ${milestoneRecord.title}`,
+                                transfer_group: `milestone_${milestoneRecord.id}`,
+                                metadata: {
+                                        contractId,
+                                        milestoneId,
+                                        clientId: clientUserId,
+                                        paymentMethodRefId: paymentMethod.id
+                                },
+                                expand: ['latest_charge.payment_method_details.card'],
+                                payment_method_options: {
+                                        card: {
+                                                request_three_d_secure: requireThreeDS ? 'any' : 'automatic'
+                                        }
+                                }
+                        },
+                        idempotencyKey ? { idempotencyKey } : undefined
+                )
 
-		const latestCharge = paymentIntent.latest_charge
+                const latestCharge = paymentIntent.latest_charge
 		let cardDetails: Stripe.Charge.PaymentMethodDetails.Card | null = null
 		let chargeId: string | null = null
 
@@ -1353,17 +1359,18 @@ const payMilestone = async (
 
 		const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-		return {
-			contractId,
-			milestone: serializeMilestone(updatedMilestone),
-			payment: serializePayment(paymentRecord),
-			requiresAction: false
-		}
-	} catch (error) {
-		if (error instanceof Stripe.errors.StripeCardError) {
-			const paymentIntent = error.payment_intent as Stripe.PaymentIntent | undefined
+                return {
+                        contractId,
+                        milestone: serializeMilestone(updatedMilestone),
+                        payment: serializePayment(paymentRecord),
+                        requiresAction: false,
+                        nextAction: paymentIntent.next_action ?? null
+                }
+        } catch (error) {
+                if (error instanceof Stripe.errors.StripeCardError) {
+                        const paymentIntent = error.payment_intent as Stripe.PaymentIntent | undefined
 
-			if (paymentIntent && paymentIntent.status === 'requires_action') {
+                        if (paymentIntent && paymentIntent.status === 'requires_action') {
 				const pendingPayment = await prismaClient.payment.upsert({
 					where: { paymentIntentId: paymentIntent.id },
 					create: {
@@ -1388,14 +1395,15 @@ const payMilestone = async (
 
 				const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-				return {
-					contractId,
-					milestone: serializeMilestone(updatedMilestone),
-					payment: serializePayment(pendingPayment),
-					requiresAction: true,
-					clientSecret: paymentIntent.client_secret
-				}
-			}
+                                return {
+                                        contractId,
+                                        milestone: serializeMilestone(updatedMilestone),
+                                        payment: serializePayment(pendingPayment),
+                                        requiresAction: true,
+                                        clientSecret: paymentIntent.client_secret,
+                                        nextAction: paymentIntent.next_action ?? null
+                                }
+                        }
 
 			throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
 		}
