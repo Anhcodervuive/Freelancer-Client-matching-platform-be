@@ -1,11 +1,17 @@
 import Stripe from 'stripe'
 
+import type { FreelancerConnectAccount } from '~/generated/prisma'
+
 import { CLIENT, STRIPE_CONFIG_INFO } from '~/config/environment'
 import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { InternalServerException } from '~/exceptions/internal-server'
 import { ErrorCode } from '~/exceptions/root'
-import type { ConnectAccountLinkInput, ConnectAccountLoginLinkInput } from '~/schema/freelancer-connect-account.schema'
+import type {
+        ConnectAccountLinkInput,
+        ConnectAccountLoginLinkInput,
+        ConnectAccountStatusQuery
+} from '~/schema/freelancer-connect-account.schema'
 
 const stripe = new Stripe(STRIPE_CONFIG_INFO.API_KEY!)
 
@@ -51,22 +57,37 @@ const DEFAULT_REFRESH_URL = CLIENT_BASE_URL ? `${CLIENT_BASE_URL}/me/settings/pa
 type AccountLinkMode = 'onboarding' | 'update'
 
 type EnsureAccountOptions = {
-	createIfMissing?: boolean
-	requestedCountry?: string | null
+        createIfMissing?: boolean
+        requestedCountry?: string | null
+}
+
+type AccountLinkResponse = {
+        url: string
+        expiresAt: string
+        linkType: Stripe.AccountLinkCreateParams.Type
+        connectAccount: FreelancerConnectAccount
 }
 
 // Helper to convert Stripe enums into our uppercase representation so that the
 // API response stays consistent with other payment resources.
 const mapAccountType = (type: Stripe.Account.Type | null | undefined): 'EXPRESS' | 'STANDARD' | 'CUSTOM' => {
-	switch (type) {
-		case 'standard':
-			return 'STANDARD'
-		case 'custom':
-			return 'CUSTOM'
-		case 'express':
-		default:
-			return 'EXPRESS'
-	}
+        switch (type) {
+                case 'standard':
+                        return 'STANDARD'
+                case 'custom':
+                        return 'CUSTOM'
+                case 'express':
+                default:
+                        return 'EXPRESS'
+        }
+}
+
+const parseJsonStringArray = (value: unknown): string[] => {
+        if (!Array.isArray(value)) {
+                return []
+        }
+
+        return value.filter((item): item is string => typeof item === 'string')
 }
 
 /**
@@ -246,7 +267,40 @@ const ensureStripeAccount = async (userId: string, options?: EnsureAccountOption
 		data: mapStripeAccountToConnectAccountData(account)
 	})
 
-	return { user, freelancer, account, accountRecord }
+        return { user, freelancer, account, accountRecord }
+}
+
+const createAccountLinkForAccount = async (
+        account: Stripe.Account,
+        accountRecord: FreelancerConnectAccount,
+        options: {
+                mode: AccountLinkMode
+                returnUrl: string
+                refreshUrl: string
+        }
+): Promise<AccountLinkResponse> => {
+        const linkType: Stripe.AccountLinkCreateParams.Type =
+                accountRecord.detailsSubmitted && options.mode === 'update' ? 'account_update' : 'account_onboarding'
+
+        const params: Stripe.AccountLinkCreateParams = {
+                account: account.id,
+                return_url: options.returnUrl,
+                refresh_url: options.refreshUrl,
+                type: linkType
+        }
+
+        if (params.type === 'account_onboarding') {
+                params.collect = 'eventually_due'
+        }
+
+        const accountLink = await stripe.accountLinks.create(params)
+
+        return {
+                url: accountLink.url,
+                expiresAt: new Date(accountLink.expires_at * 1000).toISOString(),
+                linkType: params.type,
+                connectAccount: accountRecord
+        }
 }
 
 /**
@@ -254,11 +308,85 @@ const ensureStripeAccount = async (userId: string, options?: EnsureAccountOption
  * started onboarding we return null so the client can show an empty state.
  */
 const getConnectAccount = async (userId: string) => {
-	const result = await ensureStripeAccount(userId, { createIfMissing: false })
-	if (!result.accountRecord) {
-		return null
-	}
-	return result.accountRecord
+        const result = await ensureStripeAccount(userId, { createIfMissing: false })
+        if (!result.accountRecord) {
+                return null
+        }
+        return result.accountRecord
+}
+
+const getConnectAccountStatus = async (userId: string, query: ConnectAccountStatusQuery) => {
+        const result = await ensureStripeAccount(userId, { createIfMissing: false })
+
+        if (!result.account || !result.accountRecord) {
+                return {
+                        connectAccount: null,
+                        needsUpdate: false,
+                        nextAction: null
+                }
+        }
+
+        const { account, accountRecord } = result
+
+        const requirementsCurrentlyDue = parseJsonStringArray(accountRecord.requirementsCurrentlyDue)
+        const requirementsPastDue = parseJsonStringArray(accountRecord.requirementsPastDue)
+        const requirementsDue = parseJsonStringArray(accountRecord.requirementsDue)
+
+        const requiresOnboarding = !accountRecord.detailsSubmitted
+        const hasPendingRequirements =
+                requiresOnboarding ||
+                requirementsCurrentlyDue.length > 0 ||
+                requirementsPastDue.length > 0 ||
+                requirementsDue.length > 0 ||
+                Boolean(accountRecord.disabledReason)
+
+        if (!hasPendingRequirements) {
+                return {
+                        connectAccount: accountRecord,
+                        needsUpdate: false,
+                        nextAction: null
+                }
+        }
+
+        const mode: AccountLinkMode = requiresOnboarding ? 'onboarding' : 'update'
+
+        const returnUrl = query.returnUrl ?? DEFAULT_RETURN_URL
+        const refreshUrl = query.refreshUrl ?? DEFAULT_REFRESH_URL
+
+        if (!returnUrl || !refreshUrl) {
+                return {
+                        connectAccount: accountRecord,
+                        needsUpdate: true,
+                        nextAction: {
+                                type: mode === 'onboarding' ? 'ACCOUNT_ONBOARDING' : 'ACCOUNT_UPDATE',
+                                url: null,
+                                expiresAt: null,
+                                reason: 'MISSING_RETURN_URL',
+                                linkType: mode === 'onboarding' ? 'account_onboarding' : 'account_update'
+                        }
+                }
+        }
+
+        try {
+                const accountLink = await createAccountLinkForAccount(account, accountRecord, {
+                        mode,
+                        returnUrl,
+                        refreshUrl
+                })
+
+                return {
+                        connectAccount: accountRecord,
+                        needsUpdate: true,
+                        nextAction: {
+                                type: mode === 'onboarding' ? 'ACCOUNT_ONBOARDING' : 'ACCOUNT_UPDATE',
+                                url: accountLink.url,
+                                expiresAt: accountLink.expiresAt,
+                                linkType: accountLink.linkType
+                        }
+                }
+        } catch (error) {
+                return handleStripeError(error)
+        }
 }
 
 /**
@@ -281,45 +409,29 @@ const createAccountLink = async (userId: string, input: ConnectAccountLinkInput)
 		throw new InternalServerException('Failed to prepare Stripe Connect account', ErrorCode.INTERNAL_SERVER_ERROR)
 	}
 
-	const desiredMode: AccountLinkMode = (input.mode ?? 'onboarding') as AccountLinkMode
-	const linkType: Stripe.AccountLinkCreateParams.Type =
-		accountRecord.detailsSubmitted && desiredMode === 'update' ? 'account_update' : 'account_onboarding'
+        const desiredMode: AccountLinkMode = (input.mode ?? 'onboarding') as AccountLinkMode
 
-	const returnUrl = input.returnUrl ?? DEFAULT_RETURN_URL
-	const refreshUrl = input.refreshUrl ?? DEFAULT_REFRESH_URL
+        const returnUrl = input.returnUrl ?? DEFAULT_RETURN_URL
+        const refreshUrl = input.refreshUrl ?? DEFAULT_REFRESH_URL
 
-	if (!returnUrl || !refreshUrl) {
+        if (!returnUrl || !refreshUrl) {
 		throw new InternalServerException(
 			'Stripe account links require absolute return and refresh URLs. Provide them in the request body or set CLIENT_URL to a public https domain.',
 			ErrorCode.INTERNAL_SERVER_ERROR
 		)
 	}
 
-	const params: Stripe.AccountLinkCreateParams = {
-		account: account.id,
-		return_url: returnUrl,
-		refresh_url: refreshUrl,
-		type: linkType
-	}
+        try {
+                const accountLink = await createAccountLinkForAccount(account, accountRecord, {
+                        mode: desiredMode,
+                        returnUrl,
+                        refreshUrl
+                })
 
-	if (params.type === 'account_onboarding') {
-		// Collect all requirements that Stripe expects eventually so the user
-		// can finish onboarding in a single session whenever possible.
-		params.collect = 'eventually_due'
-	}
-
-	try {
-		const accountLink = await stripe.accountLinks.create(params)
-
-		return {
-			url: accountLink.url,
-			expiresAt: new Date(accountLink.expires_at * 1000).toISOString(),
-			linkType: params.type,
-			connectAccount: accountRecord
-		}
-	} catch (error) {
-		handleStripeError(error)
-	}
+                return accountLink
+        } catch (error) {
+                handleStripeError(error)
+        }
 }
 
 /**
@@ -380,8 +492,9 @@ const deleteConnectAccount = async (userId: string) => {
 }
 
 export default {
-	getConnectAccount,
-	createAccountLink,
-	createLoginLink,
-	deleteConnectAccount
+        getConnectAccount,
+        getConnectAccountStatus,
+        createAccountLink,
+        createLoginLink,
+        deleteConnectAccount
 }

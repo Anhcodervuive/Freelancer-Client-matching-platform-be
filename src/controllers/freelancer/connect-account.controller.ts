@@ -2,18 +2,37 @@ import { Request, Response } from 'express'
 import { StatusCodes } from 'http-status-codes'
 
 import freelancerConnectAccountService from '~/services/freelancer/connect-account.service'
-import { ConnectAccountLinkSchema, ConnectAccountLoginLinkSchema } from '~/schema/freelancer-connect-account.schema'
+import {
+        ConnectAccountLinkSchema,
+        ConnectAccountLoginLinkSchema,
+        ConnectAccountStatusQuerySchema
+} from '~/schema/freelancer-connect-account.schema'
 
 /**
  * GET /freelancer/connect-account
  * Returns the persisted Stripe Connect account snapshot for the authenticated freelancer.
  */
 export const getConnectAccount = async (req: Request, res: Response) => {
-	const userId = req.user?.id
+        const userId = req.user?.id
 
-	const account = await freelancerConnectAccountService.getConnectAccount(userId!)
+        const account = await freelancerConnectAccountService.getConnectAccount(userId!)
 
-	return res.status(StatusCodes.OK).json(account)
+        return res.status(StatusCodes.OK).json(account)
+}
+
+/**
+ * GET /freelancer/connect-account/status
+ * Returns the latest account snapshot and, when Stripe requires additional information,
+ * automatically prepares an onboarding/update link so the client can redirect the user.
+ */
+export const getConnectAccountStatus = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+
+        const query = ConnectAccountStatusQuerySchema.parse(req.query)
+
+        const result = await freelancerConnectAccountService.getConnectAccountStatus(userId!, query)
+
+        return res.status(StatusCodes.OK).json(result)
 }
 
 /**

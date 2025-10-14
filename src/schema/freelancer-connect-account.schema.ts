@@ -14,17 +14,23 @@ const CountryCodeSchema = z
 	.transform(value => value.toUpperCase())
 
 export const ConnectAccountLinkSchema = z.object({
-	mode: z.enum(['onboarding', 'update']).default('onboarding'),
-	returnUrl: z.string().url().optional(),
-	refreshUrl: z.string().url().optional(),
-	country: CountryCodeSchema.optional()
+        mode: z.enum(['onboarding', 'update']).default('onboarding'),
+        returnUrl: z.string().url().optional(),
+        refreshUrl: z.string().url().optional(),
+        country: CountryCodeSchema.optional()
 })
 
 // Request body for generating a dashboard login link. When no redirectUrl is
 // provided Stripe will send the freelancer back to the previous page.
 export const ConnectAccountLoginLinkSchema = z.object({
-	redirectUrl: z.string().url().optional()
+        redirectUrl: z.string().url().optional()
+})
+
+export const ConnectAccountStatusQuerySchema = z.object({
+        returnUrl: z.string().url().optional(),
+        refreshUrl: z.string().url().optional()
 })
 
 export type ConnectAccountLinkInput = z.infer<typeof ConnectAccountLinkSchema>
 export type ConnectAccountLoginLinkInput = z.infer<typeof ConnectAccountLoginLinkSchema>
+export type ConnectAccountStatusQuery = z.infer<typeof ConnectAccountStatusQuerySchema>

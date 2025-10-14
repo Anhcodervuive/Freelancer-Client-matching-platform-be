@@ -5,6 +5,7 @@ import {
         createConnectAccountLoginLink,
         deleteConnectAccount,
         getConnectAccount,
+        getConnectAccountStatus
 } from '~/controllers/freelancer/connect-account.controller'
 import authenticateMiddleware from '~/middlewares/authentication'
 import { errorHandler } from '~/utils/error-handler'
@@ -15,6 +16,7 @@ const router = Router()
 // logged-in freelancers can manage their Stripe payout configuration. The
 // errorHandler helper makes sure thrown exceptions reach the global handler.
 router.get('/', authenticateMiddleware, errorHandler(getConnectAccount))
+router.get('/status', authenticateMiddleware, errorHandler(getConnectAccountStatus))
 router.post('/link', authenticateMiddleware, errorHandler(createConnectAccountLink))
 router.post('/login-link', authenticateMiddleware, errorHandler(createConnectAccountLoginLink))
 router.delete('/', authenticateMiddleware, errorHandler(deleteConnectAccount))
