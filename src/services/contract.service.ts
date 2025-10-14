@@ -263,10 +263,10 @@ const ensureContractBelongsToClient = async (contractId: string, clientId: strin
 }
 
 const ensureContractBelongsToFreelancer = async (contractId: string, freelancerId: string) => {
-	const contract = await prismaClient.contract.findUnique({
-		where: { id: contractId },
-		select: {
-			id: true,
+        const contract = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: {
+                        id: true,
 			freelancerId: true,
 			currency: true,
 			clientId: true
@@ -277,14 +277,60 @@ const ensureContractBelongsToFreelancer = async (contractId: string, freelancerI
 		throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
 	}
 
-	return contract
+return contract
+}
+
+type ContractParticipantIds = {
+        clientId: string | null
+        freelancerId: string | null
+}
+
+const notifyMilestoneParticipants = async (
+        contract: ContractParticipantIds,
+        actorId: string,
+        notification: {
+                event: NotificationEvent
+                resourceType: NotificationResource
+                resourceId: string
+                payload: Record<string, unknown>
+        },
+        errorMessage: string
+) => {
+        const recipients = new Set<string>()
+
+        if (contract.clientId) {
+                recipients.add(contract.clientId)
+        }
+
+        if (contract.freelancerId) {
+                recipients.add(contract.freelancerId)
+        }
+
+        await Promise.all(
+                Array.from(recipients).map(async recipientId => {
+                        try {
+                                await notificationService.create({
+                                        recipientId,
+                                        actorId,
+                                        category: NotificationCategory.CONTRACT,
+                                        event: notification.event,
+                                        resourceType: notification.resourceType,
+                                        resourceId: notification.resourceId,
+                                        payload: notification.payload
+                                })
+                        } catch (notificationError) {
+                                // eslint-disable-next-line no-console
+                                console.error(errorMessage, notificationError)
+                        }
+                })
+        )
 }
 
 const ensureMilestoneBelongsToContract = async (milestoneId: string, contractId: string) => {
-	const milestone = await prismaClient.milestone.findFirst({
-		where: {
-			id: milestoneId,
-			contractId,
+        const milestone = await prismaClient.milestone.findFirst({
+                where: {
+                        id: milestoneId,
+                        contractId,
 			isDeleted: false
 		},
 		select: {
@@ -1027,28 +1073,23 @@ const createContractMilestone = async (
 		include: milestoneInclude
 	})
 
-	if (contract.freelancerId) {
-		try {
-			await notificationService.create({
-				recipientId: contract.freelancerId,
-				actorId: clientUserId,
-				category: NotificationCategory.CONTRACT,
-				event: NotificationEvent.CONTRACT_MILESTONE_CREATED,
-				resourceType: NotificationResource.CONTRACT_MILESTONE,
-				resourceId: milestone.id,
-				payload: {
-					contractId,
-					milestoneId: milestone.id,
-					milestoneTitle: milestone.title
-				}
-			})
-		} catch (notificationError) {
-			// eslint-disable-next-line no-console
-			console.error('Không thể tạo thông báo khi tạo milestone', notificationError)
-		}
-	}
+        await notifyMilestoneParticipants(
+                contract,
+                clientUserId,
+                {
+                        event: NotificationEvent.CONTRACT_MILESTONE_CREATED,
+                        resourceType: NotificationResource.CONTRACT_MILESTONE,
+                        resourceId: milestone.id,
+                        payload: {
+                                contractId,
+                                milestoneId: milestone.id,
+                                milestoneTitle: milestone.title
+                        }
+                },
+                'Không thể tạo thông báo khi tạo milestone'
+        )
 
-	return serializeMilestone(milestone)
+        return serializeMilestone(milestone)
 }
 
 const uploadMilestoneResources = async (
@@ -1673,30 +1714,25 @@ const submitMilestoneWork = async (
 
 		const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-		if (contract.clientId) {
-			try {
-				await notificationService.create({
-					recipientId: contract.clientId,
-					actorId: freelancerUserId,
-					category: NotificationCategory.CONTRACT,
-					event: NotificationEvent.CONTRACT_MILESTONE_SUBMITTED,
-					resourceType: NotificationResource.MILESTONE_SUBMISSION,
-					resourceId: submissionRecord.id,
-					payload: {
-						contractId,
-						milestoneId,
-						submissionId: submissionRecord.id
-					}
-				})
-			} catch (notificationError) {
-				// eslint-disable-next-line no-console
-				console.error('Không thể tạo thông báo khi freelancer gửi kết quả milestone', notificationError)
-			}
-		}
+                await notifyMilestoneParticipants(
+                        contract,
+                        freelancerUserId,
+                        {
+                                event: NotificationEvent.CONTRACT_MILESTONE_SUBMITTED,
+                                resourceType: NotificationResource.MILESTONE_SUBMISSION,
+                                resourceId: submissionRecord.id,
+                                payload: {
+                                        contractId,
+                                        milestoneId,
+                                        submissionId: submissionRecord.id
+                                }
+                        },
+                        'Không thể tạo thông báo khi freelancer gửi kết quả milestone'
+                )
 
-		return {
-			contractId,
-			milestone: serializeMilestone(updatedMilestone),
+                return {
+                        contractId,
+                        milestone: serializeMilestone(updatedMilestone),
 			submission: serializeMilestoneSubmission(submissionRecord)
 		}
 	} catch (error) {
@@ -1863,31 +1899,26 @@ const approveMilestoneSubmission = async (
 
 	const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-	if (contract.clientId) {
-		try {
-			await notificationService.create({
-				recipientId: contract.clientId,
-				actorId: clientUserId,
-				category: NotificationCategory.CONTRACT,
-				event: NotificationEvent.CONTRACT_MILESTONE_APPROVED,
-				resourceType: NotificationResource.MILESTONE_SUBMISSION,
-				resourceId: submission.id,
-				payload: {
-					contractId,
-					milestoneId,
-					submissionId: submission.id,
-					action: 'approved'
-				}
-			})
-		} catch (notificationError) {
-			// eslint-disable-next-line no-console
-			console.error('Không thể tạo thông báo khi client duyệt kết quả milestone', notificationError)
-		}
-	}
+        await notifyMilestoneParticipants(
+                contract,
+                clientUserId,
+                {
+                        event: NotificationEvent.CONTRACT_MILESTONE_APPROVED,
+                        resourceType: NotificationResource.MILESTONE_SUBMISSION,
+                        resourceId: submission.id,
+                        payload: {
+                                contractId,
+                                milestoneId,
+                                submissionId: submission.id,
+                                action: 'approved'
+                        }
+                },
+                'Không thể tạo thông báo khi client duyệt kết quả milestone'
+        )
 
-	return {
-		contractId,
-		milestone: serializeMilestone(updatedMilestone),
+        return {
+                contractId,
+                milestone: serializeMilestone(updatedMilestone),
 		submission: serializeMilestoneSubmission(submission),
 		transfer: serializeTransfer(transferRecord)
 	}
@@ -1966,31 +1997,26 @@ const declineMilestoneSubmission = async (
 
 	const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-	if (contract.clientId) {
-		try {
-			await notificationService.create({
-				recipientId: contract.clientId,
-				actorId: clientUserId,
-				category: NotificationCategory.CONTRACT,
-				event: NotificationEvent.CONTRACT_MILESTONE_DECLINED,
-				resourceType: NotificationResource.MILESTONE_SUBMISSION,
-				resourceId: declinedSubmission.id,
-				payload: {
-					contractId,
-					milestoneId,
-					submissionId: declinedSubmission.id,
-					action: 'declined'
-				}
-			})
-		} catch (notificationError) {
-			// eslint-disable-next-line no-console
-			console.error('Không thể tạo thông báo khi client từ chối kết quả milestone', notificationError)
-		}
-	}
+        await notifyMilestoneParticipants(
+                contract,
+                clientUserId,
+                {
+                        event: NotificationEvent.CONTRACT_MILESTONE_DECLINED,
+                        resourceType: NotificationResource.MILESTONE_SUBMISSION,
+                        resourceId: declinedSubmission.id,
+                        payload: {
+                                contractId,
+                                milestoneId,
+                                submissionId: declinedSubmission.id,
+                                action: 'declined'
+                        }
+                },
+                'Không thể tạo thông báo khi client từ chối kết quả milestone'
+        )
 
-	return {
-		contractId,
-		milestone: serializeMilestone(updatedMilestone),
+        return {
+                contractId,
+                milestone: serializeMilestone(updatedMilestone),
 		submission: serializeMilestoneSubmission(declinedSubmission)
 	}
 }
