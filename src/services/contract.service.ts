@@ -1285,160 +1285,282 @@ const payMilestone = async (
 		throw new BadRequestException('Phương thức thanh toán chưa được liên kết Stripe', ErrorCode.PARAM_QUERY_ERROR)
 	}
 
-	const stripe = getStripeClient()
-	const currency = milestoneRecord.currency.toLowerCase()
-	const amountInMinorUnit = toMinorUnitAmount(milestoneRecord.amount, currency)
-	const idempotencyKey = payload.idempotencyKey?.trim()
+        const stripe = getStripeClient()
+        const currency = milestoneRecord.currency.toLowerCase()
+        const amountInMinorUnit = toMinorUnitAmount(milestoneRecord.amount, currency)
+        const idempotencyKey = payload.idempotencyKey?.trim()
 
-	try {
-		const requireThreeDS = Boolean(STRIPE_CONFIG_INFO.FORCE_3DS)
-		const paymentIntent = await stripe.paymentIntents.create(
-			{
-				amount: amountInMinorUnit,
-				currency,
-				customer: paymentMethod.stripeCustomerId,
-				payment_method: paymentMethod.paymentMethodId,
-				confirm: true,
-				off_session: true,
-				description: `Funding milestone ${milestoneRecord.title}`,
-				transfer_group: `milestone_${milestoneRecord.id}`,
-				metadata: {
-					contractId,
-					milestoneId,
-					clientId: clientUserId,
-					paymentMethodRefId: paymentMethod.id
-				},
-				expand: ['latest_charge.payment_method_details.card'],
-				payment_method_options: {
-					card: {
-						request_three_d_secure: requireThreeDS ? 'any' : 'automatic'
-					}
-				}
-			},
-			idempotencyKey ? { idempotencyKey } : undefined
-		)
+        const fallbackCardFromPaymentMethod = {
+                brand: paymentMethod.brand ?? null,
+                last4: paymentMethod.last4 ?? null,
+                expMonth: paymentMethod.expMonth ?? null,
+                expYear: paymentMethod.expYear ?? null
+        }
 
-		const latestCharge = paymentIntent.latest_charge
-		let cardDetails: Stripe.Charge.PaymentMethodDetails.Card | null = null
-		let chargeId: string | null = null
+        let existingPayment: PaymentEntity | null = null
 
-		if (latestCharge && typeof latestCharge !== 'string') {
-			const charge = latestCharge as Stripe.Charge
-			chargeId = charge.id ?? null
-			cardDetails = charge.payment_method_details?.card ?? null
-		}
+        if (idempotencyKey) {
+                existingPayment = await prismaClient.payment.findFirst({
+                        where: {
+                                escrowId: escrow.id,
+                                OR: [
+                                        { idemKey: idempotencyKey },
+                                        { paymentIntentId: idempotencyKey }
+                                ]
+                        }
+                })
+        }
 
-		const paymentRecord = await prismaClient.$transaction(async tx => {
-			const payment = await tx.payment.create({
-				data: {
-					escrowId: escrow.id,
-					amount: milestoneRecord.amount,
-					currency: milestoneRecord.currency,
-					status: PaymentStatus.SUCCEEDED,
-					paymentIntentId: paymentIntent.id,
-					chargeId,
-					cardBrand: cardDetails?.brand ?? paymentMethod.brand ?? null,
-					cardLast4: cardDetails?.last4 ?? paymentMethod.last4 ?? null,
-					cardExpMonth: cardDetails?.exp_month ?? paymentMethod.expMonth ?? null,
-					cardExpYear: cardDetails?.exp_year ?? paymentMethod.expYear ?? null,
-					cardFingerprint: cardDetails?.fingerprint ?? null,
-					idemKey: idempotencyKey ?? null
-				}
-			})
+        const existingPaymentIntentId = existingPayment?.paymentIntentId
+                ?? (idempotencyKey && idempotencyKey.startsWith('pi_') ? idempotencyKey : null)
 
-			await tx.escrow.update({
-				where: { id: escrow.id },
-				data: {
-					amountFunded: escrow.amountFunded.plus(milestoneRecord.amount),
-					status: EscrowStatus.FUNDED
-				}
-			})
+        const buildRequiresActionResponse = async (
+                paymentIntent: Stripe.PaymentIntent,
+                options: {
+                        existingPayment?: PaymentEntity | null
+                        idempotencyKey?: string | null
+                }
+        ) => {
+                const pendingPayment = await prismaClient.payment.upsert({
+                        where: { paymentIntentId: paymentIntent.id },
+                        create: {
+                                escrowId: escrow.id,
+                                amount: milestoneRecord.amount,
+                                currency: milestoneRecord.currency,
+                                status: PaymentStatus.REQUIRES_ACTION,
+                                paymentIntentId: paymentIntent.id,
+                                chargeId: null,
+                                cardBrand:
+                                        options.existingPayment?.cardBrand
+                                        ?? fallbackCardFromPaymentMethod.brand,
+                                cardLast4:
+                                        options.existingPayment?.cardLast4
+                                        ?? fallbackCardFromPaymentMethod.last4,
+                                cardExpMonth:
+                                        options.existingPayment?.cardExpMonth
+                                        ?? fallbackCardFromPaymentMethod.expMonth,
+                                cardExpYear:
+                                        options.existingPayment?.cardExpYear
+                                        ?? fallbackCardFromPaymentMethod.expYear,
+                                cardFingerprint: options.existingPayment?.cardFingerprint ?? null,
+                                idemKey: options.idempotencyKey ?? null
+                        },
+                        update: {
+                                status: PaymentStatus.REQUIRES_ACTION,
+                                ...(options.idempotencyKey ? { idemKey: options.idempotencyKey } : {})
+                        }
+                })
 
-			return payment
-		})
+                const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-		const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+                const metaPayload = {
+                        status: paymentIntent.status ?? null,
+                        paymentStatus: pendingPayment.status,
+                        requiresAction: true,
+                        clientSecret: paymentIntent.client_secret ?? null,
+                        client_secret: paymentIntent.client_secret ?? null,
+                        idempotencyKey: options.idempotencyKey ?? pendingPayment.idemKey ?? null,
+                        idemKey: pendingPayment.idemKey ?? options.idempotencyKey ?? null,
+                        paymentIntentId: paymentIntent.id,
+                        payment_intent_id: paymentIntent.id
+                }
 
-		const responseMeta = {
-			status: paymentIntent.status ?? null,
-			paymentStatus: paymentRecord.status,
-			requiresAction: false,
-			clientSecret: paymentIntent.client_secret ?? null,
-			client_secret: paymentIntent.client_secret ?? null,
-			idempotencyKey: idempotencyKey ?? paymentRecord.idemKey ?? null,
-			idemKey: paymentRecord.idemKey ?? idempotencyKey ?? null,
-			paymentIntentId: paymentIntent.id,
-			payment_intent_id: paymentIntent.id
-		}
+                return {
+                        contractId,
+                        milestone: serializeMilestone(updatedMilestone),
+                        payment: serializePayment(pendingPayment),
+                        nextAction: paymentIntent.next_action ?? null,
+                        ...metaPayload
+                }
+        }
 
-		return {
-			contractId,
-			milestone: serializeMilestone(updatedMilestone),
-			payment: serializePayment(paymentRecord),
-			nextAction: paymentIntent.next_action ?? null,
-			...responseMeta
-		}
-	} catch (error) {
-		if (error instanceof Stripe.errors.StripeCardError) {
-			const paymentIntent = error.payment_intent as Stripe.PaymentIntent | undefined
-			if (paymentIntent && paymentIntent.status === 'requires_action') {
-				console.log('requires_action')
-				const pendingPayment = await prismaClient.payment.upsert({
-					where: { paymentIntentId: paymentIntent.id },
-					create: {
-						escrowId: escrow.id,
-						amount: milestoneRecord.amount,
-						currency: milestoneRecord.currency,
-						status: PaymentStatus.REQUIRES_ACTION,
-						paymentIntentId: paymentIntent.id,
-						chargeId: null,
-						cardBrand: paymentMethod.brand ?? null,
-						cardLast4: paymentMethod.last4 ?? null,
-						cardExpMonth: paymentMethod.expMonth ?? null,
-						cardExpYear: paymentMethod.expYear ?? null,
-						cardFingerprint: null,
-						idemKey: idempotencyKey ?? null
-					},
-					update: {
-						status: PaymentStatus.REQUIRES_ACTION,
-						...(idempotencyKey ? { idemKey: idempotencyKey } : {})
-					}
-				})
+        const buildSucceededResponse = async (
+                paymentIntent: Stripe.PaymentIntent,
+                options: {
+                        existingPayment?: PaymentEntity | null
+                        idempotencyKey?: string | null
+                }
+        ) => {
+                const latestCharge = paymentIntent.latest_charge
+                let cardDetails: Stripe.Charge.PaymentMethodDetails.Card | null = null
+                let chargeId: string | null = null
 
-				const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+                if (latestCharge && typeof latestCharge !== 'string') {
+                        const charge = latestCharge as Stripe.Charge
+                        chargeId = charge.id ?? null
+                        cardDetails = charge.payment_method_details?.card ?? null
+                }
 
-				const metaPayload = {
-					status: paymentIntent.status ?? null,
-					paymentStatus: pendingPayment.status,
-					requiresAction: true,
-					clientSecret: paymentIntent.client_secret ?? null,
-					client_secret: paymentIntent.client_secret ?? null,
-					idempotencyKey: idempotencyKey ?? pendingPayment.idemKey ?? null,
-					idemKey: pendingPayment.idemKey ?? idempotencyKey ?? null,
-					paymentIntentId: paymentIntent.id,
-					payment_intent_id: paymentIntent.id
-				}
+                const cardBrand = cardDetails?.brand
+                        ?? options.existingPayment?.cardBrand
+                        ?? fallbackCardFromPaymentMethod.brand
+                const cardLast4 = cardDetails?.last4
+                        ?? options.existingPayment?.cardLast4
+                        ?? fallbackCardFromPaymentMethod.last4
+                const cardExpMonth = cardDetails?.exp_month
+                        ?? options.existingPayment?.cardExpMonth
+                        ?? fallbackCardFromPaymentMethod.expMonth
+                const cardExpYear = cardDetails?.exp_year
+                        ?? options.existingPayment?.cardExpYear
+                        ?? fallbackCardFromPaymentMethod.expYear
+                const cardFingerprint = cardDetails?.fingerprint ?? options.existingPayment?.cardFingerprint ?? null
 
-				return {
-					contractId,
-					milestone: serializeMilestone(updatedMilestone),
-					payment: serializePayment(pendingPayment),
-					nextAction: paymentIntent.next_action ?? null,
-					...metaPayload
-				}
-			}
+                const paymentRecord = await prismaClient.$transaction(async tx => {
+                        const updatedPayment = await tx.payment.upsert({
+                                where: { paymentIntentId: paymentIntent.id },
+                                create: {
+                                        escrowId: escrow.id,
+                                        amount: milestoneRecord.amount,
+                                        currency: milestoneRecord.currency,
+                                        status: PaymentStatus.SUCCEEDED,
+                                        paymentIntentId: paymentIntent.id,
+                                        chargeId,
+                                        cardBrand,
+                                        cardLast4,
+                                        cardExpMonth,
+                                        cardExpYear,
+                                        cardFingerprint,
+                                        idemKey: options.idempotencyKey ?? null
+                                },
+                                update: {
+                                        status: PaymentStatus.SUCCEEDED,
+                                        chargeId,
+                                        cardBrand,
+                                        cardLast4,
+                                        cardExpMonth,
+                                        cardExpYear,
+                                        cardFingerprint,
+                                        ...(options.idempotencyKey ? { idemKey: options.idempotencyKey } : {})
+                                }
+                        })
 
-			throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
-		}
+                        if (!options.existingPayment || options.existingPayment.status !== PaymentStatus.SUCCEEDED) {
+                                await tx.escrow.update({
+                                        where: { id: escrow.id },
+                                        data: {
+                                                amountFunded: escrow.amountFunded.plus(milestoneRecord.amount),
+                                                status: EscrowStatus.FUNDED
+                                        }
+                                })
+                        }
 
-		console.log('Not Stripe.errors.StripeCardError')
+                        return updatedPayment
+                })
 
-		if (error instanceof Stripe.errors.StripeError) {
-			throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
-		}
+                const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-		throw error
-	}
+                const responseMeta = {
+                        status: paymentIntent.status ?? null,
+                        paymentStatus: paymentRecord.status,
+                        requiresAction: false,
+                        clientSecret: paymentIntent.client_secret ?? null,
+                        client_secret: paymentIntent.client_secret ?? null,
+                        idempotencyKey: options.idempotencyKey ?? paymentRecord.idemKey ?? null,
+                        idemKey: paymentRecord.idemKey ?? options.idempotencyKey ?? null,
+                        paymentIntentId: paymentIntent.id,
+                        payment_intent_id: paymentIntent.id
+                }
+
+                return {
+                        contractId,
+                        milestone: serializeMilestone(updatedMilestone),
+                        payment: serializePayment(paymentRecord),
+                        nextAction: paymentIntent.next_action ?? null,
+                        ...responseMeta
+                }
+        }
+
+        try {
+                const effectiveIdempotencyKey = idempotencyKey ?? existingPayment?.idemKey ?? null
+
+                if (existingPaymentIntentId) {
+                        const retrievedIntent = await stripe.paymentIntents.retrieve(existingPaymentIntentId, {
+                                expand: ['latest_charge.payment_method_details.card']
+                        })
+
+                        if (
+                                retrievedIntent.status === 'succeeded'
+                                || retrievedIntent.status === 'processing'
+                                || retrievedIntent.status === 'requires_capture'
+                        ) {
+                                return buildSucceededResponse(retrievedIntent, {
+                                        existingPayment,
+                                        idempotencyKey: effectiveIdempotencyKey
+                                })
+                        }
+
+                        if (retrievedIntent.status === 'requires_action' || retrievedIntent.status === 'requires_confirmation') {
+                                return buildRequiresActionResponse(retrievedIntent, {
+                                        existingPayment,
+                                        idempotencyKey: effectiveIdempotencyKey
+                                })
+                        }
+
+                        if (retrievedIntent.status === 'requires_payment_method') {
+                                if (existingPayment && existingPayment.status !== PaymentStatus.FAILED) {
+                                        await prismaClient.payment.update({
+                                                where: { id: existingPayment.id },
+                                                data: { status: PaymentStatus.FAILED }
+                                        })
+                                }
+
+                                throw new BadRequestException(
+                                        'Thanh toán cần một phương thức khác. Vui lòng thử lại với thẻ khác.',
+                                        ErrorCode.PARAM_QUERY_ERROR
+                                )
+                        }
+                }
+
+                const requireThreeDS = Boolean(STRIPE_CONFIG_INFO.FORCE_3DS)
+                const paymentIntent = await stripe.paymentIntents.create(
+                        {
+                                amount: amountInMinorUnit,
+                                currency,
+                                customer: paymentMethod.stripeCustomerId,
+                                payment_method: paymentMethod.paymentMethodId,
+                                confirm: true,
+                                off_session: true,
+                                description: `Funding milestone ${milestoneRecord.title}`,
+                                transfer_group: `milestone_${milestoneRecord.id}`,
+                                metadata: {
+                                        contractId,
+                                        milestoneId,
+                                        clientId: clientUserId,
+                                        paymentMethodRefId: paymentMethod.id
+                                },
+                                expand: ['latest_charge.payment_method_details.card'],
+                                payment_method_options: {
+                                        card: {
+                                                request_three_d_secure: requireThreeDS ? 'any' : 'automatic'
+                                        }
+                                }
+                        },
+                        idempotencyKey ? { idempotencyKey } : undefined
+                )
+
+                return buildSucceededResponse(paymentIntent, {
+                        idempotencyKey
+                })
+        } catch (error) {
+                if (error instanceof Stripe.errors.StripeCardError) {
+                        const paymentIntent = error.payment_intent as Stripe.PaymentIntent | undefined
+                        if (paymentIntent && (paymentIntent.status === 'requires_action' || paymentIntent.status === 'requires_confirmation')) {
+                                const effectiveIdempotencyKey = idempotencyKey ?? existingPayment?.idemKey ?? null
+                                return buildRequiresActionResponse(paymentIntent, {
+                                        existingPayment,
+                                        idempotencyKey: effectiveIdempotencyKey
+                                })
+                        }
+
+                        throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
+                }
+
+                if (error instanceof Stripe.errors.StripeError) {
+                        throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
+                }
+
+                throw error
+        }
 }
 
 const submitMilestoneWork = async (
