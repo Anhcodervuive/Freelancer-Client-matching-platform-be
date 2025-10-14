@@ -1480,6 +1480,16 @@ const payMilestone = async (
 			}
 
 			if (retrievedIntent.status === 'requires_payment_method') {
+				const lastErrorCode = retrievedIntent.last_payment_error?.code
+				const requiresAuthentication = lastErrorCode === 'authentication_required'
+
+				if (requiresAuthentication) {
+					return buildRequiresActionResponse(retrievedIntent, {
+						existingPayment,
+						idempotencyKey: effectiveIdempotencyKey ?? existingPayment?.paymentIntentId ?? retrievedIntent.id
+					})
+				}
+
 				if (existingPayment && existingPayment.status !== PaymentStatus.FAILED) {
 					await prismaClient.payment.update({
 						where: { id: existingPayment.id },
@@ -1527,14 +1537,29 @@ const payMilestone = async (
 	} catch (error) {
 		if (error instanceof Stripe.errors.StripeCardError) {
 			const paymentIntent = error.payment_intent as Stripe.PaymentIntent | undefined
+			const paymentIntentStatus = paymentIntent?.status
+			const lastErrorCode =
+				paymentIntent?.last_payment_error?.code ?? (typeof error.code === 'string' ? error.code : undefined)
+			const effectiveIdempotencyKey = idempotencyKey ?? existingPayment?.idemKey ?? null
+
 			if (
 				paymentIntent &&
-				(paymentIntent.status === 'requires_action' || paymentIntent.status === 'requires_confirmation')
+				(paymentIntentStatus === 'requires_action' || paymentIntentStatus === 'requires_confirmation')
 			) {
-				const effectiveIdempotencyKey = idempotencyKey ?? existingPayment?.idemKey ?? null
 				return buildRequiresActionResponse(paymentIntent, {
 					existingPayment,
 					idempotencyKey: effectiveIdempotencyKey
+				})
+			}
+
+			if (
+				paymentIntent &&
+				paymentIntentStatus === 'requires_payment_method' &&
+				lastErrorCode === 'authentication_required'
+			) {
+				return buildRequiresActionResponse(paymentIntent, {
+					existingPayment,
+					idempotencyKey: effectiveIdempotencyKey ?? existingPayment?.paymentIntentId ?? paymentIntent.id
 				})
 			}
 
