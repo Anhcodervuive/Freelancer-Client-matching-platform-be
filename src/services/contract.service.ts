@@ -5,18 +5,18 @@ import type { Express } from 'express'
 import Stripe from 'stripe'
 
 import {
-        AssetKind,
-        AssetProvider,
-        AssetStatus,
-        EscrowStatus,
-        MilestoneStatus,
-        MilestoneSubmissionStatus,
-        NotificationCategory,
-        NotificationEvent,
-        NotificationResource,
-        PaymentStatus,
-        Prisma,
-        TransferStatus
+	AssetKind,
+	AssetProvider,
+	AssetStatus,
+	EscrowStatus,
+	MilestoneStatus,
+	MilestoneSubmissionStatus,
+	NotificationCategory,
+	NotificationEvent,
+	NotificationResource,
+	PaymentStatus,
+	Prisma,
+	TransferStatus
 } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
@@ -245,15 +245,15 @@ const ensureFreelancerUser = async (userId: string) => {
 }
 
 const ensureContractBelongsToClient = async (contractId: string, clientId: string) => {
-        const contract = await prismaClient.contract.findUnique({
-                where: { id: contractId },
-                select: {
-                        id: true,
-                        clientId: true,
-                        currency: true,
-                        freelancerId: true
-                }
-        })
+	const contract = await prismaClient.contract.findUnique({
+		where: { id: contractId },
+		select: {
+			id: true,
+			clientId: true,
+			currency: true,
+			freelancerId: true
+		}
+	})
 
 	if (!contract || contract.clientId !== clientId) {
 		throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
@@ -263,15 +263,15 @@ const ensureContractBelongsToClient = async (contractId: string, clientId: strin
 }
 
 const ensureContractBelongsToFreelancer = async (contractId: string, freelancerId: string) => {
-        const contract = await prismaClient.contract.findUnique({
-                where: { id: contractId },
-                select: {
-                        id: true,
-                        freelancerId: true,
-                        currency: true,
-                        clientId: true
-                }
-        })
+	const contract = await prismaClient.contract.findUnique({
+		where: { id: contractId },
+		select: {
+			id: true,
+			freelancerId: true,
+			currency: true,
+			clientId: true
+		}
+	})
 
 	if (!contract || contract.freelancerId !== freelancerId) {
 		throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
@@ -995,12 +995,12 @@ const listMilestoneResources = async (userId: string, contractId: string, milest
 }
 
 const createContractMilestone = async (
-        clientUserId: string,
-        contractId: string,
-        payload: CreateContractMilestoneInput
+	clientUserId: string,
+	contractId: string,
+	payload: CreateContractMilestoneInput
 ) => {
-        await ensureClientUser(clientUserId)
-        const contract = await ensureContractBelongsToClient(contractId, clientUserId)
+	await ensureClientUser(clientUserId)
+	const contract = await ensureContractBelongsToClient(contractId, clientUserId)
 
 	const currency = payload.currency.toUpperCase()
 
@@ -1008,10 +1008,10 @@ const createContractMilestone = async (
 		throw new BadRequestException('Currency của milestone phải trùng với hợp đồng', ErrorCode.PARAM_QUERY_ERROR)
 	}
 
-        const milestone = await prismaClient.milestone.create({
-                data: {
-                        contract: {
-                                connect: { id: contractId }
+	const milestone = await prismaClient.milestone.create({
+		data: {
+			contract: {
+				connect: { id: contractId }
 			},
 			title: payload.title,
 			amount: new Prisma.Decimal(payload.amount),
@@ -1024,31 +1024,31 @@ const createContractMilestone = async (
 				}
 			}
 		},
-                include: milestoneInclude
-        })
+		include: milestoneInclude
+	})
 
-        if (contract.freelancerId) {
-                try {
-                        await notificationService.create({
-                                recipientId: contract.freelancerId,
-                                actorId: clientUserId,
-                                category: NotificationCategory.CONTRACT,
-                                event: NotificationEvent.CONTRACT_MILESTONE_CREATED,
-                                resourceType: NotificationResource.CONTRACT_MILESTONE,
-                                resourceId: milestone.id,
-                                payload: {
-                                        contractId,
-                                        milestoneId: milestone.id,
-                                        milestoneTitle: milestone.title
-                                }
-                        })
-                } catch (notificationError) {
-                        // eslint-disable-next-line no-console
-                        console.error('Không thể tạo thông báo khi tạo milestone', notificationError)
-                }
-        }
+	if (contract.freelancerId) {
+		try {
+			await notificationService.create({
+				recipientId: contract.freelancerId,
+				actorId: clientUserId,
+				category: NotificationCategory.CONTRACT,
+				event: NotificationEvent.CONTRACT_MILESTONE_CREATED,
+				resourceType: NotificationResource.CONTRACT_MILESTONE,
+				resourceId: milestone.id,
+				payload: {
+					contractId,
+					milestoneId: milestone.id,
+					milestoneTitle: milestone.title
+				}
+			})
+		} catch (notificationError) {
+			// eslint-disable-next-line no-console
+			console.error('Không thể tạo thông báo khi tạo milestone', notificationError)
+		}
+	}
 
-        return serializeMilestone(milestone)
+	return serializeMilestone(milestone)
 }
 
 const uploadMilestoneResources = async (
@@ -1290,35 +1290,35 @@ const payMilestone = async (
 	const amountInMinorUnit = toMinorUnitAmount(milestoneRecord.amount, currency)
 	const idempotencyKey = payload.idempotencyKey?.trim()
 
-        try {
-                const requireThreeDS = Boolean(STRIPE_CONFIG_INFO.FORCE_3DS)
-                const paymentIntent = await stripe.paymentIntents.create(
-                        {
-                                amount: amountInMinorUnit,
-                                currency,
-                                customer: paymentMethod.stripeCustomerId,
-                                payment_method: paymentMethod.paymentMethodId,
-                                confirm: true,
-                                off_session: true,
-                                description: `Funding milestone ${milestoneRecord.title}`,
-                                transfer_group: `milestone_${milestoneRecord.id}`,
-                                metadata: {
-                                        contractId,
-                                        milestoneId,
-                                        clientId: clientUserId,
-                                        paymentMethodRefId: paymentMethod.id
-                                },
-                                expand: ['latest_charge.payment_method_details.card'],
-                                payment_method_options: {
-                                        card: {
-                                                request_three_d_secure: requireThreeDS ? 'any' : 'automatic'
-                                        }
-                                }
-                        },
-                        idempotencyKey ? { idempotencyKey } : undefined
-                )
+	try {
+		const requireThreeDS = Boolean(STRIPE_CONFIG_INFO.FORCE_3DS)
+		const paymentIntent = await stripe.paymentIntents.create(
+			{
+				amount: amountInMinorUnit,
+				currency,
+				customer: paymentMethod.stripeCustomerId,
+				payment_method: paymentMethod.paymentMethodId,
+				confirm: true,
+				off_session: true,
+				description: `Funding milestone ${milestoneRecord.title}`,
+				transfer_group: `milestone_${milestoneRecord.id}`,
+				metadata: {
+					contractId,
+					milestoneId,
+					clientId: clientUserId,
+					paymentMethodRefId: paymentMethod.id
+				},
+				expand: ['latest_charge.payment_method_details.card'],
+				payment_method_options: {
+					card: {
+						request_three_d_secure: requireThreeDS ? 'any' : 'automatic'
+					}
+				}
+			},
+			idempotencyKey ? { idempotencyKey } : undefined
+		)
 
-                const latestCharge = paymentIntent.latest_charge
+		const latestCharge = paymentIntent.latest_charge
 		let cardDetails: Stripe.Charge.PaymentMethodDetails.Card | null = null
 		let chargeId: string | null = null
 
@@ -1359,30 +1359,31 @@ const payMilestone = async (
 
 		const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-                const responseMeta = {
-                        status: paymentIntent.status ?? null,
-                        paymentStatus: paymentRecord.status,
-                        requiresAction: false,
-                        clientSecret: paymentIntent.client_secret ?? null,
-                        client_secret: paymentIntent.client_secret ?? null,
-                        idempotencyKey: idempotencyKey ?? paymentRecord.idemKey ?? null,
-                        idemKey: paymentRecord.idemKey ?? idempotencyKey ?? null,
-                        paymentIntentId: paymentIntent.id,
-                        payment_intent_id: paymentIntent.id
-                }
+		const responseMeta = {
+			status: paymentIntent.status ?? null,
+			paymentStatus: paymentRecord.status,
+			requiresAction: false,
+			clientSecret: paymentIntent.client_secret ?? null,
+			client_secret: paymentIntent.client_secret ?? null,
+			idempotencyKey: idempotencyKey ?? paymentRecord.idemKey ?? null,
+			idemKey: paymentRecord.idemKey ?? idempotencyKey ?? null,
+			paymentIntentId: paymentIntent.id,
+			payment_intent_id: paymentIntent.id
+		}
 
-                return {
-                        contractId,
-                        milestone: serializeMilestone(updatedMilestone),
-                        payment: serializePayment(paymentRecord),
-                        nextAction: paymentIntent.next_action ?? null,
-                        ...responseMeta
-                }
-        } catch (error) {
-                if (error instanceof Stripe.errors.StripeCardError) {
-                        const paymentIntent = error.payment_intent as Stripe.PaymentIntent | undefined
-
-                        if (paymentIntent && paymentIntent.status === 'requires_action') {
+		return {
+			contractId,
+			milestone: serializeMilestone(updatedMilestone),
+			payment: serializePayment(paymentRecord),
+			nextAction: paymentIntent.next_action ?? null,
+			...responseMeta
+		}
+	} catch (error) {
+		if (error instanceof Stripe.errors.StripeCardError) {
+			const paymentIntent = error.payment_intent as Stripe.PaymentIntent | undefined
+			console.log(error)
+			if (paymentIntent && paymentIntent.status === 'requires_payment_method') {
+				console.log('requires_action')
 				const pendingPayment = await prismaClient.payment.upsert({
 					where: { paymentIntentId: paymentIntent.id },
 					create: {
@@ -1407,29 +1408,31 @@ const payMilestone = async (
 
 				const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-                                const metaPayload = {
-                                        status: paymentIntent.status ?? null,
-                                        paymentStatus: pendingPayment.status,
-                                        requiresAction: true,
-                                        clientSecret: paymentIntent.client_secret ?? null,
-                                        client_secret: paymentIntent.client_secret ?? null,
-                                        idempotencyKey: idempotencyKey ?? pendingPayment.idemKey ?? null,
-                                        idemKey: pendingPayment.idemKey ?? idempotencyKey ?? null,
-                                        paymentIntentId: paymentIntent.id,
-                                        payment_intent_id: paymentIntent.id
-                                }
+				const metaPayload = {
+					status: paymentIntent.status ?? null,
+					paymentStatus: pendingPayment.status,
+					requiresAction: true,
+					clientSecret: paymentIntent.client_secret ?? null,
+					client_secret: paymentIntent.client_secret ?? null,
+					idempotencyKey: idempotencyKey ?? pendingPayment.idemKey ?? null,
+					idemKey: pendingPayment.idemKey ?? idempotencyKey ?? null,
+					paymentIntentId: paymentIntent.id,
+					payment_intent_id: paymentIntent.id
+				}
 
-                                return {
-                                        contractId,
-                                        milestone: serializeMilestone(updatedMilestone),
-                                        payment: serializePayment(pendingPayment),
-                                        nextAction: paymentIntent.next_action ?? null,
-                                        ...metaPayload
-                                }
-                        }
+				return {
+					contractId,
+					milestone: serializeMilestone(updatedMilestone),
+					payment: serializePayment(pendingPayment),
+					nextAction: paymentIntent.next_action ?? null,
+					...metaPayload
+				}
+			}
 
 			throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
 		}
+
+		console.log('Not Stripe.errors.StripeCardError')
 
 		if (error instanceof Stripe.errors.StripeError) {
 			throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
@@ -1440,14 +1443,14 @@ const payMilestone = async (
 }
 
 const submitMilestoneWork = async (
-        freelancerUserId: string,
-        contractId: string,
-        milestoneId: string,
-        payload: SubmitMilestoneInput,
-        files: readonly Express.Multer.File[]
+	freelancerUserId: string,
+	contractId: string,
+	milestoneId: string,
+	payload: SubmitMilestoneInput,
+	files: readonly Express.Multer.File[]
 ) => {
-        await ensureFreelancerUser(freelancerUserId)
-        const contract = await ensureContractBelongsToFreelancer(contractId, freelancerUserId)
+	await ensureFreelancerUser(freelancerUserId)
+	const contract = await ensureContractBelongsToFreelancer(contractId, freelancerUserId)
 
 	const milestoneRecord = await prismaClient.milestone.findFirst({
 		where: {
@@ -1536,49 +1539,49 @@ const submitMilestoneWork = async (
 			return hydratedSubmission
 		})
 
-                const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+		const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-                if (contract.clientId) {
-                        try {
-                                await notificationService.create({
-                                        recipientId: contract.clientId,
-                                        actorId: freelancerUserId,
-                                        category: NotificationCategory.CONTRACT,
-                                        event: NotificationEvent.CONTRACT_MILESTONE_SUBMITTED,
-                                        resourceType: NotificationResource.MILESTONE_SUBMISSION,
-                                        resourceId: submissionRecord.id,
-                                        payload: {
-                                                contractId,
-                                                milestoneId,
-                                                submissionId: submissionRecord.id
-                                        }
-                                })
-                        } catch (notificationError) {
-                                // eslint-disable-next-line no-console
-                                console.error('Không thể tạo thông báo khi freelancer gửi kết quả milestone', notificationError)
-                        }
-                }
+		if (contract.clientId) {
+			try {
+				await notificationService.create({
+					recipientId: contract.clientId,
+					actorId: freelancerUserId,
+					category: NotificationCategory.CONTRACT,
+					event: NotificationEvent.CONTRACT_MILESTONE_SUBMITTED,
+					resourceType: NotificationResource.MILESTONE_SUBMISSION,
+					resourceId: submissionRecord.id,
+					payload: {
+						contractId,
+						milestoneId,
+						submissionId: submissionRecord.id
+					}
+				})
+			} catch (notificationError) {
+				// eslint-disable-next-line no-console
+				console.error('Không thể tạo thông báo khi freelancer gửi kết quả milestone', notificationError)
+			}
+		}
 
-                return {
-                        contractId,
-                        milestone: serializeMilestone(updatedMilestone),
-                        submission: serializeMilestoneSubmission(submissionRecord)
-                }
-        } catch (error) {
-                await cleanupMilestoneSubmissionUploads(uploads)
-                throw error
-        }
+		return {
+			contractId,
+			milestone: serializeMilestone(updatedMilestone),
+			submission: serializeMilestoneSubmission(submissionRecord)
+		}
+	} catch (error) {
+		await cleanupMilestoneSubmissionUploads(uploads)
+		throw error
+	}
 }
 
 const approveMilestoneSubmission = async (
-        clientUserId: string,
-        contractId: string,
-        milestoneId: string,
-        submissionId: string,
-        payload: ApproveMilestoneSubmissionInput
+	clientUserId: string,
+	contractId: string,
+	milestoneId: string,
+	submissionId: string,
+	payload: ApproveMilestoneSubmissionInput
 ) => {
-        await ensureClientUser(clientUserId)
-        const contract = await ensureContractBelongsToClient(contractId, clientUserId)
+	await ensureClientUser(clientUserId)
+	const contract = await ensureContractBelongsToClient(contractId, clientUserId)
 
 	const milestoneRecord = await prismaClient.milestone.findFirst({
 		where: {
@@ -1726,47 +1729,47 @@ const approveMilestoneSubmission = async (
 		return { submission: approvedSubmission, transfer: createdTransfer }
 	})
 
-        const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+	const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-        if (contract.clientId) {
-                try {
-                        await notificationService.create({
-                                recipientId: contract.clientId,
-                                actorId: clientUserId,
-                                category: NotificationCategory.CONTRACT,
-                                event: NotificationEvent.CONTRACT_MILESTONE_APPROVED,
-                                resourceType: NotificationResource.MILESTONE_SUBMISSION,
-                                resourceId: submission.id,
-                                payload: {
-                                        contractId,
-                                        milestoneId,
-                                        submissionId: submission.id,
-                                        action: 'approved'
-                                }
-                        })
-                } catch (notificationError) {
-                        // eslint-disable-next-line no-console
-                        console.error('Không thể tạo thông báo khi client duyệt kết quả milestone', notificationError)
-                }
-        }
+	if (contract.clientId) {
+		try {
+			await notificationService.create({
+				recipientId: contract.clientId,
+				actorId: clientUserId,
+				category: NotificationCategory.CONTRACT,
+				event: NotificationEvent.CONTRACT_MILESTONE_APPROVED,
+				resourceType: NotificationResource.MILESTONE_SUBMISSION,
+				resourceId: submission.id,
+				payload: {
+					contractId,
+					milestoneId,
+					submissionId: submission.id,
+					action: 'approved'
+				}
+			})
+		} catch (notificationError) {
+			// eslint-disable-next-line no-console
+			console.error('Không thể tạo thông báo khi client duyệt kết quả milestone', notificationError)
+		}
+	}
 
-        return {
-                contractId,
-                milestone: serializeMilestone(updatedMilestone),
-                submission: serializeMilestoneSubmission(submission),
-                transfer: serializeTransfer(transferRecord)
-        }
+	return {
+		contractId,
+		milestone: serializeMilestone(updatedMilestone),
+		submission: serializeMilestoneSubmission(submission),
+		transfer: serializeTransfer(transferRecord)
+	}
 }
 
 const declineMilestoneSubmission = async (
-        clientUserId: string,
-        contractId: string,
-        milestoneId: string,
-        submissionId: string,
-        payload: DeclineMilestoneSubmissionInput
+	clientUserId: string,
+	contractId: string,
+	milestoneId: string,
+	submissionId: string,
+	payload: DeclineMilestoneSubmissionInput
 ) => {
-        await ensureClientUser(clientUserId)
-        const contract = await ensureContractBelongsToClient(contractId, clientUserId)
+	await ensureClientUser(clientUserId)
+	const contract = await ensureContractBelongsToClient(contractId, clientUserId)
 
 	const milestoneRecord = await prismaClient.milestone.findFirst({
 		where: {
@@ -1829,35 +1832,35 @@ const declineMilestoneSubmission = async (
 		return updated
 	})
 
-        const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+	const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
 
-        if (contract.clientId) {
-                try {
-                        await notificationService.create({
-                                recipientId: contract.clientId,
-                                actorId: clientUserId,
-                                category: NotificationCategory.CONTRACT,
-                                event: NotificationEvent.CONTRACT_MILESTONE_DECLINED,
-                                resourceType: NotificationResource.MILESTONE_SUBMISSION,
-                                resourceId: declinedSubmission.id,
-                                payload: {
-                                        contractId,
-                                        milestoneId,
-                                        submissionId: declinedSubmission.id,
-                                        action: 'declined'
-                                }
-                        })
-                } catch (notificationError) {
-                        // eslint-disable-next-line no-console
-                        console.error('Không thể tạo thông báo khi client từ chối kết quả milestone', notificationError)
-                }
-        }
+	if (contract.clientId) {
+		try {
+			await notificationService.create({
+				recipientId: contract.clientId,
+				actorId: clientUserId,
+				category: NotificationCategory.CONTRACT,
+				event: NotificationEvent.CONTRACT_MILESTONE_DECLINED,
+				resourceType: NotificationResource.MILESTONE_SUBMISSION,
+				resourceId: declinedSubmission.id,
+				payload: {
+					contractId,
+					milestoneId,
+					submissionId: declinedSubmission.id,
+					action: 'declined'
+				}
+			})
+		} catch (notificationError) {
+			// eslint-disable-next-line no-console
+			console.error('Không thể tạo thông báo khi client từ chối kết quả milestone', notificationError)
+		}
+	}
 
-        return {
-                contractId,
-                milestone: serializeMilestone(updatedMilestone),
-                submission: serializeMilestoneSubmission(declinedSubmission)
-        }
+	return {
+		contractId,
+		milestone: serializeMilestone(updatedMilestone),
+		submission: serializeMilestoneSubmission(declinedSubmission)
+	}
 }
 
 const contractService = {
