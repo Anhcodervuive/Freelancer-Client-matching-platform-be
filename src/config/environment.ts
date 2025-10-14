@@ -62,7 +62,8 @@ export const R2_CONFIG = {
 }
 
 export const STRIPE_CONFIG_INFO = {
-	API_KEY: process.env.STRIPE_API_KEY
+        API_KEY: process.env.STRIPE_API_KEY,
+        FORCE_3DS: process.env.STRIPE_FORCE_3DS === 'true'
 }
 
 export const REDIS_CONFIG = {

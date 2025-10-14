@@ -91,6 +91,7 @@ R2_FORCE_PATH_STYLE=true
 
 # Stripe
 STRIPE_API_KEY=sk_test_...
+STRIPE_FORCE_3DS=false
 
 # Redis / BullMQ
 REDIS_HOST=127.0.0.1
@@ -102,6 +103,8 @@ SEED_BATCH_SIZE=500
 ```
 
 > ⚠️ Ứng dụng sẽ dùng các giá trị mặc định an toàn khi biến trống, nhưng production nên cấu hình đầy đủ.
+
+Biến `STRIPE_FORCE_3DS` đặt `true` khi muốn backend luôn yêu cầu 3D Secure cho mọi thẻ (phối hợp với rule trong Stripe Radar). Nếu để `false`, Stripe tự quyết định dựa vào đánh giá rủi ro và các yêu cầu tuân thủ.
 
 ## 4. Cơ sở dữ liệu Prisma
 
