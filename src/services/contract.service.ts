@@ -1381,8 +1381,7 @@ const payMilestone = async (
 	} catch (error) {
 		if (error instanceof Stripe.errors.StripeCardError) {
 			const paymentIntent = error.payment_intent as Stripe.PaymentIntent | undefined
-			console.log(error)
-			if (paymentIntent && paymentIntent.status === 'requires_payment_method') {
+			if (paymentIntent && paymentIntent.status === 'requires_action') {
 				console.log('requires_action')
 				const pendingPayment = await prismaClient.payment.upsert({
 					where: { paymentIntentId: paymentIntent.id },
