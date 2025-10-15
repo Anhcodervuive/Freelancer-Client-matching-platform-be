@@ -192,23 +192,31 @@ const createStripeExpressAccount = async (params: {
 	country: string
 }): Promise<Stripe.Account> => {
 	try {
-		const businessProfile: Stripe.AccountCreateParams.BusinessProfile = {
-			product_description: 'Freelance payouts on the platform'
-		}
+    const businessProfile: Stripe.AccountCreateParams.BusinessProfile = {
+            product_description: 'Freelance payouts on the platform',
+            mcc: '7333'
+    }
 
 		if (CLIENT_BUSINESS_PROFILE_URL) {
 			businessProfile.url = CLIENT_BUSINESS_PROFILE_URL
 		}
 
-		const account = await stripe.accounts.create({
-			type: 'express',
-			email: params.email,
-			country: params.country,
-			business_type: 'individual',
-			capabilities: {
-				transfers: { requested: true },
-				card_payments: { requested: true }
-			},
+                const account = await stripe.accounts.create({
+                        type: 'express',
+                        email: params.email,
+                        country: params.country,
+                        business_type: 'individual',
+                        settings: {
+                                payouts: {
+                                        schedule: {
+                                                interval: 'manual'
+                                        }
+                                }
+                        },
+                        capabilities: {
+                                transfers: { requested: true },
+                                card_payments: { requested: true }
+                        },
 			business_profile: businessProfile,
 			metadata: {
 				userId: params.userId
