@@ -788,6 +788,7 @@ enum NotificationEvent {
   CONTRACT_MILESTONE_SUBMITTED
   CONTRACT_MILESTONE_APPROVED
   CONTRACT_MILESTONE_DECLINED
+  CONTRACT_MILESTONE_CANCELLATION_REQUESTED
   DISPUTE_CREATED
   DISPUTE_UPDATED
   SYSTEM_MESSAGE
@@ -818,6 +819,12 @@ enum MilestoneStatus {
   APPROVED
   RELEASED
   CANCELED
+}
+
+enum MilestoneCancellationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
 }
 
 enum MilestoneSubmissionStatus {
@@ -908,6 +915,10 @@ model Milestone {
   approvedSubmissionId String?         @unique @map("approved_submission_id")
   approvedAt           DateTime?       @map("approved_at")
   releasedAt           DateTime?       @map("released_at")
+  cancellationStatus       MilestoneCancellationStatus? @map("cancellation_status")
+  cancellationRequestedAt  DateTime?                     @map("cancellation_requested_at")
+  cancellationReason       String?                       @map("cancellation_reason") @db.MediumText
+  cancellationRespondedAt  DateTime?                     @map("cancellation_responded_at")
   isDeleted            Boolean         @default(false) @map("is_deleted")
   deletedAt            DateTime?       @map("deleted_at")
   deletedBy            String?         @map("deleted_by")
@@ -923,6 +934,7 @@ model Milestone {
   @@unique([escrowId])
   @@index([approvedSubmissionId])
   @@index([contractId, isDeleted])
+  @@index([cancellationStatus], name: "idx_milestone_cancellation_status")
 }
 
 model MilestoneResource {

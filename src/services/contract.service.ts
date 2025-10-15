@@ -5,18 +5,19 @@ import type { Express } from 'express'
 import Stripe from 'stripe'
 
 import {
-	AssetKind,
-	AssetProvider,
-	AssetStatus,
-	EscrowStatus,
-	MilestoneStatus,
-	MilestoneSubmissionStatus,
-	NotificationCategory,
-	NotificationEvent,
-	NotificationResource,
-	PaymentStatus,
-	Prisma,
-	TransferStatus
+        AssetKind,
+        AssetProvider,
+        AssetStatus,
+        EscrowStatus,
+        MilestoneCancellationStatus,
+        MilestoneStatus,
+        MilestoneSubmissionStatus,
+        NotificationCategory,
+        NotificationEvent,
+        NotificationResource,
+        PaymentStatus,
+        Prisma,
+        TransferStatus
 } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
@@ -26,12 +27,13 @@ import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import {
-	ApproveMilestoneSubmissionInput,
-	ContractListFilterInput,
-	CreateContractMilestoneInput,
-	DeclineMilestoneSubmissionInput,
-	PayMilestoneInput,
-	SubmitMilestoneInput
+        ApproveMilestoneSubmissionInput,
+        CancelMilestoneInput,
+        ContractListFilterInput,
+        CreateContractMilestoneInput,
+        DeclineMilestoneSubmissionInput,
+        PayMilestoneInput,
+        SubmitMilestoneInput
 } from '~/schema/contract.schema'
 import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 import { InternalServerException } from '~/exceptions/internal-server'
@@ -853,15 +855,19 @@ const serializeMilestone = (milestone: MilestonePayload) => {
 		startAt: milestone.startAt ?? null,
 		endAt: milestone.endAt ?? null,
 		status: milestone.status,
-		submittedAt: milestone.submittedAt ?? null,
-		approvedSubmissionId: milestone.approvedSubmissionId ?? null,
-		approvedAt: milestone.approvedAt ?? null,
-		releasedAt: milestone.releasedAt ?? null,
-		updatedAt: milestone.updatedAt,
-		resources: milestone.resources.map(resource => serializeMilestoneResource(resource)),
-		submissions: milestone.submissions.map(submission => serializeMilestoneSubmission(submission)),
-		approvedSubmission: milestone.approvedSubmission
-			? serializeMilestoneSubmission(milestone.approvedSubmission)
+                submittedAt: milestone.submittedAt ?? null,
+                approvedSubmissionId: milestone.approvedSubmissionId ?? null,
+                approvedAt: milestone.approvedAt ?? null,
+                releasedAt: milestone.releasedAt ?? null,
+                cancellationStatus: milestone.cancellationStatus ?? null,
+                cancellationRequestedAt: milestone.cancellationRequestedAt ?? null,
+                cancellationReason: milestone.cancellationReason ?? null,
+                cancellationRespondedAt: milestone.cancellationRespondedAt ?? null,
+                updatedAt: milestone.updatedAt,
+                resources: milestone.resources.map(resource => serializeMilestoneResource(resource)),
+                submissions: milestone.submissions.map(submission => serializeMilestoneSubmission(submission)),
+                approvedSubmission: milestone.approvedSubmission
+                        ? serializeMilestoneSubmission(milestone.approvedSubmission)
 			: null,
 		escrow: milestone.escrow
 			? {
@@ -1198,21 +1204,28 @@ const deleteMilestoneResource = async (
 }
 
 const deleteContractMilestone = async (clientUserId: string, contractId: string, milestoneId: string) => {
-	await ensureClientUser(clientUserId)
-	await ensureContractBelongsToClient(contractId, clientUserId)
+        await ensureClientUser(clientUserId)
+        await ensureContractBelongsToClient(contractId, clientUserId)
 
-	const milestone = await prismaClient.milestone.findFirst({
-		where: {
-			id: milestoneId,
-			contractId,
-			isDeleted: false
-		},
-		include: {
-			resources: {
-				include: {
-					asset: {
-						select: {
-							id: true,
+        const milestone = await prismaClient.milestone.findFirst({
+                where: {
+                        id: milestoneId,
+                        contractId,
+                        isDeleted: false
+                },
+                include: {
+                        escrow: {
+                                select: {
+                                        id: true,
+                                        status: true,
+                                        amountFunded: true
+                                }
+                        },
+                        resources: {
+                                include: {
+                                        asset: {
+                                                select: {
+                                                        id: true,
 							provider: true,
 							bucket: true,
 							storageKey: true
@@ -1223,14 +1236,20 @@ const deleteContractMilestone = async (clientUserId: string, contractId: string,
 		}
 	})
 
-	if (!milestone) {
-		throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
-	}
+        if (!milestone) {
+                throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
+        }
 
-	const resourceIds = milestone.resources.map(resource => resource.id)
-	const assetIds = milestone.resources
-		.map(resource => resource.asset?.id ?? null)
-		.filter((id): id is string => Boolean(id))
+        const escrow = milestone.escrow
+
+        if (escrow && (escrow.status !== EscrowStatus.UNFUNDED || Number(escrow.amountFunded) > 0)) {
+                throw new BadRequestException('Không thể xóa milestone đã được fund', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const resourceIds = milestone.resources.map(resource => resource.id)
+        const assetIds = milestone.resources
+                .map(resource => resource.asset?.id ?? null)
+                .filter((id): id is string => Boolean(id))
 	const r2Objects = milestone.resources
 		.map(resource => {
 			const asset = resource.asset
@@ -1268,16 +1287,108 @@ const deleteContractMilestone = async (clientUserId: string, contractId: string,
 		})
 	})
 
-	if (r2Objects.length > 0) {
-		await Promise.allSettled(r2Objects.map(object => deleteR2Object(object.bucket, object.key).catch(() => undefined)))
-	}
+        if (r2Objects.length > 0) {
+                await Promise.allSettled(r2Objects.map(object => deleteR2Object(object.bucket, object.key).catch(() => undefined)))
+        }
+}
+
+const cancelMilestone = async (
+        clientUserId: string,
+        contractId: string,
+        milestoneId: string,
+        payload: CancelMilestoneInput
+) => {
+        await ensureClientUser(clientUserId)
+        const contract = await ensureContractBelongsToClient(contractId, clientUserId)
+
+        const milestone = await prismaClient.milestone.findFirst({
+                where: {
+                        id: milestoneId,
+                        contractId,
+                        isDeleted: false
+                },
+                include: {
+                        escrow: true
+                }
+        })
+
+        if (!milestone) {
+                throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (milestone.status === MilestoneStatus.CANCELED) {
+                throw new BadRequestException('Milestone đã bị hủy trước đó', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (milestone.status === MilestoneStatus.APPROVED || milestone.status === MilestoneStatus.RELEASED) {
+                throw new BadRequestException('Milestone đã được duyệt nên không thể hủy', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const escrow = milestone.escrow
+
+        if (!escrow) {
+                throw new NotFoundException('Milestone chưa có escrow', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (escrow.status === EscrowStatus.UNFUNDED || Number(escrow.amountFunded) === 0) {
+                throw new BadRequestException('Milestone chưa được fund nên không thể hủy', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (milestone.cancellationStatus === MilestoneCancellationStatus.PENDING) {
+                throw new BadRequestException('Milestone đang chờ freelancer phản hồi yêu cầu hủy', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (milestone.cancellationStatus === MilestoneCancellationStatus.ACCEPTED) {
+                throw new BadRequestException('Milestone đã được xử lý hủy', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (milestone.cancellationStatus === MilestoneCancellationStatus.DECLINED) {
+                throw new BadRequestException(
+                        'Yêu cầu hủy trước đó đã bị từ chối, vui lòng mở dispute để được hỗ trợ',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const cancellationReason = payload.reason ? payload.reason.trim() : null
+
+        const updatedMilestone = await prismaClient.milestone.update({
+                where: { id: milestone.id },
+                data: {
+                        cancellationStatus: MilestoneCancellationStatus.PENDING,
+                        cancellationRequestedAt: new Date(),
+                        cancellationReason,
+                        cancellationRespondedAt: null
+                },
+                include: milestoneInclude
+        })
+
+        await notifyMilestoneParticipants(
+                contract,
+                clientUserId,
+                {
+                        event: NotificationEvent.CONTRACT_MILESTONE_CANCELLATION_REQUESTED,
+                        resourceType: NotificationResource.CONTRACT_MILESTONE,
+                        resourceId: updatedMilestone.id,
+                        payload: {
+                                contractId,
+                                milestoneId: updatedMilestone.id,
+                                cancellationStatus: updatedMilestone.cancellationStatus
+                        }
+                },
+                'Không thể tạo thông báo khi client yêu cầu hủy milestone'
+        )
+
+        return {
+                contractId,
+                milestone: serializeMilestone(updatedMilestone)
+        }
 }
 
 const payMilestone = async (
-	clientUserId: string,
-	contractId: string,
-	milestoneId: string,
-	payload: PayMilestoneInput
+        clientUserId: string,
+        contractId: string,
+        milestoneId: string,
+        payload: PayMilestoneInput
 ) => {
 	await ensureClientUser(clientUserId)
 	await ensureContractBelongsToClient(contractId, clientUserId)
@@ -2027,13 +2138,14 @@ const contractService = {
 	listContractMilestones,
 	listMilestoneResources,
 	createContractMilestone,
-	uploadMilestoneResources,
-	deleteMilestoneResource,
-	deleteContractMilestone,
-	payMilestone,
-	submitMilestoneWork,
-	approveMilestoneSubmission,
-	declineMilestoneSubmission
+        uploadMilestoneResources,
+        deleteMilestoneResource,
+        deleteContractMilestone,
+        cancelMilestone,
+        payMilestone,
+        submitMilestoneWork,
+        approveMilestoneSubmission,
+        declineMilestoneSubmission
 }
 
 export default contractService

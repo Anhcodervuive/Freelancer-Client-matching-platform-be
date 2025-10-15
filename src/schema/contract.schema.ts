@@ -65,6 +65,17 @@ export const PayMilestoneSchema = z.object({
 
 export type PayMilestoneInput = z.infer<typeof PayMilestoneSchema>
 
+export const CancelMilestoneSchema = z.object({
+        reason: z
+                .string()
+                .trim()
+                .min(1, 'Lý do hủy không được để trống')
+                .max(2000, 'Lý do hủy tối đa 2000 ký tự')
+                .optional()
+})
+
+export type CancelMilestoneInput = z.infer<typeof CancelMilestoneSchema>
+
 export const SubmitMilestoneSchema = z.object({
         message: z
                 .string()

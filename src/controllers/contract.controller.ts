@@ -7,6 +7,7 @@ import { ErrorCode } from '~/exceptions/root'
 import { UnauthorizedException } from '~/exceptions/unauthoried'
 import {
         ApproveMilestoneSubmissionSchema,
+        CancelMilestoneSchema,
         ContractListFilterSchema,
         CreateContractMilestoneSchema,
         DeclineMilestoneSubmissionSchema,
@@ -186,6 +187,24 @@ export const deleteContractMilestone = async (req: Request, res: Response) => {
         await contractService.deleteContractMilestone(userId, contractId, milestoneId)
 
         return res.status(StatusCodes.NO_CONTENT).send()
+}
+
+export const cancelMilestone = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để yêu cầu hủy milestone', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId) {
+                throw new BadRequestException('Thiếu tham số contractId hoặc milestoneId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = CancelMilestoneSchema.parse(req.body)
+        const result = await contractService.cancelMilestone(userId, contractId, milestoneId, payload)
+
+        return res.status(StatusCodes.ACCEPTED).json(result)
 }
 
 export const payMilestone = async (req: Request, res: Response) => {
