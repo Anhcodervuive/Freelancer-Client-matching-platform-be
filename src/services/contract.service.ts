@@ -16,6 +16,7 @@ import {
         NotificationEvent,
         NotificationResource,
         PaymentStatus,
+        RefundStatus,
         Prisma,
         TransferStatus
 } from '~/generated/prisma'
@@ -33,6 +34,7 @@ import {
         CreateContractMilestoneInput,
         DeclineMilestoneSubmissionInput,
         PayMilestoneInput,
+        RespondMilestoneCancellationInput,
         SubmitMilestoneInput
 } from '~/schema/contract.schema'
 import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
@@ -213,11 +215,13 @@ type ContractDetailPayload = Prisma.ContractGetPayload<{ include: typeof contrac
 type MilestonePayload = Prisma.MilestoneGetPayload<{ include: typeof milestoneInclude }>
 type MilestoneResourcePayload = Prisma.MilestoneResourceGetPayload<{ include: typeof milestoneResourceInclude }>
 type MilestoneSubmissionAttachmentPayload = Prisma.MilestoneSubmissionAttachmentGetPayload<{
-	include: typeof milestoneSubmissionAttachmentInclude
+        include: typeof milestoneSubmissionAttachmentInclude
 }>
 type MilestoneSubmissionPayload = Prisma.MilestoneSubmissionGetPayload<{ include: typeof milestoneSubmissionInclude }>
 type PaymentEntity = Prisma.PaymentGetPayload<{}>
 type TransferEntity = Prisma.TransferGetPayload<{}>
+type RefundEntity = Prisma.RefundGetPayload<{}>
+type DisputeEntity = Prisma.DisputeGetPayload<{}>
 type ContractJobSkillRelation = NonNullable<ContractDetailPayload['jobPost']>['requiredSkills'][number]
 
 const ensureClientUser = async (userId: string) => {
@@ -384,14 +388,26 @@ const ZERO_DECIMAL_CURRENCIES = new Set([
 ])
 
 const toMinorUnitAmount = (value: Prisma.Decimal | number | string, currency: string) => {
-	const decimal = value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value)
-	const lowerCurrency = currency.toLowerCase()
+        const decimal = value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value)
+        const lowerCurrency = currency.toLowerCase()
 
-	if (ZERO_DECIMAL_CURRENCIES.has(lowerCurrency)) {
-		return Number(decimal.toFixed(0))
-	}
+        if (ZERO_DECIMAL_CURRENCIES.has(lowerCurrency)) {
+                return Number(decimal.toFixed(0))
+        }
 
-	return Number(decimal.mul(100).toFixed(0))
+        return Number(decimal.mul(100).toFixed(0))
+}
+
+const mapStripeRefundStatus = (status?: Stripe.Refund['status'] | null): RefundStatus => {
+        if (status === 'succeeded') {
+                return RefundStatus.SUCCEEDED
+        }
+
+        if (status === 'pending') {
+                return RefundStatus.PENDING
+        }
+
+        return RefundStatus.FAILED
 }
 
 const loadMilestoneWithDetails = async (milestoneId: string) => {
@@ -906,18 +922,55 @@ const serializePayment = (payment: PaymentEntity) => {
 }
 
 const serializeTransfer = (transfer: TransferEntity) => {
-	return {
-		id: transfer.id,
-		escrowId: transfer.escrowId,
-		amount: Number(transfer.amount),
-		currency: transfer.currency,
-		status: transfer.status,
-		transferId: transfer.transferId ?? null,
-		destinationAccountId: transfer.destinationAccountId,
-		idemKey: transfer.idemKey ?? null,
-		createdAt: transfer.createdAt,
-		updatedAt: transfer.updatedAt
-	}
+        return {
+                id: transfer.id,
+                escrowId: transfer.escrowId,
+                amount: Number(transfer.amount),
+                currency: transfer.currency,
+                status: transfer.status,
+                transferId: transfer.transferId ?? null,
+                destinationAccountId: transfer.destinationAccountId,
+                idemKey: transfer.idemKey ?? null,
+                createdAt: transfer.createdAt,
+                updatedAt: transfer.updatedAt
+        }
+}
+
+const serializeRefund = (refund: RefundEntity) => {
+        return {
+                id: refund.id,
+                escrowId: refund.escrowId,
+                paymentId: refund.paymentId,
+                amount: Number(refund.amount),
+                currency: refund.currency,
+                status: refund.status,
+                stripeRefundId: refund.stripeRefundId ?? null,
+                idemKey: refund.idemKey ?? null,
+                createdAt: refund.createdAt,
+                updatedAt: refund.updatedAt
+        }
+}
+
+const serializeDispute = (dispute: DisputeEntity) => {
+        return {
+                id: dispute.id,
+                escrowId: dispute.escrowId,
+                openedById: dispute.openedById,
+                status: dispute.status,
+                proposedRelease: Number(dispute.proposedRelease),
+                proposedRefund: Number(dispute.proposedRefund),
+                arbFeePerParty: Number(dispute.arbFeePerParty),
+                clientArbFeePaid: dispute.clientArbFeePaid,
+                freelancerArbFeePaid: dispute.freelancerArbFeePaid,
+                responseDeadline: dispute.responseDeadline ?? null,
+                arbitrationDeadline: dispute.arbitrationDeadline ?? null,
+                decidedRelease: Number(dispute.decidedRelease),
+                decidedRefund: Number(dispute.decidedRefund),
+                decidedById: dispute.decidedById ?? null,
+                note: dispute.note ?? null,
+                createdAt: dispute.createdAt,
+                updatedAt: dispute.updatedAt
+        }
 }
 
 const ensureContractAccess = async (contractId: string, userId: string) => {
@@ -1381,6 +1434,284 @@ const cancelMilestone = async (
         return {
                 contractId,
                 milestone: serializeMilestone(updatedMilestone)
+        }
+}
+
+const respondMilestoneCancellation = async (
+        freelancerUserId: string,
+        contractId: string,
+        milestoneId: string,
+        payload: RespondMilestoneCancellationInput
+) => {
+        await ensureFreelancerUser(freelancerUserId)
+        const contract = await ensureContractBelongsToFreelancer(contractId, freelancerUserId)
+
+        const milestoneRecord = await prismaClient.milestone.findFirst({
+                where: {
+                        id: milestoneId,
+                        contractId,
+                        isDeleted: false
+                },
+                include: {
+                        escrow: {
+                                include: {
+                                        payments: {
+                                                where: { status: PaymentStatus.SUCCEEDED },
+                                                orderBy: { createdAt: 'desc' },
+                                                take: 1
+                                        },
+                                        dispute: true
+                                }
+                        }
+                }
+        })
+
+        if (!milestoneRecord) {
+                throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (milestoneRecord.status === MilestoneStatus.CANCELED) {
+                throw new BadRequestException('Milestone đã bị hủy', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (milestoneRecord.cancellationStatus !== MilestoneCancellationStatus.PENDING) {
+                throw new BadRequestException(
+                        'Milestone không có yêu cầu hủy đang chờ xử lý',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const escrow = milestoneRecord.escrow
+
+        if (!escrow) {
+                throw new NotFoundException('Milestone chưa có escrow', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (Number(escrow.amountFunded) === 0) {
+                throw new BadRequestException('Milestone chưa được thanh toán', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const succeededPayment = escrow.payments?.[0] ?? null
+
+        if (!succeededPayment) {
+                throw new BadRequestException('Không tìm thấy giao dịch thanh toán để hoàn tiền', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const now = new Date()
+        const action = payload.action
+
+        if (action === 'accept') {
+                if (Number(escrow.amountReleased) > 0) {
+                        throw new BadRequestException(
+                                'Milestone đã được release nên không thể hoàn tiền',
+                                ErrorCode.PARAM_QUERY_ERROR
+                        )
+                }
+
+                if (escrow.dispute) {
+                        throw new BadRequestException('Milestone đang trong tranh chấp, không thể hoàn tiền', ErrorCode.PARAM_QUERY_ERROR)
+                }
+
+                const stripe = getStripeClient()
+                const existingRefund = await prismaClient.refund.findUnique({
+                        where: { paymentId: succeededPayment.id }
+                })
+                const effectiveIdempotencyKey = payload.idempotencyKey?.trim() ?? existingRefund?.idemKey ?? null
+
+                let stripeRefund: Stripe.Response<Stripe.Refund> | null = null
+
+                if (existingRefund?.stripeRefundId) {
+                        try {
+                                stripeRefund = await stripe.refunds.retrieve(existingRefund.stripeRefundId)
+                        } catch (error) {
+                                if (error instanceof Stripe.errors.StripeError) {
+                                        if (error.code !== 'resource_missing') {
+                                                throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
+                                        }
+                                } else {
+                                        throw error
+                                }
+                        }
+                }
+
+                if (!stripeRefund) {
+                        try {
+                                stripeRefund = await stripe.refunds.create(
+                                        {
+                                                payment_intent: succeededPayment.paymentIntentId,
+                                                amount: toMinorUnitAmount(milestoneRecord.amount, milestoneRecord.currency),
+                                                reason: 'requested_by_customer',
+                                                metadata: {
+                                                        contractId,
+                                                        milestoneId,
+                                                        paymentId: succeededPayment.id
+                                                }
+                                        },
+                                        effectiveIdempotencyKey ? { idempotencyKey: effectiveIdempotencyKey } : undefined
+                                )
+                        } catch (error) {
+                                if (error instanceof Stripe.errors.StripeError) {
+                                        throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
+                                }
+
+                                throw error
+                        }
+                }
+
+                if (!stripeRefund) {
+                        throw new InternalServerException(
+                                'Không thể khởi tạo hoàn tiền cho milestone',
+                                ErrorCode.INTERNAL_SERVER_ERROR
+                        )
+                }
+
+                const refundStatus = mapStripeRefundStatus(stripeRefund.status)
+
+                if (refundStatus !== RefundStatus.SUCCEEDED) {
+                        throw new BadRequestException(
+                                'Hoàn tiền milestone chưa hoàn tất, vui lòng thử lại sau',
+                                ErrorCode.PARAM_QUERY_ERROR
+                        )
+                }
+
+                const refundAmount = milestoneRecord.amount
+                const refundRecord = await prismaClient.$transaction(async tx => {
+                        const updatedRefund = await tx.refund.upsert({
+                                where: { paymentId: succeededPayment.id },
+                                create: {
+                                        escrowId: escrow.id,
+                                        paymentId: succeededPayment.id,
+                                        amount: refundAmount,
+                                        currency: milestoneRecord.currency,
+                                        status: refundStatus,
+                                        stripeRefundId: stripeRefund.id ?? null,
+                                        idemKey: effectiveIdempotencyKey
+                                },
+                                update: {
+                                        amount: refundAmount,
+                                        currency: milestoneRecord.currency,
+                                        status: refundStatus,
+                                        stripeRefundId: stripeRefund.id ?? null,
+                                        ...(effectiveIdempotencyKey ? { idemKey: effectiveIdempotencyKey } : {})
+                                }
+                        })
+
+                        await tx.payment.update({
+                                where: { id: succeededPayment.id },
+                                data: { status: PaymentStatus.REFUNDED }
+                        })
+
+                        const totalRefunded = escrow.amountRefunded.plus(refundAmount)
+                        const newEscrowStatus = totalRefunded.gte(escrow.amountFunded)
+                                ? EscrowStatus.REFUNDED
+                                : EscrowStatus.PARTIALLY_REFUNDED
+
+                        await tx.escrow.update({
+                                where: { id: escrow.id },
+                                data: {
+                                        amountRefunded: totalRefunded,
+                                        status: newEscrowStatus
+                                }
+                        })
+
+                        await tx.milestone.update({
+                                where: { id: milestoneRecord.id },
+                                data: {
+                                        status: MilestoneStatus.CANCELED,
+                                        cancellationStatus: MilestoneCancellationStatus.ACCEPTED,
+                                        cancellationRespondedAt: now,
+                                        approvedSubmissionId: null,
+                                        approvedAt: null,
+                                        releasedAt: null
+                                }
+                        })
+
+                        return updatedRefund
+                })
+
+                const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+
+                await notifyMilestoneParticipants(
+                        contract,
+                        freelancerUserId,
+                        {
+                                event: NotificationEvent.CONTRACT_MILESTONE_CANCELLATION_REQUESTED,
+                                resourceType: NotificationResource.CONTRACT_MILESTONE,
+                                resourceId: updatedMilestone.id,
+                                payload: {
+                                        contractId,
+                                        milestoneId: updatedMilestone.id,
+                                        cancellationStatus: MilestoneCancellationStatus.ACCEPTED,
+                                        action: 'accepted'
+                                }
+                        },
+                        'Không thể tạo thông báo khi freelancer đồng ý hủy milestone'
+                )
+
+                return {
+                        contractId,
+                        action,
+                        milestone: serializeMilestone(updatedMilestone),
+                        refund: serializeRefund(refundRecord),
+                        dispute: null
+                }
+        }
+
+        if (escrow.dispute) {
+                throw new BadRequestException('Milestone đã có tranh chấp đang mở', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const disputeNote = payload.reason ? payload.reason.trim() : null
+
+        const disputeRecord = await prismaClient.$transaction(async tx => {
+                const createdDispute = await tx.dispute.create({
+                        data: {
+                                escrowId: escrow.id,
+                                openedById: freelancerUserId,
+                                note: disputeNote
+                        }
+                })
+
+                await tx.escrow.update({
+                        where: { id: escrow.id },
+                        data: { status: EscrowStatus.DISPUTED }
+                })
+
+                await tx.milestone.update({
+                        where: { id: milestoneRecord.id },
+                        data: {
+                                cancellationStatus: MilestoneCancellationStatus.DECLINED,
+                                cancellationRespondedAt: now
+                        }
+                })
+
+                return createdDispute
+        })
+
+        const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+
+        await notifyMilestoneParticipants(
+                contract,
+                freelancerUserId,
+                {
+                        event: NotificationEvent.DISPUTE_CREATED,
+                        resourceType: NotificationResource.DISPUTE,
+                        resourceId: disputeRecord.id,
+                        payload: {
+                                contractId,
+                                milestoneId,
+                                disputeId: disputeRecord.id
+                        }
+                },
+                'Không thể tạo thông báo khi freelancer mở tranh chấp milestone'
+        )
+
+        return {
+                contractId,
+                action,
+                milestone: serializeMilestone(updatedMilestone),
+                refund: null,
+                dispute: serializeDispute(disputeRecord)
         }
 }
 
@@ -2142,6 +2473,7 @@ const contractService = {
         deleteMilestoneResource,
         deleteContractMilestone,
         cancelMilestone,
+        respondMilestoneCancellation,
         payMilestone,
         submitMilestoneWork,
         approveMilestoneSubmission,

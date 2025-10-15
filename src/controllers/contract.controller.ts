@@ -12,6 +12,7 @@ import {
         CreateContractMilestoneSchema,
         DeclineMilestoneSubmissionSchema,
         PayMilestoneSchema,
+        RespondMilestoneCancellationSchema,
         SubmitMilestoneSchema
 } from '~/schema/contract.schema'
 import contractService from '~/services/contract.service'
@@ -205,6 +206,32 @@ export const cancelMilestone = async (req: Request, res: Response) => {
         const result = await contractService.cancelMilestone(userId, contractId, milestoneId, payload)
 
         return res.status(StatusCodes.ACCEPTED).json(result)
+}
+
+export const respondMilestoneCancellation = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException(
+                        'Bạn cần đăng nhập để phản hồi yêu cầu hủy milestone',
+                        ErrorCode.UNAUTHORIED
+                )
+        }
+
+        if (!contractId || !milestoneId) {
+                throw new BadRequestException('Thiếu tham số contractId hoặc milestoneId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = RespondMilestoneCancellationSchema.parse(req.body)
+        const result = await contractService.respondMilestoneCancellation(
+                userId,
+                contractId,
+                milestoneId,
+                payload
+        )
+
+        return res.status(StatusCodes.OK).json(result)
 }
 
 export const payMilestone = async (req: Request, res: Response) => {

@@ -12,6 +12,7 @@ import {
         listContractMilestones,
         listContracts,
         payMilestone,
+        respondMilestoneCancellation,
         submitMilestoneWork,
         uploadMilestoneResources
 } from '~/controllers/contract.controller'
@@ -27,6 +28,11 @@ router.get('/:contractId/milestones', authenticateMiddleware, errorHandler(listC
 router.post('/:contractId/milestones', authenticateMiddleware, errorHandler(createContractMilestone))
 router.delete('/:contractId/milestones/:milestoneId', authenticateMiddleware, errorHandler(deleteContractMilestone))
 router.post('/:contractId/milestones/:milestoneId/cancel', authenticateMiddleware, errorHandler(cancelMilestone))
+router.post(
+        '/:contractId/milestones/:milestoneId/cancel/respond',
+        authenticateMiddleware,
+        errorHandler(respondMilestoneCancellation)
+)
 router.post(
         '/:contractId/milestones/:milestoneId/pay',
         authenticateMiddleware,
