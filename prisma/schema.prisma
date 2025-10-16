@@ -46,6 +46,9 @@ model User {
   chatParticipants      ChatParticipant[]
   chatMessagesSent      ChatMessage[]        @relation("ChatMessageSender")
   chatAdminAccessLogs   ChatAdminAccessLog[] @relation("ChatAdminAccessLogAdmin")
+  disputeNegotiationsProposed DisputeNegotiation[] @relation("DisputeNegotiationProposer")
+  disputeNegotiationsReceived DisputeNegotiation[] @relation("DisputeNegotiationCounterparty")
+  disputeNegotiationsResponded DisputeNegotiation[] @relation("DisputeNegotiationResponder")
   @@index([email])
   @@map("user")
 }
@@ -1109,11 +1112,20 @@ enum DisputeStatus {
   EXPIRED // quá hạn không phản hồi
 }
 
+enum DisputeNegotiationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
+}
+
 model Dispute {
   id         String        @id @default(cuid())
   escrowId   String        @unique
   openedById String
   status     DisputeStatus @default(OPEN)
+  latestProposalId String? @unique @map("latest_proposal_id")
 
   // đề xuất cuối cùng (để 2 bên nhìn & đồng ý)
   proposedRelease Decimal @default(0) @map("proposed_release") @db.Decimal(12, 2) // trả freelancer
@@ -1139,6 +1151,37 @@ model Dispute {
 
   escrow         Escrow               @relation(fields: [escrowId], references: [id])
   chatAccessLogs ChatAdminAccessLog[]
+  latestProposal DisputeNegotiation?  @relation("DisputeLatestProposal", fields: [latestProposalId], references: [id])
+  negotiations   DisputeNegotiation[]
+}
+
+model DisputeNegotiation {
+  id             String                     @id @default(cuid())
+  disputeId      String                     @map("dispute_id")
+  proposerId     String                     @map("proposer_id")
+  counterpartyId String                     @map("counterparty_id")
+  status         DisputeNegotiationStatus   @default(PENDING)
+  releaseAmount  Decimal                    @map("release_amount") @db.Decimal(12, 2)
+  refundAmount   Decimal                    @map("refund_amount") @db.Decimal(12, 2)
+  message        String?                    @db.Text
+  respondedById  String?                    @map("responded_by_id")
+  respondedAt    DateTime?                  @map("responded_at")
+  responseMessage String?                   @map("response_message") @db.Text
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  updatedAt      DateTime                   @updatedAt @map("updated_at")
+
+  dispute      Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  proposer     User    @relation("DisputeNegotiationProposer", fields: [proposerId], references: [id], onDelete: Cascade)
+  counterparty User    @relation("DisputeNegotiationCounterparty", fields: [counterpartyId], references: [id], onDelete: Cascade)
+  respondedBy  User?   @relation("DisputeNegotiationResponder", fields: [respondedById], references: [id], onDelete: SetNull)
+
+  latestForDispute Dispute? @relation("DisputeLatestProposal")
+
+  @@index([disputeId])
+  @@index([proposerId])
+  @@index([counterpartyId])
+  @@index([respondedById])
+  @@map("dispute_negotiation")
 }
 
 // ---------- Chat ----------

@@ -8,6 +8,7 @@ import {
         AssetKind,
         AssetProvider,
         AssetStatus,
+        DisputeNegotiationStatus,
         DisputeStatus,
         EscrowStatus,
         MilestoneCancellationStatus,
@@ -223,7 +224,8 @@ type MilestoneSubmissionPayload = Prisma.MilestoneSubmissionGetPayload<{ include
 type PaymentEntity = Prisma.PaymentGetPayload<{}>
 type TransferEntity = Prisma.TransferGetPayload<{}>
 type RefundEntity = Prisma.RefundGetPayload<{}>
-type DisputeEntity = Prisma.DisputeGetPayload<{}>
+type DisputeNegotiationEntity = Prisma.DisputeNegotiationGetPayload<{}>
+type DisputeEntity = Prisma.DisputeGetPayload<{ include: { latestProposal: true } }>
 type ContractJobSkillRelation = NonNullable<ContractDetailPayload['jobPost']>['requiredSkills'][number]
 
 const ensureClientUser = async (userId: string) => {
@@ -953,12 +955,31 @@ const serializeRefund = (refund: RefundEntity) => {
         }
 }
 
+const serializeDisputeNegotiation = (negotiation: DisputeNegotiationEntity) => {
+        return {
+                id: negotiation.id,
+                disputeId: negotiation.disputeId,
+                proposerId: negotiation.proposerId,
+                counterpartyId: negotiation.counterpartyId,
+                status: negotiation.status,
+                releaseAmount: Number(negotiation.releaseAmount),
+                refundAmount: Number(negotiation.refundAmount),
+                message: negotiation.message ?? null,
+                respondedById: negotiation.respondedById ?? null,
+                respondedAt: negotiation.respondedAt ?? null,
+                responseMessage: negotiation.responseMessage ?? null,
+                createdAt: negotiation.createdAt,
+                updatedAt: negotiation.updatedAt
+        }
+}
+
 const serializeDispute = (dispute: DisputeEntity) => {
         return {
                 id: dispute.id,
                 escrowId: dispute.escrowId,
                 openedById: dispute.openedById,
                 status: dispute.status,
+                latestProposalId: dispute.latestProposalId ?? null,
                 proposedRelease: Number(dispute.proposedRelease),
                 proposedRefund: Number(dispute.proposedRefund),
                 arbFeePerParty: Number(dispute.arbFeePerParty),
@@ -971,7 +992,10 @@ const serializeDispute = (dispute: DisputeEntity) => {
                 decidedById: dispute.decidedById ?? null,
                 note: dispute.note ?? null,
                 createdAt: dispute.createdAt,
-                updatedAt: dispute.updatedAt
+                updatedAt: dispute.updatedAt,
+                latestProposal: dispute.latestProposal
+                        ? serializeDisputeNegotiation(dispute.latestProposal)
+                        : null
         }
 }
 
@@ -1671,7 +1695,8 @@ const respondMilestoneCancellation = async (
                                 escrowId: escrow.id,
                                 openedById: freelancerUserId,
                                 note: disputeNote
-                        }
+                        },
+                        include: { latestProposal: true }
                 })
 
                 await tx.escrow.update({
@@ -1823,6 +1848,8 @@ const openMilestoneDispute = async (
         const releaseValue = (proposedReleaseCents / 100).toFixed(2)
         const refundValue = (proposedRefundCents / 100).toFixed(2)
 
+        const counterpartyId = isClient ? contract.freelancerId : contract.clientId
+
         const disputeRecord = await prismaClient.$transaction(async tx => {
                 const createdDispute = await tx.dispute.create({
                         data: {
@@ -1836,12 +1863,34 @@ const openMilestoneDispute = async (
                         }
                 })
 
+                const negotiation = await tx.disputeNegotiation.create({
+                        data: {
+                                disputeId: createdDispute.id,
+                                proposerId: userId,
+                                counterpartyId,
+                                status: DisputeNegotiationStatus.PENDING,
+                                releaseAmount: new Prisma.Decimal(releaseValue),
+                                refundAmount: new Prisma.Decimal(refundValue),
+                                message: disputeNote
+                        }
+                })
+
+                const disputeWithProposal = await tx.dispute.update({
+                        where: { id: createdDispute.id },
+                        data: {
+                                latestProposalId: negotiation.id,
+                                proposedRelease: new Prisma.Decimal(releaseValue),
+                                proposedRefund: new Prisma.Decimal(refundValue)
+                        },
+                        include: { latestProposal: true }
+                })
+
                 await tx.escrow.update({
                         where: { id: escrow.id },
                         data: { status: EscrowStatus.DISPUTED }
                 })
 
-                return createdDispute
+                return disputeWithProposal
         })
 
         const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
