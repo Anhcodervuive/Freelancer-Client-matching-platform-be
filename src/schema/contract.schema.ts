@@ -89,6 +89,25 @@ export const RespondMilestoneCancellationSchema = z.object({
 
 export type RespondMilestoneCancellationInput = z.infer<typeof RespondMilestoneCancellationSchema>
 
+const MonetaryProposalSchema = z
+        .coerce
+        .number({ required_error: 'Số tiền phải là số' })
+        .min(0, 'Số tiền không được âm')
+        .refine(value => Number.isFinite(value), 'Số tiền không hợp lệ')
+        .refine(value => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8, 'Số tiền chỉ hỗ trợ tối đa 2 chữ số thập phân')
+
+export const OpenMilestoneDisputeSchema = z.object({
+        reason: z
+                .string()
+                .trim()
+                .min(1, 'Lý do mở tranh chấp không được để trống')
+                .max(2000, 'Lý do mở tranh chấp tối đa 2000 ký tự'),
+        proposedRelease: MonetaryProposalSchema.optional(),
+        proposedRefund: MonetaryProposalSchema.optional()
+})
+
+export type OpenMilestoneDisputeInput = z.infer<typeof OpenMilestoneDisputeSchema>
+
 export const SubmitMilestoneSchema = z.object({
         message: z
                 .string()

@@ -8,6 +8,7 @@ import {
         AssetKind,
         AssetProvider,
         AssetStatus,
+        DisputeStatus,
         EscrowStatus,
         MilestoneCancellationStatus,
         MilestoneStatus,
@@ -33,6 +34,7 @@ import {
         ContractListFilterInput,
         CreateContractMilestoneInput,
         DeclineMilestoneSubmissionInput,
+        OpenMilestoneDisputeInput,
         PayMilestoneInput,
         RespondMilestoneCancellationInput,
         SubmitMilestoneInput
@@ -1715,6 +1717,159 @@ const respondMilestoneCancellation = async (
         }
 }
 
+const openMilestoneDispute = async (
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        payload: OpenMilestoneDisputeInput
+) => {
+        await ensureContractAccess(contractId, userId)
+
+        const contract = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: { clientId: true, freelancerId: true }
+        })
+
+        if (!contract) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const milestoneRecord = await prismaClient.milestone.findFirst({
+                where: {
+                        id: milestoneId,
+                        contractId,
+                        isDeleted: false
+                },
+                include: {
+                        escrow: {
+                                include: {
+                                        dispute: true
+                                }
+                        }
+                }
+        })
+
+        if (!milestoneRecord) {
+                throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (milestoneRecord.status === MilestoneStatus.CANCELED) {
+                throw new BadRequestException('Milestone đã bị hủy', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const escrow = milestoneRecord.escrow
+
+        if (!escrow) {
+                throw new BadRequestException('Milestone chưa có escrow', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (escrow.dispute) {
+                throw new BadRequestException('Milestone đã có tranh chấp đang mở', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const funded = Number(escrow.amountFunded)
+        const released = Number(escrow.amountReleased)
+        const refunded = Number(escrow.amountRefunded)
+        const disputableAmount = funded - released - refunded
+
+        if (disputableAmount <= 0) {
+                throw new BadRequestException(
+                        'Milestone không còn tiền trong escrow để mở tranh chấp',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const availableCents = Math.round(disputableAmount * 100)
+        const isClient = contract.clientId === userId
+        const isFreelancer = contract.freelancerId === userId
+
+        const providedReleaseCents =
+                payload.proposedRelease !== undefined
+                        ? Math.round(payload.proposedRelease * 100)
+                        : undefined
+        const providedRefundCents =
+                payload.proposedRefund !== undefined
+                        ? Math.round(payload.proposedRefund * 100)
+                        : undefined
+
+        const proposedReleaseCents =
+                providedReleaseCents !== undefined
+                        ? providedReleaseCents
+                        : isFreelancer
+                        ? availableCents
+                        : 0
+        const proposedRefundCents =
+                providedRefundCents !== undefined
+                        ? providedRefundCents
+                        : isClient
+                        ? availableCents
+                        : 0
+
+        if (proposedReleaseCents < 0 || proposedRefundCents < 0) {
+                throw new BadRequestException('Số tiền đề xuất không hợp lệ', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (proposedReleaseCents + proposedRefundCents !== availableCents) {
+                throw new BadRequestException(
+                        'Tổng tiền release/refund phải bằng số tiền đang tranh chấp',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const now = new Date()
+        const responseDeadline = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000)
+        const disputeNote = payload.reason.trim()
+
+        const releaseValue = (proposedReleaseCents / 100).toFixed(2)
+        const refundValue = (proposedRefundCents / 100).toFixed(2)
+
+        const disputeRecord = await prismaClient.$transaction(async tx => {
+                const createdDispute = await tx.dispute.create({
+                        data: {
+                                escrowId: escrow.id,
+                                openedById: userId,
+                                status: DisputeStatus.OPEN,
+                                note: disputeNote,
+                                proposedRelease: new Prisma.Decimal(releaseValue),
+                                proposedRefund: new Prisma.Decimal(refundValue),
+                                responseDeadline
+                        }
+                })
+
+                await tx.escrow.update({
+                        where: { id: escrow.id },
+                        data: { status: EscrowStatus.DISPUTED }
+                })
+
+                return createdDispute
+        })
+
+        const updatedMilestone = await loadMilestoneWithDetails(milestoneId)
+
+        await notifyMilestoneParticipants(
+                contract,
+                userId,
+                {
+                        event: NotificationEvent.DISPUTE_CREATED,
+                        resourceType: NotificationResource.DISPUTE,
+                        resourceId: disputeRecord.id,
+                        payload: {
+                                contractId,
+                                milestoneId,
+                                disputeId: disputeRecord.id,
+                                responseDeadline: responseDeadline.toISOString()
+                        }
+                },
+                'Không thể tạo thông báo khi người dùng mở tranh chấp milestone'
+        )
+
+        return {
+                contractId,
+                milestone: serializeMilestone(updatedMilestone),
+                dispute: serializeDispute(disputeRecord)
+        }
+}
+
 const payMilestone = async (
         clientUserId: string,
         contractId: string,
@@ -2474,6 +2629,7 @@ const contractService = {
         deleteContractMilestone,
         cancelMilestone,
         respondMilestoneCancellation,
+        openMilestoneDispute,
         payMilestone,
         submitMilestoneWork,
         approveMilestoneSubmission,

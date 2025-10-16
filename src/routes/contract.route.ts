@@ -11,6 +11,7 @@ import {
         listMilestoneResources,
         listContractMilestones,
         listContracts,
+        openMilestoneDispute,
         payMilestone,
         respondMilestoneCancellation,
         submitMilestoneWork,
@@ -32,6 +33,11 @@ router.post(
         '/:contractId/milestones/:milestoneId/cancel/respond',
         authenticateMiddleware,
         errorHandler(respondMilestoneCancellation)
+)
+router.post(
+        '/:contractId/milestones/:milestoneId/disputes',
+        authenticateMiddleware,
+        errorHandler(openMilestoneDispute)
 )
 router.post(
         '/:contractId/milestones/:milestoneId/pay',

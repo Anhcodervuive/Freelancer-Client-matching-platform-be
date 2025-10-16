@@ -11,6 +11,7 @@ import {
         ContractListFilterSchema,
         CreateContractMilestoneSchema,
         DeclineMilestoneSubmissionSchema,
+        OpenMilestoneDisputeSchema,
         PayMilestoneSchema,
         RespondMilestoneCancellationSchema,
         SubmitMilestoneSchema
@@ -232,6 +233,24 @@ export const respondMilestoneCancellation = async (req: Request, res: Response) 
         )
 
         return res.status(StatusCodes.OK).json(result)
+}
+
+export const openMilestoneDispute = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để mở tranh chấp milestone', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId) {
+                throw new BadRequestException('Thiếu tham số contractId hoặc milestoneId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = OpenMilestoneDisputeSchema.parse(req.body)
+        const result = await contractService.openMilestoneDispute(userId, contractId, milestoneId, payload)
+
+        return res.status(StatusCodes.CREATED).json(result)
 }
 
 export const payMilestone = async (req: Request, res: Response) => {
