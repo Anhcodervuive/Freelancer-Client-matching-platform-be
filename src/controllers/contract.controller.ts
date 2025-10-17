@@ -14,6 +14,7 @@ import {
         DeclineMilestoneSubmissionSchema,
         OpenMilestoneDisputeSchema,
         PayMilestoneSchema,
+        RespondDisputeNegotiationSchema,
         RespondMilestoneCancellationSchema,
         SubmitMilestoneSchema,
         UpdateDisputeNegotiationSchema
@@ -333,6 +334,34 @@ export const updateDisputeNegotiation = async (req: Request, res: Response) => {
 
         const payload = UpdateDisputeNegotiationSchema.parse(req.body)
         const result = await contractService.updateDisputeNegotiation(
+                userId,
+                contractId,
+                milestoneId,
+                disputeId,
+                negotiationId,
+                payload
+        )
+
+        return res.status(StatusCodes.OK).json(result)
+}
+
+export const respondDisputeNegotiation = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId, disputeId, negotiationId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để phản hồi đề xuất tranh chấp', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId || !disputeId || !negotiationId) {
+                throw new BadRequestException(
+                        'Thiếu tham số contractId, milestoneId, disputeId hoặc negotiationId',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const payload = RespondDisputeNegotiationSchema.parse(req.body)
+        const result = await contractService.respondDisputeNegotiation(
                 userId,
                 contractId,
                 milestoneId,
