@@ -4,7 +4,7 @@ import { MAIL } from '~/config/environment'
 import { renderEmailTemplate } from '~/helpers/render'
 
 type DisputeNegotiationEmailPayload = {
-        action: 'created' | 'updated' | 'deleted'
+        action: 'created' | 'updated' | 'deleted' | 'accepted' | 'rejected'
         actorName: string
         milestoneTitle: string
         contractTitle: string
@@ -13,6 +13,7 @@ type DisputeNegotiationEmailPayload = {
         refundAmount: number
         currency: string
         message: string | null
+        showDeadlineNotice: boolean
 }
 
 const createTransporter = () => {
@@ -91,6 +92,16 @@ export async function sendDisputeNegotiationEmail(
                         subject: 'Đề xuất tranh chấp đã bị rút lại',
                         heading: 'Đề xuất thương lượng đã được rút',
                         description: `${payload.actorName} đã rút đề xuất thương lượng trước đó cho milestone "${payload.milestoneTitle}".`
+                },
+                accepted: {
+                        subject: 'Đề xuất tranh chấp được chấp nhận',
+                        heading: 'Thỏa thuận tranh chấp đã đạt được',
+                        description: `${payload.actorName} đã chấp nhận đề xuất thương lượng cho milestone "${payload.milestoneTitle}".`
+                },
+                rejected: {
+                        subject: 'Đề xuất tranh chấp bị từ chối',
+                        heading: 'Đề xuất thương lượng bị từ chối',
+                        description: `${payload.actorName} đã từ chối đề xuất thương lượng cho milestone "${payload.milestoneTitle}".`
                 }
         }[payload.action]
 
@@ -105,7 +116,8 @@ export async function sendDisputeNegotiationEmail(
                 releaseAmount: formatCurrency(payload.releaseAmount, payload.currency),
                 refundAmount: formatCurrency(payload.refundAmount, payload.currency),
                 message: payload.message,
-                ctaLink: payload.disputeUrl
+                ctaLink: payload.disputeUrl,
+                showDeadlineNotice: payload.showDeadlineNotice
         })
 
         await sendMail({ to, subject: copy.subject, html })

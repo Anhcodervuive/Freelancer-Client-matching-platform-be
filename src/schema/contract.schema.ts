@@ -143,6 +143,31 @@ export const UpdateDisputeNegotiationSchema = z
 
 export type UpdateDisputeNegotiationInput = z.infer<typeof UpdateDisputeNegotiationSchema>
 
+export const RespondDisputeNegotiationSchema = z
+        .object({
+                action: z.enum(['accept', 'reject']),
+                message: z
+                        .string()
+                        .trim()
+                        .max(2000, 'Phản hồi tối đa 2000 ký tự')
+                        .optional(),
+        })
+        .superRefine((payload, ctx) => {
+                if (payload.action === 'reject') {
+                        const message = payload.message ?? ''
+
+                        if (message.length === 0) {
+                                ctx.addIssue({
+                                        code: z.ZodIssueCode.custom,
+                                        path: ['message'],
+                                        message: 'Vui lòng giải thích lý do từ chối đề xuất',
+                                })
+                        }
+                }
+        })
+
+export type RespondDisputeNegotiationInput = z.infer<typeof RespondDisputeNegotiationSchema>
+
 export const SubmitMilestoneSchema = z.object({
         message: z
                 .string()
