@@ -189,6 +189,7 @@ const disputeContextInclude = Prisma.validator<Prisma.DisputeInclude>()({
         escrow: {
                 select: {
                         id: true,
+                        status: true,
                         currency: true,
                         amountFunded: true,
                         amountReleased: true,
@@ -197,6 +198,12 @@ const disputeContextInclude = Prisma.validator<Prisma.DisputeInclude>()({
                                 select: {
                                         id: true,
                                         title: true,
+                                        status: true,
+                                        amount: true,
+                                        currency: true,
+                                        startAt: true,
+                                        endAt: true,
+                                        updatedAt: true,
                                         contractId: true,
                                         contract: {
                                                 select: {
@@ -211,6 +218,71 @@ const disputeContextInclude = Prisma.validator<Prisma.DisputeInclude>()({
                 }
         },
         latestProposal: true
+})
+
+const contractDisputeMilestoneSelect = Prisma.validator<Prisma.MilestoneSelect>()({
+        id: true,
+        contractId: true,
+        title: true,
+        amount: true,
+        currency: true,
+        status: true,
+        startAt: true,
+        endAt: true,
+        updatedAt: true,
+        escrow: {
+                select: {
+                        id: true,
+                        status: true,
+                        currency: true,
+                        amountFunded: true,
+                        amountReleased: true,
+                        amountRefunded: true,
+                        dispute: {
+                                include: {
+                                        latestProposal: true
+                                }
+                        }
+                }
+        }
+})
+
+const disputeDetailInclude = Prisma.validator<Prisma.DisputeInclude>()({
+        latestProposal: true,
+        negotiations: {
+                orderBy: { createdAt: 'asc' }
+        },
+        escrow: {
+                select: {
+                        id: true,
+                        status: true,
+                        currency: true,
+                        amountFunded: true,
+                        amountReleased: true,
+                        amountRefunded: true,
+                        milestone: {
+                                select: {
+                                        id: true,
+                                        title: true,
+                                        status: true,
+                                        amount: true,
+                                        currency: true,
+                                        startAt: true,
+                                        endAt: true,
+                                        updatedAt: true,
+                                        contractId: true,
+                                        contract: {
+                                                select: {
+                                                        id: true,
+                                                        title: true,
+                                                        clientId: true,
+                                                        freelancerId: true
+                                                }
+                                        }
+                                }
+                        }
+                }
+        }
 })
 
 const contractDetailInclude = Prisma.validator<Prisma.ContractInclude>()({
@@ -261,6 +333,11 @@ type DisputeContextPayload = Prisma.DisputeGetPayload<{ include: typeof disputeC
 type DisputeEscrowPayload = NonNullable<DisputeContextPayload['escrow']>
 type DisputeMilestonePayload = NonNullable<DisputeEscrowPayload['milestone']>
 type DisputeContractPayload = NonNullable<DisputeMilestonePayload['contract']>
+type ContractDisputeMilestonePayload = Prisma.MilestoneGetPayload<{ select: typeof contractDisputeMilestoneSelect }>
+type DisputeDetailPayload = Prisma.DisputeGetPayload<{ include: typeof disputeDetailInclude }>
+type DisputeDetailEscrowPayload = NonNullable<DisputeDetailPayload['escrow']>
+type DisputeDetailMilestonePayload = NonNullable<DisputeDetailEscrowPayload['milestone']>
+type DisputeDetailContractPayload = NonNullable<DisputeDetailMilestonePayload['contract']>
 type ContractJobSkillRelation = NonNullable<ContractDetailPayload['jobPost']>['requiredSkills'][number]
 
 const ensureClientUser = async (userId: string) => {
@@ -901,11 +978,11 @@ const serializeMilestoneSubmission = (submission: MilestoneSubmissionPayload) =>
 }
 
 const serializeMilestone = (milestone: MilestonePayload) => {
-	return {
-		id: milestone.id,
-		contractId: milestone.contractId,
-		title: milestone.title,
-		amount: Number(milestone.amount),
+        return {
+                id: milestone.id,
+                contractId: milestone.contractId,
+                title: milestone.title,
+                amount: Number(milestone.amount),
 		currency: milestone.currency,
 		startAt: milestone.startAt ?? null,
 		endAt: milestone.endAt ?? null,
@@ -924,19 +1001,76 @@ const serializeMilestone = (milestone: MilestonePayload) => {
                 approvedSubmission: milestone.approvedSubmission
                         ? serializeMilestoneSubmission(milestone.approvedSubmission)
 			: null,
-		escrow: milestone.escrow
-			? {
-					id: milestone.escrow.id,
-					status: milestone.escrow.status,
-					currency: milestone.escrow.currency,
-					amountFunded: Number(milestone.escrow.amountFunded),
-					amountReleased: Number(milestone.escrow.amountReleased),
-					amountRefunded: Number(milestone.escrow.amountRefunded),
-					createdAt: milestone.escrow.createdAt,
-					updatedAt: milestone.escrow.updatedAt
-			  }
-			: null
-	}
+                escrow: milestone.escrow
+                        ? {
+                                        id: milestone.escrow.id,
+                                        status: milestone.escrow.status,
+                                        currency: milestone.escrow.currency,
+                                        amountFunded: Number(milestone.escrow.amountFunded),
+                                        amountReleased: Number(milestone.escrow.amountReleased),
+                                        amountRefunded: Number(milestone.escrow.amountRefunded),
+                                        createdAt: milestone.escrow.createdAt,
+                                        updatedAt: milestone.escrow.updatedAt
+                          }
+                        : null
+        }
+}
+
+type EscrowSummarySource = {
+        id: string
+        status: EscrowStatus
+        currency: string
+        amountFunded: Prisma.Decimal
+        amountReleased: Prisma.Decimal
+        amountRefunded: Prisma.Decimal
+}
+
+type DisputeMilestoneLike = {
+        id: string
+        contractId: string
+        title: string
+        status: MilestoneStatus
+        amount: Prisma.Decimal
+        currency: string
+        startAt: Date | null
+        endAt: Date | null
+        updatedAt: Date
+}
+
+const serializeEscrowSummary = (escrow: EscrowSummarySource) => {
+        return {
+                id: escrow.id,
+                status: escrow.status,
+                currency: escrow.currency,
+                amountFunded: Number(escrow.amountFunded),
+                amountReleased: Number(escrow.amountReleased),
+                amountRefunded: Number(escrow.amountRefunded)
+        }
+}
+
+const serializeDisputeMilestoneSummary = (milestone: DisputeMilestoneLike) => {
+        return {
+                id: milestone.id,
+                contractId: milestone.contractId,
+                title: milestone.title,
+                status: milestone.status,
+                amount: Number(milestone.amount),
+                currency: milestone.currency,
+                startAt: milestone.startAt ?? null,
+                endAt: milestone.endAt ?? null,
+                updatedAt: milestone.updatedAt
+        }
+}
+
+const serializeMilestoneDisputeOverview = (milestone: ContractDisputeMilestonePayload) => {
+        const escrow = milestone.escrow
+        const dispute = escrow?.dispute ? serializeDispute(escrow.dispute) : null
+
+        return {
+                ...serializeDisputeMilestoneSummary(milestone),
+                escrow: escrow ? serializeEscrowSummary(escrow) : null,
+                dispute
+        }
 }
 
 const serializePayment = (payment: PaymentEntity) => {
@@ -1040,7 +1174,9 @@ const centsFromDecimal = (value: Prisma.Decimal) => {
         return Number(value.mul(100).toFixed(0))
 }
 
-const computeDisputableCents = (escrow: DisputeEscrowPayload) => {
+const computeDisputableCents = (
+        escrow: Pick<DisputeEscrowPayload, 'amountFunded' | 'amountReleased' | 'amountRefunded'>
+) => {
         const disputable = escrow.amountFunded.minus(escrow.amountReleased).minus(escrow.amountRefunded)
         return Math.max(0, Number(disputable.mul(100).toFixed(0)))
 }
@@ -1256,10 +1392,10 @@ const listContractMilestones = async (userId: string, contractId: string) => {
 }
 
 const listMilestoneResources = async (userId: string, contractId: string, milestoneId: string) => {
-	await ensureContractAccess(contractId, userId)
+        await ensureContractAccess(contractId, userId)
 
-	const milestone = await prismaClient.milestone.findFirst({
-		where: {
+        const milestone = await prismaClient.milestone.findFirst({
+                where: {
 			id: milestoneId,
 			contractId,
 			isDeleted: false
@@ -1276,7 +1412,166 @@ const listMilestoneResources = async (userId: string, contractId: string, milest
 		throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
 	}
 
-	return milestone.resources.map(resource => serializeMilestoneResource(resource))
+        return milestone.resources.map(resource => serializeMilestoneResource(resource))
+}
+
+const listContractDisputes = async (userId: string, contractId: string) => {
+        const contract = await prismaClient.contract.findFirst({
+                where: {
+                        id: contractId,
+                        OR: [{ clientId: userId }, { freelancerId: userId }]
+                },
+                select: {
+                        id: true,
+                        title: true,
+                        clientId: true,
+                        freelancerId: true,
+                        milestones: {
+                                where: { isDeleted: false },
+                                orderBy: { updatedAt: 'desc' },
+                                select: contractDisputeMilestoneSelect
+                        }
+                }
+        })
+
+        if (!contract) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        return {
+                contract: {
+                        id: contract.id,
+                        title: contract.title,
+                        clientId: contract.clientId,
+                        freelancerId: contract.freelancerId
+                },
+                milestones: contract.milestones.map(milestone => serializeMilestoneDisputeOverview(milestone))
+        }
+}
+
+const getMilestoneDispute = async (userId: string, contractId: string, milestoneId: string) => {
+        await ensureContractAccess(contractId, userId)
+
+        const milestone = await prismaClient.milestone.findFirst({
+                where: { id: milestoneId, contractId, isDeleted: false },
+                select: {
+                        id: true,
+                        contractId: true,
+                        title: true,
+                        status: true,
+                        amount: true,
+                        currency: true,
+                        startAt: true,
+                        endAt: true,
+                        updatedAt: true,
+                        contract: {
+                                select: {
+                                        id: true,
+                                        title: true,
+                                        clientId: true,
+                                        freelancerId: true
+                                }
+                        },
+                        escrow: {
+                                select: {
+                                        id: true,
+                                        status: true,
+                                        currency: true,
+                                        amountFunded: true,
+                                        amountReleased: true,
+                                        amountRefunded: true,
+                                        dispute: {
+                                                select: { id: true }
+                                        }
+                                }
+                        }
+                }
+        })
+
+        if (!milestone) {
+                throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const escrow = milestone.escrow
+        const contract = milestone.contract
+
+        if (!contract) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const escrowSummary = escrow ? serializeEscrowSummary(escrow) : null
+
+        let disputableAmount = 0
+        let disputableCents = 0
+
+        if (escrow) {
+                const disputable = escrow.amountFunded.minus(escrow.amountReleased).minus(escrow.amountRefunded)
+                disputableAmount = Math.max(0, Number(disputable))
+                disputableCents = Math.max(0, Number(disputable.mul(100).toFixed(0)))
+        }
+
+        if (!escrow || !escrow.dispute) {
+                return {
+                        contract: {
+                                id: contract.id,
+                                title: contract.title,
+                                clientId: contract.clientId,
+                                freelancerId: contract.freelancerId
+                        },
+                        milestone: {
+                                ...serializeDisputeMilestoneSummary(milestone),
+                                escrow: escrowSummary
+                        },
+                        dispute: null,
+                        negotiations: [],
+                        disputableAmount,
+                        disputableCents
+                }
+        }
+
+        const disputeRecord = await prismaClient.dispute.findUnique({
+                where: { id: escrow.dispute.id },
+                include: disputeDetailInclude
+        })
+
+        if (!disputeRecord || !disputeRecord.escrow || !disputeRecord.escrow.milestone) {
+                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const disputeEscrow = disputeRecord.escrow as DisputeDetailEscrowPayload
+        const disputeMilestone = disputeEscrow.milestone as DisputeDetailMilestonePayload
+        const disputeContract = disputeMilestone.contract as DisputeDetailContractPayload
+
+        if (disputeContract.id !== contractId || disputeMilestone.id !== milestoneId) {
+                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (disputeContract.clientId !== userId && disputeContract.freelancerId !== userId) {
+                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const disputable = disputeEscrow.amountFunded
+                .minus(disputeEscrow.amountReleased)
+                .minus(disputeEscrow.amountRefunded)
+        disputableAmount = Math.max(0, Number(disputable))
+        disputableCents = Math.max(0, Number(disputable.mul(100).toFixed(0)))
+
+        return {
+                contract: {
+                        id: disputeContract.id,
+                        title: disputeContract.title,
+                        clientId: disputeContract.clientId,
+                        freelancerId: disputeContract.freelancerId
+                },
+                milestone: {
+                        ...serializeDisputeMilestoneSummary(disputeMilestone),
+                        escrow: serializeEscrowSummary(disputeEscrow)
+                },
+                dispute: serializeDispute(disputeRecord),
+                negotiations: disputeRecord.negotiations.map(serializeDisputeNegotiation),
+                disputableAmount,
+                disputableCents
+        }
 }
 
 const createContractMilestone = async (
@@ -3117,11 +3412,13 @@ const declineMilestoneSubmission = async (
 }
 
 const contractService = {
-	listContracts,
-	getContractDetail,
-	listContractMilestones,
-	listMilestoneResources,
-	createContractMilestone,
+        listContracts,
+        getContractDetail,
+        listContractMilestones,
+        listMilestoneResources,
+        listContractDisputes,
+        getMilestoneDispute,
+        createContractMilestone,
         uploadMilestoneResources,
         deleteMilestoneResource,
         deleteContractMilestone,

@@ -9,9 +9,11 @@ import {
         deleteContractMilestone,
         deleteMilestoneResource,
         deleteDisputeNegotiation,
+        getMilestoneDispute,
         getContractDetail,
         listMilestoneResources,
         listContractMilestones,
+        listContractDisputes,
         listContracts,
         openMilestoneDispute,
         payMilestone,
@@ -28,7 +30,13 @@ const router = Router()
 
 router.get('/', authenticateMiddleware, errorHandler(listContracts))
 router.get('/:contractId', authenticateMiddleware, errorHandler(getContractDetail))
+router.get('/:contractId/disputes', authenticateMiddleware, errorHandler(listContractDisputes))
 router.get('/:contractId/milestones', authenticateMiddleware, errorHandler(listContractMilestones))
+router.get(
+        '/:contractId/milestones/:milestoneId/disputes',
+        authenticateMiddleware,
+        errorHandler(getMilestoneDispute)
+)
 router.post('/:contractId/milestones', authenticateMiddleware, errorHandler(createContractMilestone))
 router.delete('/:contractId/milestones/:milestoneId', authenticateMiddleware, errorHandler(deleteContractMilestone))
 router.post('/:contractId/milestones/:milestoneId/cancel', authenticateMiddleware, errorHandler(cancelMilestone))

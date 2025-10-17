@@ -118,6 +118,40 @@ export const listMilestoneResources = async (req: Request, res: Response) => {
         })
 }
 
+export const listContractDisputes = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để xem tranh chấp của hợp đồng', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId) {
+                throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const disputes = await contractService.listContractDisputes(userId, contractId)
+
+        return res.status(StatusCodes.OK).json(disputes)
+}
+
+export const getMilestoneDispute = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để xem tranh chấp milestone', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId) {
+                throw new BadRequestException('Thiếu tham số contractId hoặc milestoneId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const dispute = await contractService.getMilestoneDispute(userId, contractId, milestoneId)
+
+        return res.status(StatusCodes.OK).json(dispute)
+}
+
 export const createContractMilestone = async (req: Request, res: Response) => {
         const userId = req.user?.id
         const { contractId } = req.params
