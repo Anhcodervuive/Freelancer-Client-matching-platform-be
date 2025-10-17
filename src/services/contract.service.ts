@@ -24,7 +24,7 @@ import {
 } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
-import { R2_CONFIG, STRIPE_CONFIG_INFO } from '~/config/environment'
+import { CLIENT, R2_CONFIG, STRIPE_CONFIG_INFO } from '~/config/environment'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
@@ -34,15 +34,18 @@ import {
         CancelMilestoneInput,
         ContractListFilterInput,
         CreateContractMilestoneInput,
+        CreateDisputeNegotiationInput,
         DeclineMilestoneSubmissionInput,
         OpenMilestoneDisputeInput,
         PayMilestoneInput,
         RespondMilestoneCancellationInput,
-        SubmitMilestoneInput
+        SubmitMilestoneInput,
+        UpdateDisputeNegotiationInput
 } from '~/schema/contract.schema'
 import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 import { InternalServerException } from '~/exceptions/internal-server'
 import notificationService from '~/services/notification.service'
+import { emailQueue } from '~/queues/email.queue'
 
 const contractJobSummarySelect = Prisma.validator<Prisma.JobPostSelect>()({
 	id: true,
@@ -158,28 +161,56 @@ const milestoneSubmissionInclude = Prisma.validator<Prisma.MilestoneSubmissionIn
 })
 
 const milestoneInclude = Prisma.validator<Prisma.MilestoneInclude>()({
-	escrow: {
-		select: {
-			id: true,
-			status: true,
-			currency: true,
-			amountFunded: true,
-			amountReleased: true,
-			amountRefunded: true,
-			createdAt: true,
-			updatedAt: true
-		}
-	},
-	resources: {
-		include: milestoneResourceInclude
-	},
-	submissions: {
-		include: milestoneSubmissionInclude,
-		orderBy: { createdAt: 'desc' }
-	},
-	approvedSubmission: {
-		include: milestoneSubmissionInclude
-	}
+        escrow: {
+                select: {
+                        id: true,
+                        status: true,
+                        currency: true,
+                        amountFunded: true,
+                        amountReleased: true,
+                        amountRefunded: true,
+                        createdAt: true,
+                        updatedAt: true
+                }
+        },
+        resources: {
+                include: milestoneResourceInclude
+        },
+        submissions: {
+                include: milestoneSubmissionInclude,
+                orderBy: { createdAt: 'desc' }
+        },
+        approvedSubmission: {
+                include: milestoneSubmissionInclude
+        }
+})
+
+const disputeContextInclude = Prisma.validator<Prisma.DisputeInclude>()({
+        escrow: {
+                select: {
+                        id: true,
+                        currency: true,
+                        amountFunded: true,
+                        amountReleased: true,
+                        amountRefunded: true,
+                        milestone: {
+                                select: {
+                                        id: true,
+                                        title: true,
+                                        contractId: true,
+                                        contract: {
+                                                select: {
+                                                        id: true,
+                                                        title: true,
+                                                        clientId: true,
+                                                        freelancerId: true
+                                                }
+                                        }
+                                }
+                        }
+                }
+        },
+        latestProposal: true
 })
 
 const contractDetailInclude = Prisma.validator<Prisma.ContractInclude>()({
@@ -226,6 +257,10 @@ type TransferEntity = Prisma.TransferGetPayload<{}>
 type RefundEntity = Prisma.RefundGetPayload<{}>
 type DisputeNegotiationEntity = Prisma.DisputeNegotiationGetPayload<{}>
 type DisputeEntity = Prisma.DisputeGetPayload<{ include: { latestProposal: true } }>
+type DisputeContextPayload = Prisma.DisputeGetPayload<{ include: typeof disputeContextInclude }>
+type DisputeEscrowPayload = NonNullable<DisputeContextPayload['escrow']>
+type DisputeMilestonePayload = NonNullable<DisputeEscrowPayload['milestone']>
+type DisputeContractPayload = NonNullable<DisputeMilestonePayload['contract']>
 type ContractJobSkillRelation = NonNullable<ContractDetailPayload['jobPost']>['requiredSkills'][number]
 
 const ensureClientUser = async (userId: string) => {
@@ -997,6 +1032,125 @@ const serializeDispute = (dispute: DisputeEntity) => {
                         ? serializeDisputeNegotiation(dispute.latestProposal)
                         : null
         }
+}
+
+const FIVE_DAYS_IN_MS = 5 * 24 * 60 * 60 * 1000
+
+const centsFromDecimal = (value: Prisma.Decimal) => {
+        return Number(value.mul(100).toFixed(0))
+}
+
+const computeDisputableCents = (escrow: DisputeEscrowPayload) => {
+        const disputable = escrow.amountFunded.minus(escrow.amountReleased).minus(escrow.amountRefunded)
+        return Math.max(0, Number(disputable.mul(100).toFixed(0)))
+}
+
+const centsToDecimalString = (cents: number) => (cents / 100).toFixed(2)
+
+const composeFullName = (profile?: { firstName: string | null; lastName: string | null } | null) => {
+        const firstName = profile?.firstName?.trim() ?? ''
+        const lastName = profile?.lastName?.trim() ?? ''
+        const combined = `${firstName} ${lastName}`.trim()
+        return combined.length > 0 ? combined : null
+}
+
+const ensureDisputeContext = async (
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
+        userId: string
+) => {
+        const dispute = await prismaClient.dispute.findUnique({
+                where: { id: disputeId },
+                include: disputeContextInclude
+        })
+
+        if (!dispute || !dispute.escrow || !dispute.escrow.milestone || !dispute.escrow.milestone.contract) {
+                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const escrow = dispute.escrow as DisputeEscrowPayload
+        const milestone = escrow.milestone as DisputeMilestonePayload
+        const contract = milestone.contract as DisputeContractPayload
+
+        if (milestone.id !== milestoneId || milestone.contractId !== contractId || contract.id !== contractId) {
+                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (contract.clientId !== userId && contract.freelancerId !== userId) {
+                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (dispute.status !== DisputeStatus.OPEN && dispute.status !== DisputeStatus.NEGOTIATION) {
+                throw new BadRequestException(
+                        'Tranh chấp không còn ở giai đoạn thương lượng',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        return { dispute: dispute as DisputeContextPayload, escrow, milestone, contract }
+}
+
+const loadUserContact = async (userId: string) => {
+        const user = await prismaClient.user.findUnique({
+                where: { id: userId },
+                select: {
+                        email: true,
+                        profile: {
+                                select: {
+                                        firstName: true,
+                                        lastName: true
+                                }
+                        }
+                }
+        })
+
+        if (!user) {
+                throw new NotFoundException('Không tìm thấy người dùng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const displayName = composeFullName(user.profile) ?? user.email
+
+        return {
+                email: user.email,
+                name: displayName
+        }
+}
+
+const queueDisputeNegotiationEmail = async (params: {
+        action: 'created' | 'updated' | 'deleted'
+        actorId: string
+        recipientId: string
+        dispute: DisputeContextPayload
+        releaseAmount: number
+        refundAmount: number
+        message?: string | null
+}) => {
+        const [actor, recipient] = await Promise.all([
+                loadUserContact(params.actorId),
+                loadUserContact(params.recipientId)
+        ])
+
+        const escrow = params.dispute.escrow as DisputeEscrowPayload
+        const milestone = escrow.milestone as DisputeMilestonePayload
+        const contract = milestone.contract as DisputeContractPayload
+        const disputeUrl = `${CLIENT.URL}/contracts/${contract.id}/milestones/${milestone.id}/disputes/${params.dispute.id}`
+
+        await emailQueue.add('sendDisputeNegotiationEmail', {
+                to: recipient.email,
+                recipientName: recipient.name,
+                payload: {
+                        action: params.action,
+                        actorName: actor.name,
+                        milestoneTitle: milestone.title,
+                        contractTitle: contract.title,
+                        disputeUrl,
+                        releaseAmount: params.releaseAmount,
+                        refundAmount: params.refundAmount,
+                        currency: escrow.currency,
+                        message: params.message ?? null
+                }
+        })
 }
 
 const ensureContractAccess = async (contractId: string, userId: string) => {
@@ -1919,6 +2073,301 @@ const openMilestoneDispute = async (
         }
 }
 
+const createDisputeNegotiation = async (
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
+        payload: CreateDisputeNegotiationInput
+) => {
+        const context = await ensureDisputeContext(contractId, milestoneId, disputeId, userId)
+        const { escrow, contract, dispute } = context
+
+        const availableCents = computeDisputableCents(escrow)
+
+        if (availableCents <= 0) {
+                throw new BadRequestException(
+                        'Milestone không còn tiền trong escrow để thương lượng',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const releaseCents = Math.round(payload.releaseAmount * 100)
+        const refundCents = Math.round(payload.refundAmount * 100)
+
+        if (releaseCents < 0 || refundCents < 0) {
+                throw new BadRequestException('Số tiền đề xuất không hợp lệ', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (releaseCents + refundCents !== availableCents) {
+                throw new BadRequestException(
+                        'Tổng tiền release/refund phải bằng số tiền đang tranh chấp',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const counterpartyId = userId === contract.clientId ? contract.freelancerId : contract.clientId
+
+        if (!counterpartyId) {
+                throw new BadRequestException('Tranh chấp không hợp lệ', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const releaseValue = centsToDecimalString(releaseCents)
+        const refundValue = centsToDecimalString(refundCents)
+        const message = payload.message?.trim() ?? null
+        const responseDeadline = new Date(Date.now() + FIVE_DAYS_IN_MS)
+
+        const result = await prismaClient.$transaction(async tx => {
+                const negotiation = await tx.disputeNegotiation.create({
+                        data: {
+                                disputeId,
+                                proposerId: userId,
+                                counterpartyId,
+                                status: DisputeNegotiationStatus.PENDING,
+                                releaseAmount: new Prisma.Decimal(releaseValue),
+                                refundAmount: new Prisma.Decimal(refundValue),
+                                message
+                        }
+                })
+
+                const updatedDispute = await tx.dispute.update({
+                        where: { id: disputeId },
+                        data: {
+                                latestProposalId: negotiation.id,
+                                proposedRelease: new Prisma.Decimal(releaseValue),
+                                proposedRefund: new Prisma.Decimal(refundValue),
+                                responseDeadline,
+                                status: DisputeStatus.NEGOTIATION
+                        },
+                        include: { latestProposal: true }
+                })
+
+                return { negotiation, dispute: updatedDispute }
+        })
+
+        await queueDisputeNegotiationEmail({
+                action: 'created',
+                actorId: userId,
+                recipientId: counterpartyId,
+                dispute,
+                releaseAmount: releaseCents / 100,
+                refundAmount: refundCents / 100,
+                message
+        })
+
+        return {
+                contractId,
+                milestoneId,
+                dispute: serializeDispute(result.dispute),
+                negotiation: serializeDisputeNegotiation(result.negotiation)
+        }
+}
+
+const updateDisputeNegotiation = async (
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
+        negotiationId: string,
+        payload: UpdateDisputeNegotiationInput
+) => {
+        const context = await ensureDisputeContext(contractId, milestoneId, disputeId, userId)
+        const { escrow, dispute } = context
+
+        const negotiationRecord = await prismaClient.disputeNegotiation.findUnique({
+                where: { id: negotiationId }
+        })
+
+        if (!negotiationRecord || negotiationRecord.disputeId !== disputeId) {
+                throw new NotFoundException('Không tìm thấy đề xuất tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (negotiationRecord.proposerId !== userId) {
+                throw new UnauthorizedException(
+                        'Bạn không thể cập nhật đề xuất tranh chấp của người khác',
+                        ErrorCode.USER_NOT_AUTHORITY
+                )
+        }
+
+        if (negotiationRecord.status !== DisputeNegotiationStatus.PENDING) {
+                throw new BadRequestException(
+                        'Đề xuất đã được phản hồi, không thể chỉnh sửa',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        if (dispute.latestProposalId !== negotiationId) {
+                throw new BadRequestException(
+                        'Chỉ có thể chỉnh sửa đề xuất đang chờ phản hồi',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const availableCents = computeDisputableCents(escrow)
+        const currentReleaseCents = centsFromDecimal(negotiationRecord.releaseAmount)
+        const currentRefundCents = centsFromDecimal(negotiationRecord.refundAmount)
+        const nextReleaseCents =
+                payload.releaseAmount !== undefined ? Math.round(payload.releaseAmount * 100) : currentReleaseCents
+        const nextRefundCents =
+                payload.refundAmount !== undefined ? Math.round(payload.refundAmount * 100) : currentRefundCents
+
+        if (nextReleaseCents < 0 || nextRefundCents < 0) {
+                throw new BadRequestException('Số tiền đề xuất không hợp lệ', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (nextReleaseCents + nextRefundCents !== availableCents) {
+                throw new BadRequestException(
+                        'Tổng tiền release/refund phải bằng số tiền đang tranh chấp',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const messageUpdate = payload.message !== undefined ? payload.message.trim() : undefined
+        const responseDeadline = new Date(Date.now() + FIVE_DAYS_IN_MS)
+
+        const result = await prismaClient.$transaction(async tx => {
+                const updatedNegotiation = await tx.disputeNegotiation.update({
+                        where: { id: negotiationRecord.id },
+                        data: {
+                                releaseAmount: new Prisma.Decimal(centsToDecimalString(nextReleaseCents)),
+                                refundAmount: new Prisma.Decimal(centsToDecimalString(nextRefundCents)),
+                                ...(messageUpdate !== undefined ? { message: messageUpdate } : {})
+                        }
+                })
+
+                const updatedDispute = await tx.dispute.update({
+                        where: { id: disputeId },
+                        data: {
+                                latestProposalId: negotiationRecord.id,
+                                proposedRelease: new Prisma.Decimal(centsToDecimalString(nextReleaseCents)),
+                                proposedRefund: new Prisma.Decimal(centsToDecimalString(nextRefundCents)),
+                                responseDeadline,
+                                status: DisputeStatus.NEGOTIATION
+                        },
+                        include: { latestProposal: true }
+                })
+
+                return { negotiation: updatedNegotiation, dispute: updatedDispute }
+        })
+
+        await queueDisputeNegotiationEmail({
+                action: 'updated',
+                actorId: userId,
+                recipientId: negotiationRecord.counterpartyId,
+                dispute,
+                releaseAmount: nextReleaseCents / 100,
+                refundAmount: nextRefundCents / 100,
+                message:
+                        messageUpdate !== undefined
+                                ? messageUpdate
+                                : negotiationRecord.message ?? null
+        })
+
+        return {
+                contractId,
+                milestoneId,
+                dispute: serializeDispute(result.dispute),
+                negotiation: serializeDisputeNegotiation(result.negotiation)
+        }
+}
+
+const deleteDisputeNegotiation = async (
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
+        negotiationId: string
+) => {
+        const context = await ensureDisputeContext(contractId, milestoneId, disputeId, userId)
+        const { dispute } = context
+
+        const negotiationRecord = await prismaClient.disputeNegotiation.findUnique({
+                where: { id: negotiationId }
+        })
+
+        if (!negotiationRecord || negotiationRecord.disputeId !== disputeId) {
+                throw new NotFoundException('Không tìm thấy đề xuất tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (negotiationRecord.proposerId !== userId) {
+                throw new UnauthorizedException(
+                        'Bạn không thể xóa đề xuất tranh chấp của người khác',
+                        ErrorCode.USER_NOT_AUTHORITY
+                )
+        }
+
+        if (negotiationRecord.status !== DisputeNegotiationStatus.PENDING) {
+                throw new BadRequestException(
+                        'Đề xuất đã được phản hồi, không thể xóa',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        if (dispute.latestProposalId !== negotiationId) {
+                throw new BadRequestException(
+                        'Chỉ có thể rút đề xuất đang chờ phản hồi',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const releaseCents = centsFromDecimal(negotiationRecord.releaseAmount)
+        const refundCents = centsFromDecimal(negotiationRecord.refundAmount)
+        const responseDeadline = new Date(Date.now() + FIVE_DAYS_IN_MS)
+
+        const result = await prismaClient.$transaction(async tx => {
+                const previousProposal = await tx.disputeNegotiation.findFirst({
+                        where: {
+                                disputeId,
+                                id: { not: negotiationRecord.id }
+                        },
+                        orderBy: { createdAt: 'desc' }
+                })
+
+                const hasPendingPrevious = previousProposal?.status === DisputeNegotiationStatus.PENDING
+
+                const updatedDispute = await tx.dispute.update({
+                        where: { id: disputeId },
+                        data: previousProposal
+                                ? {
+                                          latestProposalId: previousProposal.id,
+                                          proposedRelease: previousProposal.releaseAmount,
+                                          proposedRefund: previousProposal.refundAmount,
+                                          responseDeadline: hasPendingPrevious ? responseDeadline : null,
+                                          status: hasPendingPrevious ? DisputeStatus.NEGOTIATION : DisputeStatus.OPEN
+                                  }
+                                : {
+                                          latestProposalId: null,
+                                          proposedRelease: new Prisma.Decimal(0),
+                                          proposedRefund: new Prisma.Decimal(0),
+                                          responseDeadline: null,
+                                          status: DisputeStatus.OPEN
+                                  },
+                        include: { latestProposal: true }
+                })
+
+                await tx.disputeNegotiation.delete({ where: { id: negotiationRecord.id } })
+
+                return { dispute: updatedDispute, previousProposal }
+        })
+
+        await queueDisputeNegotiationEmail({
+                action: 'deleted',
+                actorId: userId,
+                recipientId: negotiationRecord.counterpartyId,
+                dispute,
+                releaseAmount: releaseCents / 100,
+                refundAmount: refundCents / 100,
+                message: negotiationRecord.message ?? null
+        })
+
+        return {
+                contractId,
+                milestoneId,
+                dispute: serializeDispute(result.dispute),
+                removedNegotiationId: negotiationId
+        }
+}
+
 const payMilestone = async (
         clientUserId: string,
         contractId: string,
@@ -2679,6 +3128,9 @@ const contractService = {
         cancelMilestone,
         respondMilestoneCancellation,
         openMilestoneDispute,
+        createDisputeNegotiation,
+        updateDisputeNegotiation,
+        deleteDisputeNegotiation,
         payMilestone,
         submitMilestoneWork,
         approveMilestoneSubmission,

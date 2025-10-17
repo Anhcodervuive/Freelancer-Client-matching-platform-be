@@ -4,15 +4,18 @@ import {
         approveMilestoneSubmission,
         cancelMilestone,
         createContractMilestone,
+        createDisputeNegotiation,
         declineMilestoneSubmission,
         deleteContractMilestone,
         deleteMilestoneResource,
+        deleteDisputeNegotiation,
         getContractDetail,
         listMilestoneResources,
         listContractMilestones,
         listContracts,
         openMilestoneDispute,
         payMilestone,
+        updateDisputeNegotiation,
         respondMilestoneCancellation,
         submitMilestoneWork,
         uploadMilestoneResources
@@ -38,6 +41,21 @@ router.post(
         '/:contractId/milestones/:milestoneId/disputes',
         authenticateMiddleware,
         errorHandler(openMilestoneDispute)
+)
+router.post(
+        '/:contractId/milestones/:milestoneId/disputes/:disputeId/negotiations',
+        authenticateMiddleware,
+        errorHandler(createDisputeNegotiation)
+)
+router.patch(
+        '/:contractId/milestones/:milestoneId/disputes/:disputeId/negotiations/:negotiationId',
+        authenticateMiddleware,
+        errorHandler(updateDisputeNegotiation)
+)
+router.delete(
+        '/:contractId/milestones/:milestoneId/disputes/:disputeId/negotiations/:negotiationId',
+        authenticateMiddleware,
+        errorHandler(deleteDisputeNegotiation)
 )
 router.post(
         '/:contractId/milestones/:milestoneId/pay',

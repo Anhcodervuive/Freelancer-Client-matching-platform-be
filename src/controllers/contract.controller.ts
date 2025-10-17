@@ -10,11 +10,13 @@ import {
         CancelMilestoneSchema,
         ContractListFilterSchema,
         CreateContractMilestoneSchema,
+        CreateDisputeNegotiationSchema,
         DeclineMilestoneSubmissionSchema,
         OpenMilestoneDisputeSchema,
         PayMilestoneSchema,
         RespondMilestoneCancellationSchema,
-        SubmitMilestoneSchema
+        SubmitMilestoneSchema,
+        UpdateDisputeNegotiationSchema
 } from '~/schema/contract.schema'
 import contractService from '~/services/contract.service'
 
@@ -251,6 +253,87 @@ export const openMilestoneDispute = async (req: Request, res: Response) => {
         const result = await contractService.openMilestoneDispute(userId, contractId, milestoneId, payload)
 
         return res.status(StatusCodes.CREATED).json(result)
+}
+
+export const createDisputeNegotiation = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId, disputeId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để gửi đề xuất tranh chấp', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId || !disputeId) {
+                throw new BadRequestException(
+                        'Thiếu tham số contractId, milestoneId hoặc disputeId',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const payload = CreateDisputeNegotiationSchema.parse(req.body)
+        const result = await contractService.createDisputeNegotiation(
+                userId,
+                contractId,
+                milestoneId,
+                disputeId,
+                payload
+        )
+
+        return res.status(StatusCodes.CREATED).json(result)
+}
+
+export const updateDisputeNegotiation = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId, disputeId, negotiationId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để cập nhật đề xuất tranh chấp', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId || !disputeId || !negotiationId) {
+                throw new BadRequestException(
+                        'Thiếu tham số contractId, milestoneId, disputeId hoặc negotiationId',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const payload = UpdateDisputeNegotiationSchema.parse(req.body)
+        const result = await contractService.updateDisputeNegotiation(
+                userId,
+                contractId,
+                milestoneId,
+                disputeId,
+                negotiationId,
+                payload
+        )
+
+        return res.status(StatusCodes.OK).json(result)
+}
+
+export const deleteDisputeNegotiation = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId, disputeId, negotiationId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để xóa đề xuất tranh chấp', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId || !disputeId || !negotiationId) {
+                throw new BadRequestException(
+                        'Thiếu tham số contractId, milestoneId, disputeId hoặc negotiationId',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const result = await contractService.deleteDisputeNegotiation(
+                userId,
+                contractId,
+                milestoneId,
+                disputeId,
+                negotiationId
+        )
+
+        return res.status(StatusCodes.OK).json(result)
 }
 
 export const payMilestone = async (req: Request, res: Response) => {
