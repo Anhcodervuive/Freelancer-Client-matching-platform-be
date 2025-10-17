@@ -1,0 +1,26 @@
+{{#> base subject=subject}}
+  <h2 style="margin-top:0;">{{heading}}</h2>
+  <p>Xin chào <strong>{{recipientName}}</strong>,</p>
+  <p>{{actionDescription}}</p>
+
+  <div style="margin-top:16px;padding:18px;border-radius:10px;background:#f3f4f6;">
+    <p style="margin:0 0 8px 0;"><strong>Milestone:</strong> {{milestoneTitle}}</p>
+    <p style="margin:0 0 12px 0;"><strong>Hợp đồng:</strong> {{contractTitle}}</p>
+    <p style="margin:0 0 6px 0;"><strong>Đề xuất cho freelancer:</strong> {{releaseAmount}}</p>
+    <p style="margin:0;"><strong>Hoàn lại cho client:</strong> {{refundAmount}}</p>
+  </div>
+
+  {{#if message}}
+    <p style="margin-top:18px;color:#475569;font-style:italic;">“{{message}}”</p>
+  {{/if}}
+
+  {{#if ctaLink}}
+    <div style="margin-top:24px;display:flex;justify-content:center;">
+      {{> button link=ctaLink text="Xem tranh chấp"}}
+    </div>
+  {{/if}}
+
+  <p style="margin-top:24px;font-size:13px;color:#64748b;">
+    Vui lòng phản hồi trong vòng 5 ngày để tránh tranh chấp chuyển sang bước tiếp theo.
+  </p>
+{{/base}}

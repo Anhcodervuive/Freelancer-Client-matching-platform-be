@@ -85,7 +85,7 @@ export const RespondMilestoneCancellationSchema = z.object({
 export type RespondMilestoneCancellationInput = z.infer<typeof RespondMilestoneCancellationSchema>
 
 const MonetaryProposalSchema = z.coerce
-	.number({ error: 'Số tiền phải là số' })
+	.number()
 	.min(0, 'Số tiền không được âm')
 	.refine(value => Number.isFinite(value), 'Số tiền không hợp lệ')
 	.refine(
@@ -104,6 +104,33 @@ export const OpenMilestoneDisputeSchema = z.object({
 })
 
 export type OpenMilestoneDisputeInput = z.infer<typeof OpenMilestoneDisputeSchema>
+
+export const CreateDisputeNegotiationSchema = z.object({
+	releaseAmount: MonetaryProposalSchema,
+	refundAmount: MonetaryProposalSchema,
+	message: z.string().trim().max(2000, 'Thông điệp đề xuất tối đa 2000 ký tự').optional()
+})
+
+export type CreateDisputeNegotiationInput = z.infer<typeof CreateDisputeNegotiationSchema>
+
+export const UpdateDisputeNegotiationSchema = z
+	.object({
+		releaseAmount: MonetaryProposalSchema.optional(),
+		refundAmount: MonetaryProposalSchema.optional(),
+		message: z.string().trim().max(2000, 'Thông điệp đề xuất tối đa 2000 ký tự').optional()
+	})
+	.refine(
+		payload =>
+			payload.releaseAmount !== undefined ||
+			payload.refundAmount !== undefined ||
+			(payload.message !== undefined && payload.message.length > 0),
+		{
+			message: 'Cần cung cấp nội dung cập nhật',
+			path: ['message']
+		}
+	)
+
+export type UpdateDisputeNegotiationInput = z.infer<typeof UpdateDisputeNegotiationSchema>
 
 export const SubmitMilestoneSchema = z.object({
 	message: z.string().trim().max(5000, 'Nội dung quá dài').optional()
