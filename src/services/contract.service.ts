@@ -1271,7 +1271,7 @@ const queueDisputeNegotiationEmail = async (params: {
         const escrow = params.dispute.escrow as DisputeEscrowPayload
         const milestone = escrow.milestone as DisputeMilestonePayload
         const contract = milestone.contract as DisputeContractPayload
-        const disputeUrl = `${CLIENT.URL}/contracts/${contract.id}/milestones/${milestone.id}/disputes/${params.dispute.id}`
+        const disputeUrl = `${CLIENT.URL}/contracts/${contract.id}/milestones/${milestone.id}/disputes`
 
         await emailQueue.add('sendDisputeNegotiationEmail', {
                 to: recipient.email,
