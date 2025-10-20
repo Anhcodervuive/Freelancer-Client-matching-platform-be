@@ -25,6 +25,20 @@ export const listAdminDisputes = async (req: Request, res: Response) => {
     return res.json(result)
 }
 
+export const getAdminDispute = async (req: Request, res: Response) => {
+    ensureAdminUser(req)
+
+    const { disputeId } = req.params
+
+    if (!disputeId) {
+        throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const result = await adminDisputeService.getDispute(disputeId)
+
+    return res.json(result)
+}
+
 export const joinDisputeAsAdmin = async (req: Request, res: Response) => {
     const adminId = ensureAdminUser(req)
     const { disputeId } = req.params

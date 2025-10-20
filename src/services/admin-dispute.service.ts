@@ -12,6 +12,31 @@ const MEDIATION_STATUSES: DisputeStatus[] = [DisputeStatus.OPEN, DisputeStatus.N
 const isMediationStatus = (status: DisputeStatus) =>
     status === DisputeStatus.OPEN || status === DisputeStatus.NEGOTIATION
 
+const adminDisputeUserSelect = Prisma.validator<Prisma.UserSelect>()({
+    id: true,
+    email: true,
+    profile: {
+        select: {
+            firstName: true,
+            lastName: true
+        }
+    }
+})
+
+const adminDisputeChatAccessLogSelect = Prisma.validator<Prisma.ChatAdminAccessLogSelect>()({
+    id: true,
+    threadId: true,
+    disputeId: true,
+    adminId: true,
+    action: true,
+    reason: true,
+    metadata: true,
+    createdAt: true,
+    admin: {
+        select: adminDisputeUserSelect
+    }
+})
+
 const adminDisputeInclude = Prisma.validator<Prisma.DisputeInclude>()({
     latestProposal: true,
     escrow: {
@@ -67,26 +92,7 @@ const adminDisputeInclude = Prisma.validator<Prisma.DisputeInclude>()({
     chatAccessLogs: {
         orderBy: { createdAt: 'desc' },
         take: 1,
-        select: {
-            id: true,
-            adminId: true,
-            action: true,
-            reason: true,
-            metadata: true,
-            createdAt: true,
-            admin: {
-                select: {
-                    id: true,
-                    email: true,
-                    profile: {
-                        select: {
-                            firstName: true,
-                            lastName: true
-                        }
-                    }
-                }
-            }
-        }
+        select: adminDisputeChatAccessLogSelect
     },
     _count: {
         select: {
@@ -95,16 +101,55 @@ const adminDisputeInclude = Prisma.validator<Prisma.DisputeInclude>()({
     }
 })
 
+const adminDisputeNegotiationInclude = Prisma.validator<Prisma.DisputeNegotiationInclude>()({
+    proposer: {
+        select: adminDisputeUserSelect
+    },
+    counterparty: {
+        select: adminDisputeUserSelect
+    },
+    respondedBy: {
+        select: adminDisputeUserSelect
+    }
+})
+
+const adminDisputeDetailInclude = Prisma.validator<Prisma.DisputeInclude>()({
+    ...adminDisputeInclude,
+    chatAccessLogs: {
+        orderBy: { createdAt: 'desc' },
+        select: adminDisputeChatAccessLogSelect
+    },
+    negotiations: {
+        orderBy: { createdAt: 'desc' },
+        include: adminDisputeNegotiationInclude
+    }
+})
+
 type AdminDisputeRecord = Prisma.DisputeGetPayload<{ include: typeof adminDisputeInclude }>
+type AdminDisputeDetailRecord = Prisma.DisputeGetPayload<{ include: typeof adminDisputeDetailInclude }>
 type AdminDisputeEscrow = NonNullable<AdminDisputeRecord['escrow']>
 type AdminDisputeMilestone = NonNullable<AdminDisputeEscrow['milestone']>
 type AdminDisputeContract = NonNullable<AdminDisputeMilestone['contract']>
+type AdminDisputeUser = Prisma.UserGetPayload<{ select: typeof adminDisputeUserSelect }>
+type AdminDisputeChatLog = Prisma.ChatAdminAccessLogGetPayload<{ select: typeof adminDisputeChatAccessLogSelect }>
+type AdminDisputeNegotiation = Prisma.DisputeNegotiationGetPayload<{ include: typeof adminDisputeNegotiationInclude }>
 
 const composeFullName = (profile?: { firstName: string | null; lastName: string | null } | null) => {
     const firstName = profile?.firstName?.trim() ?? ''
     const lastName = profile?.lastName?.trim() ?? ''
     const fullName = `${firstName} ${lastName}`.trim()
     return fullName.length > 0 ? fullName : null
+}
+
+const composeUserSummary = (user?: AdminDisputeUser | null) => {
+    if (!user) {
+        return null
+    }
+
+    return {
+        id: user.id,
+        name: composeFullName(user.profile)
+    }
 }
 
 const serializeLatestProposal = (proposal: AdminDisputeRecord['latestProposal']) => {
@@ -128,6 +173,41 @@ const serializeLatestProposal = (proposal: AdminDisputeRecord['latestProposal'])
         updatedAt: proposal.updatedAt
     }
 }
+
+const serializeNegotiationDetail = (negotiation: AdminDisputeNegotiation) => ({
+    id: negotiation.id,
+    disputeId: negotiation.disputeId,
+    proposerId: negotiation.proposerId,
+    counterpartyId: negotiation.counterpartyId,
+    status: negotiation.status,
+    releaseAmount: Number(negotiation.releaseAmount),
+    refundAmount: Number(negotiation.refundAmount),
+    message: negotiation.message ?? null,
+    respondedById: negotiation.respondedById ?? null,
+    respondedAt: negotiation.respondedAt ?? null,
+    responseMessage: negotiation.responseMessage ?? null,
+    createdAt: negotiation.createdAt,
+    updatedAt: negotiation.updatedAt,
+    proposer: composeUserSummary(negotiation.proposer),
+    counterparty: composeUserSummary(negotiation.counterparty),
+    respondedBy: composeUserSummary(negotiation.respondedBy ?? null)
+})
+
+const serializeAdminChatLog = (log: AdminDisputeChatLog) => ({
+    id: log.id,
+    disputeId: log.disputeId ?? null,
+    threadId: log.threadId,
+    adminId: log.adminId,
+    action: log.action,
+    reason: log.reason ?? null,
+    metadata: log.metadata ?? null,
+    createdAt: log.createdAt,
+    admin: {
+        id: log.admin.id,
+        email: log.admin.email,
+        name: composeFullName(log.admin.profile)
+    }
+})
 
 const buildAdminDisputeResponse = (record: AdminDisputeRecord) => {
     if (!record.escrow || !record.escrow.milestone || !record.escrow.milestone.contract) {
@@ -228,6 +308,16 @@ const buildAdminDisputeResponse = (record: AdminDisputeRecord) => {
                   metadata: lastAdminLog.metadata ?? null
               }
             : null
+    }
+}
+
+const buildAdminDisputeDetailResponse = (record: AdminDisputeDetailRecord) => {
+    const summary = buildAdminDisputeResponse(record)
+
+    return {
+        ...summary,
+        negotiations: record.negotiations.map(serializeNegotiationDetail),
+        chatAccessLogs: record.chatAccessLogs.map(serializeAdminChatLog)
     }
 }
 
@@ -413,6 +503,26 @@ const listDisputes = async (query: AdminDisputeListQueryInput) => {
     }
 }
 
+const getDispute = async (disputeId: string) => {
+    const disputeRecord = await prismaClient.dispute.findFirst({
+        where: {
+            id: disputeId,
+            escrow: {
+                milestone: {
+                    isDeleted: false
+                }
+            }
+        },
+        include: adminDisputeDetailInclude
+    })
+
+    if (!disputeRecord) {
+        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    return buildAdminDisputeDetailResponse(disputeRecord)
+}
+
 const joinDispute = async (adminId: string, disputeId: string, payload: AdminJoinDisputeInput) => {
     const disputeRecord = await prismaClient.dispute.findUnique({
         where: { id: disputeId },
@@ -505,6 +615,7 @@ const joinDispute = async (adminId: string, disputeId: string, payload: AdminJoi
 
 const adminDisputeService = {
     listDisputes,
+    getDispute,
     joinDispute
 }
 
