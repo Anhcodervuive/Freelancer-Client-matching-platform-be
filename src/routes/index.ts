@@ -24,6 +24,7 @@ import notificationRoute from './notification.route'
 import chatRoute from './chat.route'
 import uploadRoute from './upload.route'
 import contractRoute from './contract.route'
+import adminDisputeRoute from './admin-dispute.route'
 
 const rootRouter: Router = Router()
 
@@ -49,5 +50,6 @@ rootRouter.use('/notification', notificationRoute)
 rootRouter.use('/chat', chatRoute)
 rootRouter.use('/upload', uploadRoute)
 rootRouter.use('/contracts', contractRoute)
+rootRouter.use('/admin/disputes', adminDisputeRoute)
 
 export default rootRouter
