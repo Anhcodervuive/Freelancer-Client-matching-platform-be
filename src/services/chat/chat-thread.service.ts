@@ -101,9 +101,19 @@ const ensureProjectThreadForProposal = async ({
 		select: chatThreadSummarySelect
 	})
 
-	if (existing) {
-		return await mapThreadToSummary(existing)
-	}
+        if (existing) {
+                if (contractId && existing.contractId !== contractId) {
+                        const updated = await prisma.chatThread.update({
+                                where: { id: existing.id },
+                                data: { contractId },
+                                select: chatThreadSummarySelect
+                        })
+
+                        return await mapThreadToSummary(updated)
+                }
+
+                return await mapThreadToSummary(existing)
+        }
 
 	const created = await prisma.chatThread.create({
 		data: {
