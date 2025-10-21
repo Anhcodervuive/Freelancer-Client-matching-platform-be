@@ -49,20 +49,22 @@ const extractSubmissionFiles = (files: Request['files']): Express.Multer.File[] 
 }
 
 export const listContracts = async (req: Request, res: Response) => {
-        const userId = req.user?.id
+        const user = req.user
+        const userId = user?.id
 
         if (!userId) {
                 throw new UnauthorizedException('Bạn cần đăng nhập để xem hợp đồng', ErrorCode.UNAUTHORIED)
         }
 
         const filters = ContractListFilterSchema.parse(req.query)
-        const result = await contractService.listContracts(userId, filters)
+        const result = await contractService.listContracts({ id: userId, role: user?.role ?? null }, filters)
 
         return res.status(StatusCodes.OK).json(result)
 }
 
 export const getContractDetail = async (req: Request, res: Response) => {
-        const userId = req.user?.id
+        const user = req.user
+        const userId = user?.id
         const { contractId } = req.params
 
         if (!userId) {
@@ -73,13 +75,17 @@ export const getContractDetail = async (req: Request, res: Response) => {
                 throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
         }
 
-        const contract = await contractService.getContractDetail(userId, contractId)
+        const contract = await contractService.getContractDetail(
+                { id: userId, role: user?.role ?? null },
+                contractId
+        )
 
         return res.status(StatusCodes.OK).json(contract)
 }
 
 export const listContractMilestones = async (req: Request, res: Response) => {
-        const userId = req.user?.id
+        const user = req.user
+        const userId = user?.id
         const { contractId } = req.params
 
         if (!userId) {
@@ -90,7 +96,10 @@ export const listContractMilestones = async (req: Request, res: Response) => {
                 throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
         }
 
-        const milestones = await contractService.listContractMilestones(userId, contractId)
+        const milestones = await contractService.listContractMilestones(
+                { id: userId, role: user?.role ?? null },
+                contractId
+        )
 
         return res.status(StatusCodes.OK).json({
                 contractId,
@@ -99,7 +108,8 @@ export const listContractMilestones = async (req: Request, res: Response) => {
 }
 
 export const listMilestoneResources = async (req: Request, res: Response) => {
-        const userId = req.user?.id
+        const user = req.user
+        const userId = user?.id
         const { contractId, milestoneId } = req.params
 
         if (!userId) {
@@ -110,7 +120,11 @@ export const listMilestoneResources = async (req: Request, res: Response) => {
                 throw new BadRequestException('Thiếu tham số contractId hoặc milestoneId', ErrorCode.PARAM_QUERY_ERROR)
         }
 
-        const resources = await contractService.listMilestoneResources(userId, contractId, milestoneId)
+        const resources = await contractService.listMilestoneResources(
+                { id: userId, role: user?.role ?? null },
+                contractId,
+                milestoneId
+        )
 
         return res.status(StatusCodes.OK).json({
                 contractId,
@@ -120,7 +134,8 @@ export const listMilestoneResources = async (req: Request, res: Response) => {
 }
 
 export const listContractDisputes = async (req: Request, res: Response) => {
-        const userId = req.user?.id
+        const user = req.user
+        const userId = user?.id
         const { contractId } = req.params
 
         if (!userId) {
@@ -131,13 +146,17 @@ export const listContractDisputes = async (req: Request, res: Response) => {
                 throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
         }
 
-        const disputes = await contractService.listContractDisputes(userId, contractId)
+        const disputes = await contractService.listContractDisputes(
+                { id: userId, role: user?.role ?? null },
+                contractId
+        )
 
         return res.status(StatusCodes.OK).json(disputes)
 }
 
 export const getMilestoneDispute = async (req: Request, res: Response) => {
-        const userId = req.user?.id
+        const user = req.user
+        const userId = user?.id
         const { contractId, milestoneId } = req.params
 
         if (!userId) {
@@ -148,7 +167,11 @@ export const getMilestoneDispute = async (req: Request, res: Response) => {
                 throw new BadRequestException('Thiếu tham số contractId hoặc milestoneId', ErrorCode.PARAM_QUERY_ERROR)
         }
 
-        const dispute = await contractService.getMilestoneDispute(userId, contractId, milestoneId)
+        const dispute = await contractService.getMilestoneDispute(
+                { id: userId, role: user?.role ?? null },
+                contractId,
+                milestoneId
+        )
 
         return res.status(StatusCodes.OK).json(dispute)
 }
