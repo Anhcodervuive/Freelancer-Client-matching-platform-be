@@ -1,4 +1,4 @@
-import { Prisma, ChatAdminAction, ChatThreadType, DisputeStatus } from '~/generated/prisma'
+import { Prisma, ChatAdminAction, ChatThreadType, DisputeStatus, Role } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
 import { AdminDisputeListQueryInput, AdminJoinDisputeInput } from '~/schema/dispute.schema'
@@ -554,6 +554,7 @@ const joinDispute = async (adminId: string, disputeId: string, payload: AdminJoi
     }
 
     const now = new Date()
+    const joinedAt = now.toISOString()
 
     if (!disputeRecord.responseDeadline || disputeRecord.responseDeadline > now) {
         throw new BadRequestException('Tranh chấp chưa hết hạn thương lượng trực tiếp', ErrorCode.PARAM_QUERY_ERROR)
@@ -564,6 +565,13 @@ const joinDispute = async (adminId: string, disputeId: string, payload: AdminJoi
     }
 
     const mediationDeadline = new Date(now.getTime() + MEDIATION_RESPONSE_WINDOW_MS)
+    const joinReason = payload.reason ?? null
+    const adminJoinMetadata: Prisma.JsonObject = {
+        joinedAt,
+        stage: 'mediation',
+        disputeId,
+        ...(joinReason ? { reason: joinReason } : {})
+    }
 
     const thread = await prismaClient.chatThread.findFirst({
         where: {
@@ -586,15 +594,34 @@ const joinDispute = async (adminId: string, disputeId: string, payload: AdminJoi
             }
         })
 
+        await tx.chatParticipant.upsert({
+            where: {
+                threadId_userId: {
+                    threadId: thread.id,
+                    userId: adminId
+                }
+            },
+            create: {
+                threadId: thread.id,
+                userId: adminId,
+                role: Role.ADMIN,
+                metadata: adminJoinMetadata
+            },
+            update: {
+                leftAt: null,
+                metadata: adminJoinMetadata
+            }
+        })
+
         await tx.chatAdminAccessLog.create({
             data: {
                 threadId: thread.id,
                 adminId,
                 disputeId,
                 action: ChatAdminAction.VIEW_THREAD,
-                reason: payload.reason ?? null,
+                reason: joinReason,
                 metadata: {
-                    joinedAt: now.toISOString(),
+                    joinedAt,
                     stage: 'mediation'
                 }
             }
