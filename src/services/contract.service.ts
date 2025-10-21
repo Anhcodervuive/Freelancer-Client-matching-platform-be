@@ -20,7 +20,9 @@ import {
         PaymentStatus,
         RefundStatus,
         Prisma,
-        TransferStatus
+        Role,
+        TransferStatus,
+        User
 } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
@@ -47,6 +49,10 @@ import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 import { InternalServerException } from '~/exceptions/internal-server'
 import notificationService from '~/services/notification.service'
 import { emailQueue } from '~/queues/email.queue'
+
+type ContractAuthUser = Pick<User, 'id' | 'role'>
+
+const isAdminUser = (user: ContractAuthUser) => user.role === Role.ADMIN
 
 const contractJobSummarySelect = Prisma.validator<Prisma.JobPostSelect>()({
 	id: true,
@@ -1291,35 +1297,48 @@ const queueDisputeNegotiationEmail = async (params: {
         })
 }
 
-const ensureContractAccess = async (contractId: string, userId: string) => {
-	const contract = await prismaClient.contract.findFirst({
-		where: {
-			id: contractId,
-			OR: [{ clientId: userId }, { freelancerId: userId }]
-		},
-		select: { id: true }
-	})
+const ensureContractAccess = async (
+        contractId: string,
+        user: ContractAuthUser,
+        options: { allowAdmin?: boolean } = {}
+) => {
+        const allowAdmin = options.allowAdmin ?? false
+        const where: Prisma.ContractWhereInput = { id: contractId }
 
-	if (!contract) {
-		throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
-	}
+        if (!(allowAdmin && isAdminUser(user))) {
+                where.OR = [{ clientId: user.id }, { freelancerId: user.id }]
+        }
+
+        const contract = await prismaClient.contract.findFirst({
+                where,
+                select: { id: true }
+        })
+
+        if (!contract) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
 }
 
-const buildContractWhere = (userId: string, filters: ContractListFilterInput): Prisma.ContractWhereInput => {
-	const andConditions: Prisma.ContractWhereInput[] = []
+const buildContractWhere = (
+        user: ContractAuthUser,
+        filters: ContractListFilterInput
+): Prisma.ContractWhereInput => {
+        const andConditions: Prisma.ContractWhereInput[] = []
 
-	if (filters.role === 'client') {
-		andConditions.push({ clientId: userId })
-	} else if (filters.role === 'freelancer') {
-		andConditions.push({ freelancerId: userId })
-	} else {
-		andConditions.push({ OR: [{ clientId: userId }, { freelancerId: userId }] })
-	}
+        if (!isAdminUser(user)) {
+                if (filters.role === 'client') {
+                        andConditions.push({ clientId: user.id })
+                } else if (filters.role === 'freelancer') {
+                        andConditions.push({ freelancerId: user.id })
+                } else {
+                        andConditions.push({ OR: [{ clientId: user.id }, { freelancerId: user.id }] })
+                }
+        }
 
-	if (filters.search) {
-		const search = filters.search
-		andConditions.push({
-			OR: [{ title: { contains: search } }, { jobPost: { title: { contains: search } } }]
+        if (filters.search) {
+                const search = filters.search
+                andConditions.push({
+                        OR: [{ title: { contains: search } }, { jobPost: { title: { contains: search } } }]
 		})
 	}
 
@@ -1327,18 +1346,22 @@ const buildContractWhere = (userId: string, filters: ContractListFilterInput): P
 		andConditions.push({ status: filters.status })
 	}
 
-	if (andConditions.length === 1) {
-		return andConditions[0]!
-	}
+        if (andConditions.length === 0) {
+                return {}
+        }
 
-	return { AND: andConditions }
+        if (andConditions.length === 1) {
+                return andConditions[0]!
+        }
+
+        return { AND: andConditions }
 }
 
-const listContracts = async (userId: string, filters: ContractListFilterInput) => {
-	const page = filters.page
-	const limit = filters.limit
-	const skip = (page - 1) * limit
-	const where = buildContractWhere(userId, filters)
+const listContracts = async (user: ContractAuthUser, filters: ContractListFilterInput) => {
+        const page = filters.page
+        const limit = filters.limit
+        const skip = (page - 1) * limit
+        const where = buildContractWhere(user, filters)
 
 	const [contracts, total] = await prismaClient.$transaction([
 		prismaClient.contract.findMany({
@@ -1365,14 +1388,17 @@ const listContracts = async (userId: string, filters: ContractListFilterInput) =
 	}
 }
 
-const getContractDetail = async (userId: string, contractId: string) => {
-	const contract = await prismaClient.contract.findFirst({
-		where: {
-			id: contractId,
-			OR: [{ clientId: userId }, { freelancerId: userId }]
-		},
-		include: contractDetailInclude
-	})
+const getContractDetail = async (user: ContractAuthUser, contractId: string) => {
+        const where: Prisma.ContractWhereInput = { id: contractId }
+
+        if (!isAdminUser(user)) {
+                where.OR = [{ clientId: user.id }, { freelancerId: user.id }]
+        }
+
+        const contract = await prismaClient.contract.findFirst({
+                where,
+                include: contractDetailInclude
+        })
 
 	if (!contract) {
 		throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
@@ -1381,8 +1407,8 @@ const getContractDetail = async (userId: string, contractId: string) => {
 	return serializeContractDetail(contract)
 }
 
-const listContractMilestones = async (userId: string, contractId: string) => {
-	await ensureContractAccess(contractId, userId)
+const listContractMilestones = async (user: ContractAuthUser, contractId: string) => {
+        await ensureContractAccess(contractId, user, { allowAdmin: true })
 
 	const milestones = await prismaClient.milestone.findMany({
 		where: { contractId, isDeleted: false },
@@ -1393,8 +1419,12 @@ const listContractMilestones = async (userId: string, contractId: string) => {
 	return milestones.map(serializeMilestone)
 }
 
-const listMilestoneResources = async (userId: string, contractId: string, milestoneId: string) => {
-        await ensureContractAccess(contractId, userId)
+const listMilestoneResources = async (
+        user: ContractAuthUser,
+        contractId: string,
+        milestoneId: string
+) => {
+        await ensureContractAccess(contractId, user, { allowAdmin: true })
 
         const milestone = await prismaClient.milestone.findFirst({
                 where: {
@@ -1417,12 +1447,15 @@ const listMilestoneResources = async (userId: string, contractId: string, milest
         return milestone.resources.map(resource => serializeMilestoneResource(resource))
 }
 
-const listContractDisputes = async (userId: string, contractId: string) => {
+const listContractDisputes = async (user: ContractAuthUser, contractId: string) => {
+        const where: Prisma.ContractWhereInput = { id: contractId }
+
+        if (!isAdminUser(user)) {
+                where.OR = [{ clientId: user.id }, { freelancerId: user.id }]
+        }
+
         const contract = await prismaClient.contract.findFirst({
-                where: {
-                        id: contractId,
-                        OR: [{ clientId: userId }, { freelancerId: userId }]
-                },
+                where,
                 select: {
                         id: true,
                         title: true,
@@ -1451,8 +1484,12 @@ const listContractDisputes = async (userId: string, contractId: string) => {
         }
 }
 
-const getMilestoneDispute = async (userId: string, contractId: string, milestoneId: string) => {
-        await ensureContractAccess(contractId, userId)
+const getMilestoneDispute = async (
+        user: ContractAuthUser,
+        contractId: string,
+        milestoneId: string
+) => {
+        await ensureContractAccess(contractId, user, { allowAdmin: true })
 
         const milestone = await prismaClient.milestone.findFirst({
                 where: { id: milestoneId, contractId, isDeleted: false },
@@ -1548,7 +1585,7 @@ const getMilestoneDispute = async (userId: string, contractId: string, milestone
                 throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
         }
 
-        if (disputeContract.clientId !== userId && disputeContract.freelancerId !== userId) {
+        if (!isAdminUser(user) && disputeContract.clientId !== user.id && disputeContract.freelancerId !== user.id) {
                 throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
         }
 
@@ -2199,7 +2236,7 @@ const openMilestoneDispute = async (
         milestoneId: string,
         payload: OpenMilestoneDisputeInput
 ) => {
-        await ensureContractAccess(contractId, userId)
+        await ensureContractAccess(contractId, { id: userId, role: null })
 
         const contract = await prismaClient.contract.findUnique({
                 where: { id: contractId },
