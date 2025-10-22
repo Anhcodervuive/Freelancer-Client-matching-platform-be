@@ -73,3 +73,10 @@ export const AdminJoinDisputeSchema = z.object({
 })
 
 export type AdminJoinDisputeInput = z.infer<typeof AdminJoinDisputeSchema>
+
+export const AdminRequestArbitrationFeesSchema = z
+    .object({
+        deadlineDays: z.coerce.number().int().min(1).max(14).default(4)
+    })
+
+export type AdminRequestArbitrationFeesInput = z.infer<typeof AdminRequestArbitrationFeesSchema>

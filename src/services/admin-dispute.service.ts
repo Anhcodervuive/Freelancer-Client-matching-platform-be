@@ -1,7 +1,11 @@
 import { Prisma, ChatAdminAction, ChatThreadType, DisputeStatus, Role } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
-import { AdminDisputeListQueryInput, AdminJoinDisputeInput } from '~/schema/dispute.schema'
+import {
+    AdminDisputeListQueryInput,
+    AdminJoinDisputeInput,
+    AdminRequestArbitrationFeesInput
+} from '~/schema/dispute.schema'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
@@ -640,10 +644,74 @@ const joinDispute = async (adminId: string, disputeId: string, payload: AdminJoi
     return buildAdminDisputeResponse(refreshed)
 }
 
+const requestArbitrationFees = async (
+    adminId: string,
+    disputeId: string,
+    payload: AdminRequestArbitrationFeesInput
+) => {
+    const disputeRecord = await prismaClient.dispute.findUnique({
+        where: { id: disputeId },
+        include: {
+            escrow: {
+                select: {
+                    id: true,
+                    milestone: {
+                        select: {
+                            id: true,
+                            contractId: true
+                        }
+                    }
+                }
+            },
+            chatAccessLogs: {
+                where: { adminId },
+                take: 1
+            }
+        }
+    })
+
+    if (!disputeRecord || !disputeRecord.escrow || !disputeRecord.escrow.milestone) {
+        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    if (disputeRecord.status !== DisputeStatus.NEGOTIATION) {
+        throw new BadRequestException(
+            'Tranh chấp chưa ở giai đoạn cần yêu cầu đóng phí trọng tài',
+            ErrorCode.PARAM_QUERY_ERROR
+        )
+    }
+
+    if (disputeRecord.chatAccessLogs.length === 0) {
+        throw new BadRequestException(
+            'Bạn cần tham gia tranh chấp trước khi yêu cầu đóng phí trọng tài',
+            ErrorCode.PARAM_QUERY_ERROR
+        )
+    }
+
+    const now = Date.now()
+    const deadlineMs = Math.max(payload.deadlineDays, 1) * 24 * 60 * 60 * 1000
+    const arbitrationDeadline = new Date(now + deadlineMs)
+
+    const updated = await prismaClient.dispute.update({
+        where: { id: disputeId },
+        data: {
+            status: DisputeStatus.AWAITING_ARBITRATION_FEES,
+            arbitrationDeadline,
+            responseDeadline: null,
+            clientArbFeePaid: false,
+            freelancerArbFeePaid: false
+        },
+        include: adminDisputeInclude
+    })
+
+    return buildAdminDisputeResponse(updated)
+}
+
 const adminDisputeService = {
     listDisputes,
     getDispute,
-    joinDispute
+    joinDispute,
+    requestArbitrationFees
 }
 
 export default adminDisputeService

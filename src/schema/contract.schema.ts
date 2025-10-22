@@ -177,8 +177,15 @@ export const ApproveMilestoneSubmissionSchema = z.object({
 export type ApproveMilestoneSubmissionInput = z.infer<typeof ApproveMilestoneSubmissionSchema>
 
 export const DeclineMilestoneSubmissionSchema = z.object({
-	reviewNote: z.string().trim().min(1, 'Cần nhập lý do từ chối').max(5000, 'Nhận xét quá dài'),
-	reviewRating: ReviewRatingSchema.optional()
+        reviewNote: z.string().trim().min(1, 'Cần nhập lý do từ chối').max(5000, 'Nhận xét quá dài'),
+        reviewRating: ReviewRatingSchema.optional()
 })
 
 export type DeclineMilestoneSubmissionInput = z.infer<typeof DeclineMilestoneSubmissionSchema>
+
+export const ConfirmArbitrationFeeSchema = z.object({
+        paymentMethodRefId: z.string().trim().min(1, 'Thiếu paymentMethodRefId'),
+        idempotencyKey: z.string().trim().min(1).max(255).optional()
+})
+
+export type ConfirmArbitrationFeeInput = z.infer<typeof ConfirmArbitrationFeeSchema>

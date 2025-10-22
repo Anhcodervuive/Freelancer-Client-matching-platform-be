@@ -18,6 +18,7 @@ import {
         NotificationEvent,
         NotificationResource,
         PaymentStatus,
+        PaymentType,
         RefundStatus,
         Prisma,
         Role,
@@ -34,6 +35,7 @@ import { UnauthorizedException } from '~/exceptions/unauthoried'
 import {
         ApproveMilestoneSubmissionInput,
         CancelMilestoneInput,
+        ConfirmArbitrationFeeInput,
         ContractListFilterInput,
         CreateContractMilestoneInput,
         CreateDisputeNegotiationInput,
@@ -331,7 +333,7 @@ type MilestoneSubmissionAttachmentPayload = Prisma.MilestoneSubmissionAttachment
         include: typeof milestoneSubmissionAttachmentInclude
 }>
 type MilestoneSubmissionPayload = Prisma.MilestoneSubmissionGetPayload<{ include: typeof milestoneSubmissionInclude }>
-type PaymentEntity = Prisma.PaymentGetPayload<{}>
+type PaymentEntity = Prisma.PaymentGetPayload<Prisma.PaymentDefaultArgs>
 type TransferEntity = Prisma.TransferGetPayload<{}>
 type RefundEntity = Prisma.RefundGetPayload<{}>
 type DisputeNegotiationEntity = Prisma.DisputeNegotiationGetPayload<{}>
@@ -1201,7 +1203,8 @@ const ensureDisputeContext = async (
         contractId: string,
         milestoneId: string,
         disputeId: string,
-        userId: string
+        userId: string,
+        allowedStatuses: DisputeStatus[] = [DisputeStatus.OPEN, DisputeStatus.NEGOTIATION]
 ) => {
         const dispute = await prismaClient.dispute.findUnique({
                 where: { id: disputeId },
@@ -1224,9 +1227,9 @@ const ensureDisputeContext = async (
                 throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
         }
 
-        if (dispute.status !== DisputeStatus.OPEN && dispute.status !== DisputeStatus.NEGOTIATION) {
+        if (!allowedStatuses.includes(dispute.status)) {
                 throw new BadRequestException(
-                        'Tranh chấp không còn ở giai đoạn thương lượng',
+                        'Tranh chấp không ở trạng thái phù hợp để thực hiện thao tác này',
                         ErrorCode.PARAM_QUERY_ERROR
                 )
         }
@@ -2831,6 +2834,456 @@ const respondDisputeNegotiation = async (
         }
 }
 
+const confirmArbitrationFee = async (
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
+        payload: ConfirmArbitrationFeeInput
+) => {
+        const context = await ensureDisputeContext(
+                contractId,
+                milestoneId,
+                disputeId,
+                userId,
+                [DisputeStatus.AWAITING_ARBITRATION_FEES, DisputeStatus.ARBITRATION_READY]
+        )
+        const { dispute, contract } = context
+
+        const isClient = contract.clientId === userId
+        const isFreelancer = contract.freelancerId === userId
+
+        if (!isClient && !isFreelancer) {
+                throw new UnauthorizedException(
+                        'Bạn không có quyền xác nhận phí trọng tài của tranh chấp này',
+                        ErrorCode.USER_NOT_AUTHORITY
+                )
+        }
+
+        if (isClient && dispute.clientArbFeePaid) {
+                throw new BadRequestException(
+                        'Bạn đã xác nhận đóng phí trọng tài trước đó',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        if (isFreelancer && dispute.freelancerArbFeePaid) {
+                throw new BadRequestException(
+                        'Bạn đã xác nhận đóng phí trọng tài trước đó',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const escrow = dispute.escrow
+
+        if (!escrow) {
+                throw new NotFoundException('Không tìm thấy escrow của tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const paymentMethod = await prismaClient.paymentMethodRef.findFirst({
+                where: {
+                        id: payload.paymentMethodRefId,
+                        profileId: userId,
+                        isDeleted: false
+                }
+        })
+
+        if (!paymentMethod) {
+                throw new NotFoundException('Không tìm thấy phương thức thanh toán', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (!paymentMethod.stripeCustomerId) {
+                throw new BadRequestException('Phương thức thanh toán chưa được liên kết Stripe', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const stripe = getStripeClient()
+        const stripeCurrency = escrow.currency.toLowerCase()
+        const amountInMinorUnit = toMinorUnitAmount(dispute.arbFeePerParty, stripeCurrency)
+        const idempotencyKey = payload.idempotencyKey?.trim()
+
+        const fallbackCardFromPaymentMethod = {
+                brand: paymentMethod.brand ?? null,
+                last4: paymentMethod.last4 ?? null,
+                expMonth: paymentMethod.expMonth ?? null,
+                expYear: paymentMethod.expYear ?? null
+        }
+
+        let existingPayment: PaymentEntity | null = null
+
+        if (idempotencyKey) {
+                existingPayment = await prismaClient.payment.findFirst({
+                        where: {
+                                disputeId,
+                                payerId: userId,
+                                type: PaymentType.ARBITRATION_FEE,
+                                OR: [{ idemKey: idempotencyKey }, { paymentIntentId: idempotencyKey }]
+                        }
+                })
+        }
+
+        const existingPaymentIntentId =
+                existingPayment?.paymentIntentId ?? (idempotencyKey && idempotencyKey.startsWith('pi_') ? idempotencyKey : null)
+        const payerRole = isClient ? Role.CLIENT : Role.FREELANCER
+
+        let paymentRecord: PaymentEntity | null = null
+        let paymentIntentStatus: Stripe.PaymentIntent.Status | null = null
+        let requiresAction = false
+        let nextAction: Stripe.PaymentIntent.NextAction | null = null
+        let clientSecret: string | null = null
+        let paymentIntentId: string | null = null
+        let responseIdempotencyKey = idempotencyKey ?? existingPayment?.idemKey ?? null
+        let resolvedDispute: DisputeDetailPayload | null = null
+
+        const applyRequiresAction = async (
+                paymentIntent: Stripe.PaymentIntent,
+                options: { existingPayment?: PaymentEntity | null; idempotencyKey?: string | null }
+        ) => {
+                const pendingPayment = await prismaClient.payment.upsert({
+                        where: { paymentIntentId: paymentIntent.id },
+                        create: {
+                                type: PaymentType.ARBITRATION_FEE,
+                                amount: dispute.arbFeePerParty,
+                                currency: escrow.currency,
+                                status: PaymentStatus.REQUIRES_ACTION,
+                                paymentIntentId: paymentIntent.id,
+                                chargeId: null,
+                                cardBrand: options.existingPayment?.cardBrand ?? fallbackCardFromPaymentMethod.brand,
+                                cardLast4: options.existingPayment?.cardLast4 ?? fallbackCardFromPaymentMethod.last4,
+                                cardExpMonth: options.existingPayment?.cardExpMonth ?? fallbackCardFromPaymentMethod.expMonth,
+                                cardExpYear: options.existingPayment?.cardExpYear ?? fallbackCardFromPaymentMethod.expYear,
+                                cardFingerprint: options.existingPayment?.cardFingerprint ?? null,
+                                disputeId,
+                                payerId: userId,
+                                payerRole,
+                                idemKey: options.idempotencyKey ?? null
+                        },
+                        update: {
+                                status: PaymentStatus.REQUIRES_ACTION,
+                                type: PaymentType.ARBITRATION_FEE,
+                                disputeId,
+                                payerId: userId,
+                                payerRole,
+                                ...(options.idempotencyKey ? { idemKey: options.idempotencyKey } : {})
+                        }
+                })
+
+                paymentRecord = pendingPayment
+                paymentIntentStatus = paymentIntent.status ?? null
+                requiresAction = true
+                nextAction = paymentIntent.next_action ?? null
+                clientSecret = paymentIntent.client_secret ?? null
+                paymentIntentId = paymentIntent.id
+                responseIdempotencyKey = options.idempotencyKey ?? pendingPayment.idemKey ?? responseIdempotencyKey
+        }
+
+        const applySucceeded = async (
+                paymentIntent: Stripe.PaymentIntent,
+                options: { existingPayment?: PaymentEntity | null; idempotencyKey?: string | null }
+        ) => {
+                const latestCharge = paymentIntent.latest_charge
+                let cardDetails: Stripe.Charge.PaymentMethodDetails.Card | null = null
+                let chargeId: string | null = null
+
+                if (latestCharge && typeof latestCharge !== 'string') {
+                        const charge = latestCharge as Stripe.Charge
+                        chargeId = charge.id ?? null
+                        cardDetails = charge.payment_method_details?.card ?? null
+                }
+
+                const cardBrand = cardDetails?.brand ?? options.existingPayment?.cardBrand ?? fallbackCardFromPaymentMethod.brand
+                const cardLast4 = cardDetails?.last4 ?? options.existingPayment?.cardLast4 ?? fallbackCardFromPaymentMethod.last4
+                const cardExpMonth =
+                        cardDetails?.exp_month ?? options.existingPayment?.cardExpMonth ?? fallbackCardFromPaymentMethod.expMonth
+                const cardExpYear =
+                        cardDetails?.exp_year ?? options.existingPayment?.cardExpYear ?? fallbackCardFromPaymentMethod.expYear
+                const cardFingerprint = cardDetails?.fingerprint ?? options.existingPayment?.cardFingerprint ?? null
+
+                const paymentResult = await prismaClient.$transaction(async tx => {
+                        const disputeSnapshot = await tx.dispute.findUnique({
+                                where: { id: disputeId },
+                                select: {
+                                        clientArbFeePaid: true,
+                                        freelancerArbFeePaid: true
+                                }
+                        })
+
+                        if (!disputeSnapshot) {
+                                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+                        }
+
+                        const updatedPayment = await tx.payment.upsert({
+                                where: { paymentIntentId: paymentIntent.id },
+                                create: {
+                                        type: PaymentType.ARBITRATION_FEE,
+                                        amount: dispute.arbFeePerParty,
+                                        currency: escrow.currency,
+                                        status: PaymentStatus.SUCCEEDED,
+                                        paymentIntentId: paymentIntent.id,
+                                        chargeId,
+                                        cardBrand,
+                                        cardLast4,
+                                        cardExpMonth,
+                                        cardExpYear,
+                                        cardFingerprint,
+                                        disputeId,
+                                        payerId: userId,
+                                        payerRole,
+                                        idemKey: options.idempotencyKey ?? null
+                                },
+                                update: {
+                                        status: PaymentStatus.SUCCEEDED,
+                                        chargeId,
+                                        cardBrand,
+                                        cardLast4,
+                                        cardExpMonth,
+                                        cardExpYear,
+                                        cardFingerprint,
+                                        type: PaymentType.ARBITRATION_FEE,
+                                        disputeId,
+                                        payerId: userId,
+                                        payerRole,
+                                        ...(options.idempotencyKey ? { idemKey: options.idempotencyKey } : {})
+                                }
+                        })
+
+                        const disputeUpdateData: Prisma.DisputeUpdateInput = {
+                                responseDeadline: null
+                        }
+
+                        if (isClient) {
+                                disputeUpdateData.clientArbFeePaid = true
+                        } else {
+                                disputeUpdateData.freelancerArbFeePaid = true
+                        }
+
+                        const clientPaid = isClient ? true : disputeSnapshot.clientArbFeePaid
+                        const freelancerPaid = isFreelancer ? true : disputeSnapshot.freelancerArbFeePaid
+
+                        if (clientPaid && freelancerPaid) {
+                                disputeUpdateData.status = DisputeStatus.ARBITRATION_READY
+                                disputeUpdateData.arbitrationDeadline = null
+                        }
+
+                        const updatedDispute = await tx.dispute.update({
+                                where: { id: disputeId },
+                                data: disputeUpdateData,
+                                include: disputeDetailInclude
+                        })
+
+                        return { payment: updatedPayment, dispute: updatedDispute }
+                })
+
+                paymentRecord = paymentResult.payment
+                resolvedDispute = paymentResult.dispute
+                paymentIntentStatus = paymentIntent.status ?? null
+                requiresAction = false
+                nextAction = paymentIntent.next_action ?? null
+                clientSecret = paymentIntent.client_secret ?? null
+                paymentIntentId = paymentIntent.id
+                responseIdempotencyKey =
+                        options.idempotencyKey ?? paymentResult.payment.idemKey ?? responseIdempotencyKey
+        }
+
+        try {
+                const effectiveIdempotencyKey = idempotencyKey ?? existingPayment?.idemKey ?? null
+
+                if (existingPaymentIntentId) {
+                        const retrievedIntent = await stripe.paymentIntents.retrieve(existingPaymentIntentId, {
+                                expand: ['latest_charge.payment_method_details.card']
+                        })
+
+                        if (
+                                retrievedIntent.status === 'succeeded' ||
+                                retrievedIntent.status === 'processing' ||
+                                retrievedIntent.status === 'requires_capture'
+                        ) {
+                                await applySucceeded(retrievedIntent, {
+                                        existingPayment,
+                                        idempotencyKey: effectiveIdempotencyKey
+                                })
+                        } else if (
+                                retrievedIntent.status === 'requires_action' ||
+                                retrievedIntent.status === 'requires_confirmation'
+                        ) {
+                                await applyRequiresAction(retrievedIntent, {
+                                        existingPayment,
+                                        idempotencyKey: effectiveIdempotencyKey
+                                })
+                        } else if (retrievedIntent.status === 'requires_payment_method') {
+                                const lastErrorCode = retrievedIntent.last_payment_error?.code
+                                const requiresAuthentication = lastErrorCode === 'authentication_required'
+
+                                if (requiresAuthentication) {
+                                        await applyRequiresAction(retrievedIntent, {
+                                                existingPayment,
+                                                idempotencyKey:
+                                                        effectiveIdempotencyKey ??
+                                                        existingPayment?.paymentIntentId ??
+                                                        retrievedIntent.id
+                                        })
+                                } else {
+                                        if (existingPayment && existingPayment.status !== PaymentStatus.FAILED) {
+                                                await prismaClient.payment.update({
+                                                        where: { id: existingPayment.id },
+                                                        data: { status: PaymentStatus.FAILED }
+                                                })
+                                        }
+
+                                        throw new BadRequestException(
+                                                'Thanh toán cần một phương thức khác. Vui lòng thử lại với thẻ khác.',
+                                                ErrorCode.PARAM_QUERY_ERROR
+                                        )
+                                }
+                        }
+
+                        if (paymentRecord) {
+                                const ensuredPayment = paymentRecord!
+                                const serializedPayment = serializePayment(ensuredPayment)
+                                const disputeRecord =
+                                        resolvedDispute ??
+                                        (await prismaClient.dispute.findUnique({
+                                                where: { id: disputeId },
+                                                include: disputeDetailInclude
+                                        }))
+
+                                if (!disputeRecord || !disputeRecord.escrow || !disputeRecord.escrow.milestone) {
+                                        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+                                }
+
+                                const metaPayload = {
+                                        status: paymentIntentStatus,
+                                        paymentStatus: serializedPayment.status,
+                                        requiresAction,
+                                        clientSecret,
+                                        client_secret: clientSecret,
+                                        idempotencyKey: responseIdempotencyKey,
+                                        idemKey: responseIdempotencyKey,
+                                        paymentIntentId,
+                                        payment_intent_id: paymentIntentId
+                                }
+
+                                return {
+                                        contractId,
+                                        milestoneId,
+                                        dispute: serializeDispute(disputeRecord),
+                                        negotiations: disputeRecord.negotiations.map(serializeDisputeNegotiation),
+                                        payment: serializedPayment,
+                                        nextAction,
+                                        ...metaPayload
+                                }
+                        }
+                }
+
+                const requireThreeDS = Boolean(STRIPE_CONFIG_INFO.FORCE_3DS)
+                const paymentIntent = await stripe.paymentIntents.create(
+                        {
+                                amount: amountInMinorUnit,
+                                currency: stripeCurrency,
+                                customer: paymentMethod.stripeCustomerId,
+                                payment_method: paymentMethod.paymentMethodId,
+                                confirm: true,
+                                off_session: true,
+                                description: `Arbitration fee for dispute ${dispute.id}`,
+                                metadata: {
+                                        contractId,
+                                        milestoneId,
+                                        disputeId,
+                                        payerId: userId,
+                                        payerRole,
+                                        paymentMethodRefId: paymentMethod.id
+                                },
+                                expand: ['latest_charge.payment_method_details.card'],
+                                payment_method_options: {
+                                        card: {
+                                                request_three_d_secure: requireThreeDS ? 'any' : 'automatic'
+                                        }
+                                }
+                        },
+                        idempotencyKey ? { idempotencyKey } : undefined
+                )
+
+                await applySucceeded(paymentIntent, {
+                        idempotencyKey: idempotencyKey ?? null
+                })
+        } catch (error) {
+                if (error instanceof Stripe.errors.StripeCardError) {
+                        const paymentIntent = error.payment_intent as Stripe.PaymentIntent | undefined
+                        const paymentIntentStatus = paymentIntent?.status
+                        const lastErrorCode =
+                                paymentIntent?.last_payment_error?.code ?? (typeof error.code === 'string' ? error.code : undefined)
+                        const effectiveIdempotencyKey = idempotencyKey ?? existingPayment?.idemKey ?? null
+
+                        if (
+                                paymentIntent &&
+                                (paymentIntentStatus === 'requires_action' || paymentIntentStatus === 'requires_confirmation')
+                        ) {
+                                await applyRequiresAction(paymentIntent, {
+                                        existingPayment,
+                                        idempotencyKey: effectiveIdempotencyKey
+                                })
+                        } else if (
+                                paymentIntent &&
+                                paymentIntentStatus === 'requires_payment_method' &&
+                                lastErrorCode === 'authentication_required'
+                        ) {
+                                await applyRequiresAction(paymentIntent, {
+                                        existingPayment,
+                                        idempotencyKey:
+                                                effectiveIdempotencyKey ?? existingPayment?.paymentIntentId ?? paymentIntent.id
+                                })
+                        } else {
+                                throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
+                        }
+                } else if (error instanceof Stripe.errors.StripeError) {
+                        throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
+                } else {
+                        throw error
+                }
+        }
+
+        const disputeRecord =
+                resolvedDispute ??
+                (await prismaClient.dispute.findUnique({
+                        where: { id: disputeId },
+                        include: disputeDetailInclude
+                }))
+
+        if (!disputeRecord || !disputeRecord.escrow || !disputeRecord.escrow.milestone) {
+                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (!paymentRecord) {
+                throw new InternalServerException(
+                        'Không thể ghi nhận giao dịch phí trọng tài',
+                        ErrorCode.INTERNAL_SERVER_ERROR
+                )
+        }
+
+        const ensuredPayment = paymentRecord!
+        const serializedPayment = serializePayment(ensuredPayment)
+        const metaPayload = {
+                status: paymentIntentStatus,
+                paymentStatus: serializedPayment.status,
+                requiresAction,
+                clientSecret,
+                client_secret: clientSecret,
+                idempotencyKey: responseIdempotencyKey,
+                idemKey: responseIdempotencyKey,
+                paymentIntentId,
+                payment_intent_id: paymentIntentId
+        }
+
+        return {
+                contractId,
+                milestoneId,
+                dispute: serializeDispute(disputeRecord),
+                negotiations: disputeRecord.negotiations.map(serializeDisputeNegotiation),
+                payment: serializedPayment,
+                nextAction,
+                ...metaPayload
+        }
+}
+
 const payMilestone = async (
         clientUserId: string,
         contractId: string,
@@ -3597,6 +4050,7 @@ const contractService = {
         updateDisputeNegotiation,
         respondDisputeNegotiation,
         deleteDisputeNegotiation,
+        confirmArbitrationFee,
         payMilestone,
         submitMilestoneWork,
         approveMilestoneSubmission,

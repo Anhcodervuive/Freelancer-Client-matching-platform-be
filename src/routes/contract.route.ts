@@ -9,6 +9,7 @@ import {
         deleteContractMilestone,
         deleteMilestoneResource,
         deleteDisputeNegotiation,
+        confirmArbitrationFee,
         getMilestoneDispute,
         getContractDetail,
         listMilestoneResources,
@@ -70,6 +71,11 @@ router.delete(
         '/:contractId/milestones/:milestoneId/disputes/:disputeId/negotiations/:negotiationId',
         authenticateMiddleware,
         errorHandler(deleteDisputeNegotiation)
+)
+router.post(
+        '/:contractId/milestones/:milestoneId/disputes/:disputeId/arbitration-fees/confirm',
+        authenticateMiddleware,
+        errorHandler(confirmArbitrationFee)
 )
 router.post(
         '/:contractId/milestones/:milestoneId/pay',

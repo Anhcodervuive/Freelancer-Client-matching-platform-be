@@ -1,7 +1,11 @@
 import { Request, Response } from 'express'
 
 import adminDisputeService from '~/services/admin-dispute.service'
-import { AdminDisputeListQuerySchema, AdminJoinDisputeSchema } from '~/schema/dispute.schema'
+import {
+    AdminDisputeListQuerySchema,
+    AdminJoinDisputeSchema,
+    AdminRequestArbitrationFeesSchema
+} from '~/schema/dispute.schema'
 import { ForbiddenException } from '~/exceptions/Forbidden'
 import { ErrorCode } from '~/exceptions/root'
 import { BadRequestException } from '~/exceptions/bad-request'
@@ -49,6 +53,20 @@ export const joinDisputeAsAdmin = async (req: Request, res: Response) => {
 
     const payload = AdminJoinDisputeSchema.parse(req.body)
     const result = await adminDisputeService.joinDispute(adminId, disputeId, payload)
+
+    return res.json(result)
+}
+
+export const requestArbitrationFees = async (req: Request, res: Response) => {
+    const adminId = ensureAdminUser(req)
+    const { disputeId } = req.params
+
+    if (!disputeId) {
+        throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const payload = AdminRequestArbitrationFeesSchema.parse(req.body)
+    const result = await adminDisputeService.requestArbitrationFees(adminId, disputeId, payload)
 
     return res.json(result)
 }

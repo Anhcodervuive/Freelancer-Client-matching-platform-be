@@ -13,6 +13,7 @@ import {
         CreateDisputeNegotiationSchema,
         DeclineMilestoneSubmissionSchema,
         OpenMilestoneDisputeSchema,
+        ConfirmArbitrationFeeSchema,
         PayMilestoneSchema,
         RespondDisputeNegotiationSchema,
         RespondMilestoneCancellationSchema,
@@ -417,6 +418,37 @@ export const deleteDisputeNegotiation = async (req: Request, res: Response) => {
                 milestoneId,
                 disputeId,
                 negotiationId
+        )
+
+        return res.status(StatusCodes.OK).json(result)
+}
+
+export const confirmArbitrationFee = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId, disputeId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException(
+                        'Bạn cần đăng nhập để xác nhận đã đóng phí trọng tài',
+                        ErrorCode.UNAUTHORIED
+                )
+        }
+
+        if (!contractId || !milestoneId || !disputeId) {
+                throw new BadRequestException(
+                        'Thiếu tham số contractId, milestoneId hoặc disputeId',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const payload = ConfirmArbitrationFeeSchema.parse(req.body)
+
+        const result = await contractService.confirmArbitrationFee(
+                userId,
+                contractId,
+                milestoneId,
+                disputeId,
+                payload
         )
 
         return res.status(StatusCodes.OK).json(result)

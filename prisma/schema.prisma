@@ -20,6 +20,13 @@ enum Role {
   ADMIN
 }
 
+enum ArbitrationDossierStatus {
+  DRAFT
+  LOCKED
+  FINALIZED
+  ARCHIVED
+}
+
 model User {
   id       String  @id @default(uuid())
   email    String  @unique
@@ -39,16 +46,20 @@ model User {
   // 1-1
   profile Profile?
 
-  emailVerifyTokens     EmailVerifyToken[]
-  jobActivityLogs       JobActivityLog[]
-  notificationsReceived Notification[]       @relation("NotificationRecipient")
-  notificationsAuthored Notification[]       @relation("NotificationActor")
-  chatParticipants      ChatParticipant[]
-  chatMessagesSent      ChatMessage[]        @relation("ChatMessageSender")
-  chatAdminAccessLogs   ChatAdminAccessLog[] @relation("ChatAdminAccessLogAdmin")
-  disputeNegotiationsProposed DisputeNegotiation[] @relation("DisputeNegotiationProposer")
-  disputeNegotiationsReceived DisputeNegotiation[] @relation("DisputeNegotiationCounterparty")
+  emailVerifyTokens            EmailVerifyToken[]
+  jobActivityLogs              JobActivityLog[]
+  notificationsReceived        Notification[]       @relation("NotificationRecipient")
+  notificationsAuthored        Notification[]       @relation("NotificationActor")
+  chatParticipants             ChatParticipant[]
+  chatMessagesSent             ChatMessage[]        @relation("ChatMessageSender")
+  chatAdminAccessLogs          ChatAdminAccessLog[] @relation("ChatAdminAccessLogAdmin")
+  disputeNegotiationsProposed  DisputeNegotiation[] @relation("DisputeNegotiationProposer")
+  disputeNegotiationsReceived  DisputeNegotiation[] @relation("DisputeNegotiationCounterparty")
   disputeNegotiationsResponded DisputeNegotiation[] @relation("DisputeNegotiationResponder")
+  disputesLocked               Dispute[]            @relation("DisputeLockedBy")
+  arbitrationDossiersGenerated ArbitrationDossier[] @relation("ArbitrationDossierGeneratedBy")
+  paymentsAsPayer              Payment[]            @relation("PaymentPayer")
+
   @@index([email])
   @@map("user")
 }
@@ -315,7 +326,7 @@ model Asset {
   publicId   String?         @unique @map("public_id") // Cloudinary…
   bucket     String? // S3/R2
   storageKey String?         @unique // object key (path) trên S3/R2
-  url        String?         @db.VarChar(2048)  // có thể không lưu nếu build từ provider
+  url        String?         @db.VarChar(2048) // có thể không lưu nếu build từ provider
   mimeType   String?
   bytes      Int?
   width      Int?
@@ -905,28 +916,28 @@ model Contract {
 }
 
 model Milestone {
-  id                   String          @id @default(cuid())
-  contractId           String          @map("contract_id")
-  title                String
-  amount               Decimal         @db.Decimal(12, 2)
-  currency             String
-  startAt              DateTime?       @map("start_at")
-  endAt                DateTime?       @map("end_at")
-  status               MilestoneStatus @default(OPEN)
-  escrowId             String          @map("escrow_id")
-  submittedAt          DateTime?       @map("submitted_at")
-  approvedSubmissionId String?         @unique @map("approved_submission_id")
-  approvedAt           DateTime?       @map("approved_at")
-  releasedAt           DateTime?       @map("released_at")
-  cancellationStatus       MilestoneCancellationStatus? @map("cancellation_status")
-  cancellationRequestedAt  DateTime?                     @map("cancellation_requested_at")
-  cancellationReason       String?                       @map("cancellation_reason") @db.MediumText
-  cancellationRespondedAt  DateTime?                     @map("cancellation_responded_at")
-  isDeleted            Boolean         @default(false) @map("is_deleted")
-  deletedAt            DateTime?       @map("deleted_at")
-  deletedBy            String?         @map("deleted_by")
-  createdAt            DateTime        @default(now()) @map("created_at")
-  updatedAt            DateTime        @updatedAt @map("updated_at")
+  id                      String                       @id @default(cuid())
+  contractId              String                       @map("contract_id")
+  title                   String
+  amount                  Decimal                      @db.Decimal(12, 2)
+  currency                String
+  startAt                 DateTime?                    @map("start_at")
+  endAt                   DateTime?                    @map("end_at")
+  status                  MilestoneStatus              @default(OPEN)
+  escrowId                String                       @map("escrow_id")
+  submittedAt             DateTime?                    @map("submitted_at")
+  approvedSubmissionId    String?                      @unique @map("approved_submission_id")
+  approvedAt              DateTime?                    @map("approved_at")
+  releasedAt              DateTime?                    @map("released_at")
+  cancellationStatus      MilestoneCancellationStatus? @map("cancellation_status")
+  cancellationRequestedAt DateTime?                    @map("cancellation_requested_at")
+  cancellationReason      String?                      @map("cancellation_reason") @db.MediumText
+  cancellationRespondedAt DateTime?                    @map("cancellation_responded_at")
+  isDeleted               Boolean                      @default(false) @map("is_deleted")
+  deletedAt               DateTime?                    @map("deleted_at")
+  deletedBy               String?                      @map("deleted_by")
+  createdAt               DateTime                     @default(now()) @map("created_at")
+  updatedAt               DateTime                     @updatedAt @map("updated_at")
 
   contract           Contract              @relation(fields: [contractId], references: [id])
   escrow             Escrow?               @relation(fields: [escrowId], references: [id])
@@ -941,16 +952,16 @@ model Milestone {
 }
 
 model MilestoneResource {
-  id           String   @id @default(cuid())
-  milestoneId  String   @map("milestone_id")
-  assetId      String?  @map("asset_id")
-  url          String?  @db.VarChar(2048)
-  name         String?  @db.VarChar(255)
-  mimeType     String?  @map("mime_type") @db.VarChar(255)
-  size         Int?     @map("size_bytes")
-  metadata     Json?
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(cuid())
+  milestoneId String   @map("milestone_id")
+  assetId     String?  @map("asset_id")
+  url         String?  @db.VarChar(2048)
+  name        String?  @db.VarChar(255)
+  mimeType    String?  @map("mime_type") @db.VarChar(255)
+  size        Int?     @map("size_bytes")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
   asset     Asset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
@@ -1031,6 +1042,7 @@ model Escrow {
 enum PaymentType {
   ESCROW_MILESTONE
   PLATFORM_SERVICE
+  ARBITRATION_FEE
 }
 
 model Payment {
@@ -1048,15 +1060,22 @@ model Payment {
   cardExpMonth    Int?          @db.UnsignedTinyInt
   cardExpYear     Int?          @db.UnsignedSmallInt
   cardFingerprint String?       @db.Char(32) // optional
+  payerId         String?       @map("payer_id")
+  payerRole       Role?         @map("payer_role")
+  disputeId       String?       @map("dispute_id")
   // Idempotency
   idemKey         String?       @unique @map("idem_key")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  escrow Escrow? @relation(fields: [escrowId], references: [id])
-  refund Refund?
+  escrow  Escrow?  @relation(fields: [escrowId], references: [id])
+  refund  Refund?
+  payer   User?    @relation("PaymentPayer", fields: [payerId], references: [id])
+  dispute Dispute? @relation("DisputeArbitrationPayments", fields: [disputeId], references: [id])
 
   @@index([escrowId])
+  @@index([disputeId])
+  @@index([payerId])
 }
 
 model Transfer {
@@ -1103,7 +1122,9 @@ model Refund {
 enum DisputeStatus {
   OPEN // vừa mở
   NEGOTIATION // (tùy dùng hay không) đang thương lượng
+  INTERNAL_MEDIATION // admin hòa giải nội bộ
   AWAITING_ARBITRATION_FEES
+  ARBITRATION_READY // đã khóa hồ sơ, chuẩn bị giao trọng tài
   ARBITRATION // đã thu phí, chờ quyết
   RESOLVED_RELEASE_ALL
   RESOLVED_REFUND_ALL
@@ -1121,11 +1142,13 @@ enum DisputeNegotiationStatus {
 }
 
 model Dispute {
-  id         String        @id @default(cuid())
-  escrowId   String        @unique
-  openedById String
-  status     DisputeStatus @default(OPEN)
-  latestProposalId String? @unique @map("latest_proposal_id")
+  id               String        @id @default(cuid())
+  escrowId         String        @unique
+  openedById       String
+  status           DisputeStatus @default(OPEN)
+  latestProposalId String?       @unique @map("latest_proposal_id")
+  lockedAt         DateTime?     @map("locked_at")
+  lockedById       String?       @map("locked_by_id")
 
   // đề xuất cuối cùng (để 2 bên nhìn & đồng ý)
   proposedRelease Decimal @default(0) @map("proposed_release") @db.Decimal(12, 2) // trả freelancer
@@ -1140,6 +1163,9 @@ model Dispute {
   responseDeadline    DateTime? @map("response_deadline")
   arbitrationDeadline DateTime? @map("arbitration_deadline")
 
+  // hồ sơ trọng tài
+  currentDossierVersion Int? @map("current_dossier_version")
+
   // kết quả chốt (nếu RESOLVED_*)
   decidedRelease Decimal @default(0) @map("decided_release") @db.Decimal(12, 2)
   decidedRefund  Decimal @default(0) @map("decided_refund") @db.Decimal(12, 2)
@@ -1149,26 +1175,51 @@ model Dispute {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  escrow         Escrow               @relation(fields: [escrowId], references: [id])
-  chatAccessLogs ChatAdminAccessLog[]
-  latestProposal DisputeNegotiation?  @relation("DisputeLatestProposal", fields: [latestProposalId], references: [id])
-  negotiations   DisputeNegotiation[]
+  escrow                 Escrow               @relation(fields: [escrowId], references: [id])
+  chatAccessLogs         ChatAdminAccessLog[]
+  latestProposal         DisputeNegotiation?  @relation("DisputeLatestProposal", fields: [latestProposalId], references: [id])
+  negotiations           DisputeNegotiation[]
+  lockedBy               User?                @relation("DisputeLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  arbitrationDossiers    ArbitrationDossier[]
+  arbitrationFeePayments Payment[]            @relation("DisputeArbitrationPayments")
+}
+
+model ArbitrationDossier {
+  id            String                   @id @default(cuid())
+  disputeId     String                   @map("dispute_id")
+  version       Int                      @default(1)
+  status        ArbitrationDossierStatus @default(DRAFT)
+  generatedAt   DateTime                 @default(now()) @map("generated_at")
+  generatedById String?                  @map("generated_by_id")
+  lockedAt      DateTime?                @map("locked_at")
+  finalizedAt   DateTime?                @map("finalized_at")
+  hash          String?
+  payload       Json
+  pdfUrl        String?                  @map("pdf_url")
+  notes         String?                  @db.Text
+
+  dispute     Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  generatedBy User?   @relation("ArbitrationDossierGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
+
+  @@unique([disputeId, version])
+  @@index([disputeId], name: "idx_arbitration_dossier_dispute")
+  @@map("arbitration_dossier")
 }
 
 model DisputeNegotiation {
-  id             String                     @id @default(cuid())
-  disputeId      String                     @map("dispute_id")
-  proposerId     String                     @map("proposer_id")
-  counterpartyId String                     @map("counterparty_id")
-  status         DisputeNegotiationStatus   @default(PENDING)
-  releaseAmount  Decimal                    @map("release_amount") @db.Decimal(12, 2)
-  refundAmount   Decimal                    @map("refund_amount") @db.Decimal(12, 2)
-  message        String?                    @db.Text
-  respondedById  String?                    @map("responded_by_id")
-  respondedAt    DateTime?                  @map("responded_at")
-  responseMessage String?                   @map("response_message") @db.Text
-  createdAt      DateTime                   @default(now()) @map("created_at")
-  updatedAt      DateTime                   @updatedAt @map("updated_at")
+  id              String                   @id @default(cuid())
+  disputeId       String                   @map("dispute_id")
+  proposerId      String                   @map("proposer_id")
+  counterpartyId  String                   @map("counterparty_id")
+  status          DisputeNegotiationStatus @default(PENDING)
+  releaseAmount   Decimal                  @map("release_amount") @db.Decimal(12, 2)
+  refundAmount    Decimal                  @map("refund_amount") @db.Decimal(12, 2)
+  message         String?                  @db.Text
+  respondedById   String?                  @map("responded_by_id")
+  respondedAt     DateTime?                @map("responded_at")
+  responseMessage String?                  @map("response_message") @db.Text
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  updatedAt       DateTime                 @updatedAt @map("updated_at")
 
   dispute      Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
   proposer     User    @relation("DisputeNegotiationProposer", fields: [proposerId], references: [id], onDelete: Cascade)
