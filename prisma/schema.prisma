@@ -27,6 +27,13 @@ enum ArbitrationDossierStatus {
   ARCHIVED
 }
 
+enum ArbitrationEvidenceSourceType {
+  MILESTONE_ATTACHMENT
+  CHAT_ATTACHMENT
+  ASSET
+  EXTERNAL_URL
+}
+
 model User {
   id       String  @id @default(uuid())
   email    String  @unique
@@ -58,6 +65,7 @@ model User {
   disputeNegotiationsResponded DisputeNegotiation[] @relation("DisputeNegotiationResponder")
   disputesLocked               Dispute[]            @relation("DisputeLockedBy")
   arbitrationDossiersGenerated ArbitrationDossier[] @relation("ArbitrationDossierGeneratedBy")
+  arbitrationEvidenceSubmissions ArbitrationEvidenceSubmission[] @relation("ArbitrationEvidenceSubmittedBy")
   paymentsAsPayer              Payment[]            @relation("PaymentPayer")
 
   @@index([email])
@@ -345,6 +353,7 @@ model Asset {
   chatMessageAttachments         ChatMessageAttachment[]
   milestoneSubmissionAttachments MilestoneSubmissionAttachment[]
   milestoneResources             MilestoneResource[]
+  arbitrationEvidenceItems       ArbitrationEvidenceItem[] @relation("ArbitrationEvidenceAsset")
 
   @@index([provider, bucket, storageKey])
   @@index([status])
@@ -1182,6 +1191,7 @@ model Dispute {
   lockedBy               User?                @relation("DisputeLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
   arbitrationDossiers    ArbitrationDossier[]
   arbitrationFeePayments Payment[]            @relation("DisputeArbitrationPayments")
+  evidenceSubmissions    ArbitrationEvidenceSubmission[]
 }
 
 model ArbitrationDossier {
@@ -1204,6 +1214,43 @@ model ArbitrationDossier {
   @@unique([disputeId, version])
   @@index([disputeId], name: "idx_arbitration_dossier_dispute")
   @@map("arbitration_dossier")
+}
+
+model ArbitrationEvidenceSubmission {
+  id                   String      @id @default(cuid())
+  disputeId            String      @map("dispute_id")
+  submittedById        String      @map("submitted_by_id")
+  statement            String?     @db.Text
+  noAdditionalEvidence Boolean     @default(false) @map("no_additional_evidence")
+  submittedAt          DateTime    @default(now()) @map("submitted_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
+
+  dispute     Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  submittedBy User    @relation("ArbitrationEvidenceSubmittedBy", fields: [submittedById], references: [id], onDelete: Cascade)
+  items       ArbitrationEvidenceItem[]
+
+  @@unique([disputeId, submittedById], name: "uq_evidence_submission_per_user")
+  @@index([disputeId])
+  @@map("arbitration_evidence_submission")
+}
+
+model ArbitrationEvidenceItem {
+  id           String                       @id @default(cuid())
+  submissionId String                       @map("submission_id")
+  label        String?                      @db.VarChar(255)
+  description  String?                      @db.Text
+  sourceType   ArbitrationEvidenceSourceType @map("source_type")
+  sourceId     String?                      @map("source_id")
+  url          String?                      @db.VarChar(2048)
+  assetId      String?                      @map("asset_id")
+  createdAt    DateTime                     @default(now()) @map("created_at")
+
+  submission ArbitrationEvidenceSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  asset      Asset?                        @relation("ArbitrationEvidenceAsset", fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId])
+  @@index([assetId])
+  @@map("arbitration_evidence_item")
 }
 
 model DisputeNegotiation {

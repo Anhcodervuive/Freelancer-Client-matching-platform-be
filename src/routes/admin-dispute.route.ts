@@ -6,7 +6,9 @@ import {
     getAdminDispute,
     joinDisputeAsAdmin,
     listAdminDisputes,
-    requestArbitrationFees
+    requestArbitrationFees,
+    lockDisputeForArbitration,
+    generateArbitrationDossier
 } from '~/controllers/admin/dispute.controller'
 
 const router = Router()
@@ -19,5 +21,7 @@ router.post(
     authenticateMiddleware,
     errorHandler(requestArbitrationFees)
 )
+router.post('/:disputeId/lock', authenticateMiddleware, errorHandler(lockDisputeForArbitration))
+router.post('/:disputeId/dossiers', authenticateMiddleware, errorHandler(generateArbitrationDossier))
 
 export default router

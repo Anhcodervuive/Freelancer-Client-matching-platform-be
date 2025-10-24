@@ -20,6 +20,7 @@ import {
         SubmitMilestoneSchema,
         UpdateDisputeNegotiationSchema
 } from '~/schema/contract.schema'
+import { SubmitFinalEvidenceSchema } from '~/schema/dispute.schema'
 import contractService from '~/services/contract.service'
 
 const RESOURCE_FILE_FIELD_NAMES = new Set(['resourceFiles', 'resourceFiles[]', 'files', 'files[]'])
@@ -444,6 +445,33 @@ export const confirmArbitrationFee = async (req: Request, res: Response) => {
         const payload = ConfirmArbitrationFeeSchema.parse(req.body)
 
         const result = await contractService.confirmArbitrationFee(
+                userId,
+                contractId,
+                milestoneId,
+                disputeId,
+                payload
+        )
+
+        return res.status(StatusCodes.OK).json(result)
+}
+
+export const submitFinalEvidence = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId, disputeId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để nộp bằng chứng tranh chấp', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId || !disputeId) {
+                throw new BadRequestException(
+                        'Thiếu tham số contractId, milestoneId hoặc disputeId',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const payload = SubmitFinalEvidenceSchema.parse(req.body)
+        const result = await contractService.submitFinalEvidence(
                 userId,
                 contractId,
                 milestoneId,

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { DisputeStatus } from '~/generated/prisma'
+import { ArbitrationEvidenceSourceType, DisputeStatus } from '~/generated/prisma'
 
 const coerceDate = (value: unknown) => {
 	if (value === undefined || value === null || value instanceof Date) return value
@@ -75,7 +75,100 @@ export const AdminJoinDisputeSchema = z.object({
 export type AdminJoinDisputeInput = z.infer<typeof AdminJoinDisputeSchema>
 
 export const AdminRequestArbitrationFeesSchema: z.ZodType<{ deadlineDays: number }> = z.object({
-	deadlineDays: z.coerce.number().int().min(1).max(14).default(7)
+        deadlineDays: z.coerce.number().int().min(1).max(14).default(7)
 })
 
 export type AdminRequestArbitrationFeesInput = z.infer<typeof AdminRequestArbitrationFeesSchema>
+
+const EvidenceItemSchema = z
+        .object({
+                label: z.string().trim().max(255).optional(),
+                description: z.string().trim().max(2000).optional(),
+                sourceType: z.nativeEnum(ArbitrationEvidenceSourceType),
+                sourceId: z.string().trim().max(255).optional(),
+                url: z.string().trim().url().max(2048).optional(),
+                assetId: z.string().trim().max(255).optional()
+        })
+        .superRefine((item, ctx) => {
+                const requireSourceId =
+                        item.sourceType === ArbitrationEvidenceSourceType.MILESTONE_ATTACHMENT ||
+                        item.sourceType === ArbitrationEvidenceSourceType.CHAT_ATTACHMENT
+                const requireAssetId = item.sourceType === ArbitrationEvidenceSourceType.ASSET
+                const requireUrl = item.sourceType === ArbitrationEvidenceSourceType.EXTERNAL_URL
+
+                if (requireSourceId && !item.sourceId) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'sourceId là bắt buộc với loại chứng cứ đã chọn',
+                                path: ['sourceId']
+                        })
+                }
+
+                if (requireAssetId && !item.assetId) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'assetId là bắt buộc với loại chứng cứ đã chọn',
+                                path: ['assetId']
+                        })
+                }
+
+                if (requireUrl && !item.url) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'url là bắt buộc với loại chứng cứ đã chọn',
+                                path: ['url']
+                        })
+                }
+
+                if (!requireSourceId && !requireAssetId && !requireUrl) {
+                        if (!item.assetId && !item.sourceId && !item.url) {
+                                ctx.addIssue({
+                                        code: z.ZodIssueCode.custom,
+                                        message: 'Cần cung cấp ít nhất một nguồn tham chiếu cho chứng cứ',
+                                        path: ['sourceId']
+                                })
+                        }
+                }
+        })
+
+export const SubmitFinalEvidenceSchema = z
+        .object({
+                statement: z.string().trim().max(5000).optional(),
+                noAdditionalEvidence: z.boolean().optional(),
+                items: z.array(EvidenceItemSchema).max(50).optional()
+        })
+        .superRefine((data, ctx) => {
+                const hasStatement = Boolean(data.statement && data.statement.length > 0)
+                const hasItems = Boolean(data.items && data.items.length > 0)
+                const markedNone = Boolean(data.noAdditionalEvidence)
+
+                if (!hasStatement && !hasItems && !markedNone) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'Cần cung cấp luận điểm, danh sách chứng cứ hoặc đánh dấu không có chứng cứ mới'
+                        })
+                }
+
+                if (markedNone && hasItems) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'Không thể vừa đánh dấu không có chứng cứ mới vừa gửi danh sách chứng cứ',
+                                path: ['items']
+                        })
+                }
+        })
+
+export type SubmitFinalEvidenceInput = z.infer<typeof SubmitFinalEvidenceSchema>
+
+export const AdminLockDisputeSchema = z.object({
+        note: z.string().trim().max(2000).optional()
+})
+
+export type AdminLockDisputeInput = z.infer<typeof AdminLockDisputeSchema>
+
+export const AdminGenerateArbitrationDossierSchema = z.object({
+        notes: z.string().trim().max(5000).optional(),
+        finalize: z.boolean().optional()
+})
+
+export type AdminGenerateArbitrationDossierInput = z.infer<typeof AdminGenerateArbitrationDossierSchema>

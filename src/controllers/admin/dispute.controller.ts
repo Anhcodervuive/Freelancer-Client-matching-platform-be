@@ -4,7 +4,9 @@ import adminDisputeService from '~/services/admin-dispute.service'
 import {
     AdminDisputeListQuerySchema,
     AdminJoinDisputeSchema,
-    AdminRequestArbitrationFeesSchema
+    AdminRequestArbitrationFeesSchema,
+    AdminLockDisputeSchema,
+    AdminGenerateArbitrationDossierSchema
 } from '~/schema/dispute.schema'
 import { ForbiddenException } from '~/exceptions/Forbidden'
 import { ErrorCode } from '~/exceptions/root'
@@ -67,6 +69,34 @@ export const requestArbitrationFees = async (req: Request, res: Response) => {
 
     const payload = AdminRequestArbitrationFeesSchema.parse(req.body)
     const result = await adminDisputeService.requestArbitrationFees(adminId, disputeId, payload)
+
+    return res.json(result)
+}
+
+export const lockDisputeForArbitration = async (req: Request, res: Response) => {
+    const adminId = ensureAdminUser(req)
+    const { disputeId } = req.params
+
+    if (!disputeId) {
+        throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const payload = AdminLockDisputeSchema.parse(req.body)
+    const result = await adminDisputeService.lockDispute(adminId, disputeId, payload)
+
+    return res.json(result)
+}
+
+export const generateArbitrationDossier = async (req: Request, res: Response) => {
+    const adminId = ensureAdminUser(req)
+    const { disputeId } = req.params
+
+    if (!disputeId) {
+        throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const payload = AdminGenerateArbitrationDossierSchema.parse(req.body)
+    const result = await adminDisputeService.generateArbitrationDossier(adminId, disputeId, payload)
 
     return res.json(result)
 }

@@ -5,25 +5,26 @@ import type { Express } from 'express'
 import Stripe from 'stripe'
 
 import {
-	AssetKind,
-	AssetProvider,
-	AssetStatus,
-	DisputeNegotiationStatus,
-	DisputeStatus,
-	EscrowStatus,
-	MilestoneCancellationStatus,
-	MilestoneStatus,
-	MilestoneSubmissionStatus,
-	NotificationCategory,
-	NotificationEvent,
-	NotificationResource,
-	PaymentStatus,
-	PaymentType,
-	RefundStatus,
-	Prisma,
-	Role,
-	TransferStatus,
-	User
+        ArbitrationEvidenceSourceType,
+        AssetKind,
+        AssetProvider,
+        AssetStatus,
+        DisputeNegotiationStatus,
+        DisputeStatus,
+        EscrowStatus,
+        MilestoneCancellationStatus,
+        MilestoneStatus,
+        MilestoneSubmissionStatus,
+        NotificationCategory,
+        NotificationEvent,
+        NotificationResource,
+        PaymentStatus,
+        PaymentType,
+        RefundStatus,
+        Prisma,
+        Role,
+        TransferStatus,
+        User
 } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
@@ -51,6 +52,7 @@ import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 import { InternalServerException } from '~/exceptions/internal-server'
 import notificationService from '~/services/notification.service'
 import { emailQueue } from '~/queues/email.queue'
+import { SubmitFinalEvidenceInput } from '~/schema/dispute.schema'
 
 type ContractAuthUser = Pick<User, 'id' | 'role'>
 
@@ -139,16 +141,46 @@ const milestoneResourceInclude = Prisma.validator<Prisma.MilestoneResourceInclud
 })
 
 const milestoneSubmissionAttachmentInclude = Prisma.validator<Prisma.MilestoneSubmissionAttachmentInclude>()({
-	asset: {
-		select: {
-			id: true,
-			kind: true,
+        asset: {
+                select: {
+                        id: true,
+                        kind: true,
 			url: true,
 			mimeType: true,
 			bytes: true,
 			status: true
 		}
-	}
+        }
+})
+
+const arbitrationEvidenceItemInclude = Prisma.validator<Prisma.ArbitrationEvidenceItemInclude>()({
+        asset: {
+                select: {
+                        id: true,
+                        url: true,
+                        mimeType: true,
+                        bytes: true,
+                        status: true
+                }
+        }
+})
+
+const arbitrationEvidenceSubmissionInclude = Prisma.validator<Prisma.ArbitrationEvidenceSubmissionInclude>()({
+        submittedBy: {
+                select: {
+                        id: true,
+                        profile: {
+                                select: {
+                                        firstName: true,
+                                        lastName: true
+                                }
+                        }
+                }
+        },
+        items: {
+                include: arbitrationEvidenceItemInclude,
+                orderBy: { createdAt: 'asc' }
+        }
 })
 
 const milestoneSubmissionInclude = Prisma.validator<Prisma.MilestoneSubmissionInclude>()({
@@ -330,9 +362,15 @@ type ContractDetailPayload = Prisma.ContractGetPayload<{ include: typeof contrac
 type MilestonePayload = Prisma.MilestoneGetPayload<{ include: typeof milestoneInclude }>
 type MilestoneResourcePayload = Prisma.MilestoneResourceGetPayload<{ include: typeof milestoneResourceInclude }>
 type MilestoneSubmissionAttachmentPayload = Prisma.MilestoneSubmissionAttachmentGetPayload<{
-	include: typeof milestoneSubmissionAttachmentInclude
+        include: typeof milestoneSubmissionAttachmentInclude
 }>
 type MilestoneSubmissionPayload = Prisma.MilestoneSubmissionGetPayload<{ include: typeof milestoneSubmissionInclude }>
+type ArbitrationEvidenceSubmissionPayload = Prisma.ArbitrationEvidenceSubmissionGetPayload<{
+        include: typeof arbitrationEvidenceSubmissionInclude
+}>
+type ArbitrationEvidenceItemPayload = Prisma.ArbitrationEvidenceItemGetPayload<{
+        include: typeof arbitrationEvidenceItemInclude
+}>
 type PaymentEntity = Prisma.PaymentGetPayload<Prisma.PaymentDefaultArgs>
 type TransferEntity = Prisma.TransferGetPayload<{}>
 type RefundEntity = Prisma.RefundGetPayload<{}>
@@ -969,10 +1007,10 @@ const serializeReviewerProfile = (
 }
 
 const serializeMilestoneSubmission = (submission: MilestoneSubmissionPayload) => {
-	return {
-		id: submission.id,
-		milestoneId: submission.milestoneId,
-		freelancerId: submission.freelancerId,
+        return {
+                id: submission.id,
+                milestoneId: submission.milestoneId,
+                freelancerId: submission.freelancerId,
 		message: submission.message ?? null,
 		status: submission.status,
 		reviewNote: submission.reviewNote ?? null,
@@ -981,10 +1019,46 @@ const serializeMilestoneSubmission = (submission: MilestoneSubmissionPayload) =>
 		reviewedById: submission.reviewedById ?? null,
 		createdAt: submission.createdAt,
 		updatedAt: submission.updatedAt,
-		attachments: submission.attachments.map(serializeMilestoneSubmissionAttachment),
-		reviewer: serializeReviewerProfile(submission.reviewer)
-	}
+                attachments: submission.attachments.map(serializeMilestoneSubmissionAttachment),
+                reviewer: serializeReviewerProfile(submission.reviewer)
+        }
 }
+
+const serializeArbitrationEvidenceItem = (item: ArbitrationEvidenceItemPayload) => ({
+        id: item.id,
+        submissionId: item.submissionId,
+        label: item.label ?? null,
+        description: item.description ?? null,
+        sourceType: item.sourceType,
+        sourceId: item.sourceId ?? null,
+        url: item.url ?? null,
+        assetId: item.assetId ?? null,
+        createdAt: item.createdAt,
+        asset: item.asset
+                ? {
+                          id: item.asset.id,
+                          url: item.asset.url ?? null,
+                          mimeType: item.asset.mimeType ?? null,
+                          bytes: item.asset.bytes ?? null,
+                          status: item.asset.status
+                  }
+                : null
+})
+
+const serializeArbitrationEvidenceSubmission = (submission: ArbitrationEvidenceSubmissionPayload) => ({
+        id: submission.id,
+        disputeId: submission.disputeId,
+        submittedById: submission.submittedById,
+        statement: submission.statement ?? null,
+        noAdditionalEvidence: submission.noAdditionalEvidence,
+        submittedAt: submission.submittedAt,
+        updatedAt: submission.updatedAt,
+        submittedBy: {
+                id: submission.submittedBy.id,
+                name: composeFullName(submission.submittedBy.profile) ?? null
+        },
+        items: submission.items.map(serializeArbitrationEvidenceItem)
+})
 
 const serializeMilestone = (milestone: MilestonePayload) => {
 	return {
@@ -2642,12 +2716,12 @@ const deleteDisputeNegotiation = async (
 }
 
 const respondDisputeNegotiation = async (
-	userId: string,
-	contractId: string,
-	milestoneId: string,
-	disputeId: string,
-	negotiationId: string,
-	payload: RespondDisputeNegotiationInput
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
+        negotiationId: string,
+        payload: RespondDisputeNegotiationInput
 ) => {
 	const context = await ensureDisputeContext(contractId, milestoneId, disputeId, userId)
 	const { escrow, dispute } = context
@@ -2755,14 +2829,228 @@ const respondDisputeNegotiation = async (
 		milestoneId,
 		dispute: serializeDispute(result.dispute),
 		negotiation: serializeDisputeNegotiation(result.negotiation)
-	}
+        }
+}
+
+const submitFinalEvidence = async (
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
+        payload: SubmitFinalEvidenceInput
+) => {
+        const context = await ensureDisputeContext(contractId, milestoneId, disputeId, userId, [
+                DisputeStatus.AWAITING_ARBITRATION_FEES,
+                DisputeStatus.ARBITRATION_READY,
+                DisputeStatus.ARBITRATION
+        ])
+        const { contract } = context
+
+        const isClient = contract.clientId === userId
+        const isFreelancer = contract.freelancerId === userId
+
+        if (!isClient && !isFreelancer) {
+                throw new UnauthorizedException(
+                        'Bạn không có quyền nộp bằng chứng cho tranh chấp này',
+                        ErrorCode.USER_NOT_AUTHORITY
+                )
+        }
+
+        const evidenceItems = payload.items ?? []
+        const milestoneAttachmentIds = evidenceItems
+                .filter(item => item.sourceType === ArbitrationEvidenceSourceType.MILESTONE_ATTACHMENT && item.sourceId)
+                .map(item => item.sourceId as string)
+        const chatAttachmentIds = evidenceItems
+                .filter(item => item.sourceType === ArbitrationEvidenceSourceType.CHAT_ATTACHMENT && item.sourceId)
+                .map(item => item.sourceId as string)
+        const directAssetIds = evidenceItems
+                .filter(item => item.sourceType === ArbitrationEvidenceSourceType.ASSET && item.assetId)
+                .map(item => item.assetId as string)
+
+        const [milestoneAttachments, chatAttachments, directAssets] = await Promise.all([
+                milestoneAttachmentIds.length > 0
+                        ? prismaClient.milestoneSubmissionAttachment.findMany({
+                                  where: {
+                                          id: { in: milestoneAttachmentIds },
+                                          submission: { milestoneId }
+                                  },
+                                  select: {
+                                          id: true,
+                                          assetId: true
+                                  }
+                          })
+                        : [],
+                chatAttachmentIds.length > 0
+                        ? prismaClient.chatMessageAttachment.findMany({
+                                  where: {
+                                          id: { in: chatAttachmentIds },
+                                          message: {
+                                                  thread: {
+                                                          contractId
+                                                  }
+                                          }
+                                  },
+                                  select: {
+                                          id: true,
+                                          assetId: true
+                                  }
+                          })
+                        : [],
+                directAssetIds.length > 0
+                        ? prismaClient.asset.findMany({
+                                  where: {
+                                          id: { in: directAssetIds },
+                                          OR: [
+                                                  { createdBy: userId },
+                                                  {
+                                                          milestoneSubmissionAttachments: {
+                                                                  some: { submission: { milestoneId } }
+                                                          }
+                                                  },
+                                                  {
+                                                          chatMessageAttachments: {
+                                                                  some: { message: { thread: { contractId } } }
+                                                          }
+                                                  }
+                                          ]
+                                  },
+                                  select: { id: true }
+                          })
+                        : []
+        ])
+
+        if (milestoneAttachments.length !== milestoneAttachmentIds.length) {
+                throw new BadRequestException(
+                        'Không tìm thấy file milestone bạn tham chiếu trong tranh chấp này',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        if (chatAttachments.length !== chatAttachmentIds.length) {
+                throw new BadRequestException(
+                        'Không tìm thấy file chat bạn tham chiếu trong hợp đồng này',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        if (directAssets.length !== directAssetIds.length) {
+                throw new BadRequestException(
+                        'Không tìm thấy tài sản hợp lệ cho mục chứng cứ đã chọn',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const milestoneAttachmentMap = new Map(milestoneAttachments.map(attachment => [attachment.id, attachment]))
+        const chatAttachmentMap = new Map(chatAttachments.map(attachment => [attachment.id, attachment]))
+        const directAssetMap = new Map(directAssets.map(asset => [asset.id, asset]))
+
+        const statement = payload.statement?.trim() ?? null
+        const normalizedNoEvidence = Boolean(payload.noAdditionalEvidence && evidenceItems.length === 0)
+
+        const itemData = evidenceItems.map(item => {
+                const label = item.label?.trim() ?? null
+                const description = item.description?.trim() ?? null
+                const sourceId = item.sourceId ?? null
+                const url = item.url ?? null
+
+                let assetId: string | null = null
+
+                if (item.sourceType === ArbitrationEvidenceSourceType.MILESTONE_ATTACHMENT && sourceId) {
+                        const attachment = milestoneAttachmentMap.get(sourceId)
+                        if (!attachment) {
+                                throw new BadRequestException(
+                                        'File milestone tham chiếu không hợp lệ',
+                                        ErrorCode.PARAM_QUERY_ERROR
+                                )
+                        }
+                        assetId = attachment.assetId ?? null
+                } else if (item.sourceType === ArbitrationEvidenceSourceType.CHAT_ATTACHMENT && sourceId) {
+                        const attachment = chatAttachmentMap.get(sourceId)
+                        if (!attachment) {
+                                throw new BadRequestException(
+                                        'File chat tham chiếu không hợp lệ',
+                                        ErrorCode.PARAM_QUERY_ERROR
+                                )
+                        }
+                        assetId = attachment.assetId ?? null
+                } else if (item.sourceType === ArbitrationEvidenceSourceType.ASSET && item.assetId) {
+                        const asset = directAssetMap.get(item.assetId)
+                        if (!asset) {
+                                throw new BadRequestException('Tài sản đính kèm không hợp lệ', ErrorCode.PARAM_QUERY_ERROR)
+                        }
+                        assetId = asset.id
+                } else if (item.assetId) {
+                        const asset = directAssetMap.get(item.assetId)
+                        assetId = asset ? asset.id : null
+                }
+
+                return {
+                        label,
+                        description,
+                        sourceType: item.sourceType,
+                        sourceId,
+                        url,
+                        assetId
+                }
+        })
+
+        const submissionRecord = await prismaClient.$transaction(async tx => {
+                const now = new Date()
+                const upserted = await tx.arbitrationEvidenceSubmission.upsert({
+                        where: {
+                                disputeId_submittedById: {
+                                        disputeId,
+                                        submittedById: userId
+                                }
+                        },
+                        update: {
+                                statement,
+                                noAdditionalEvidence: normalizedNoEvidence,
+                                submittedAt: now
+                        },
+                        create: {
+                                disputeId,
+                                submittedById: userId,
+                                statement,
+                                noAdditionalEvidence: normalizedNoEvidence,
+                                submittedAt: now
+                        }
+                })
+
+                await tx.arbitrationEvidenceItem.deleteMany({ where: { submissionId: upserted.id } })
+
+                if (itemData.length > 0) {
+                        await tx.arbitrationEvidenceItem.createMany({
+                                data: itemData.map(item => ({
+                                        ...item,
+                                        submissionId: upserted.id
+                                }))
+                        })
+                }
+
+                return tx.arbitrationEvidenceSubmission.findUnique({
+                        where: { id: upserted.id },
+                        include: arbitrationEvidenceSubmissionInclude
+                })
+        })
+
+        if (!submissionRecord) {
+                throw new NotFoundException('Không thể tải bản ghi bằng chứng sau khi lưu', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        return {
+                contractId,
+                milestoneId,
+                disputeId,
+                evidenceSubmission: serializeArbitrationEvidenceSubmission(submissionRecord)
+        }
 }
 
 const confirmArbitrationFee = async (
-	userId: string,
-	contractId: string,
-	milestoneId: string,
-	disputeId: string,
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
 	payload: ConfirmArbitrationFeeInput
 ) => {
 	const context = await ensureDisputeContext(contractId, milestoneId, disputeId, userId, [
@@ -3950,13 +4238,14 @@ const contractService = {
 	cancelMilestone,
 	respondMilestoneCancellation,
 	openMilestoneDispute,
-	createDisputeNegotiation,
-	updateDisputeNegotiation,
-	respondDisputeNegotiation,
-	deleteDisputeNegotiation,
-	confirmArbitrationFee,
-	payMilestone,
-	submitMilestoneWork,
+        createDisputeNegotiation,
+        updateDisputeNegotiation,
+        respondDisputeNegotiation,
+        deleteDisputeNegotiation,
+        submitFinalEvidence,
+        confirmArbitrationFee,
+        payMilestone,
+        submitMilestoneWork,
 	approveMilestoneSubmission,
 	declineMilestoneSubmission
 }

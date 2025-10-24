@@ -108,7 +108,74 @@ flowchart TD
   - Trước khi bấm khóa hồ sơ, mỗi bên sẽ thấy **form "Final evidence submission"** để liệt kê các luận điểm chính, đính kèm file chứng cứ bổ sung (hóa đơn, phiên bản sản phẩm, ảnh chụp, v.v.) và xác nhận rằng đây là gói bằng chứng cuối cùng của họ.
   - Các mục được khai trong form (statement, danh sách file, đường dẫn ngoài hệ thống) sẽ được đánh dấu `submittedBy: CLIENT/FREELANCER` và hợp nhất vào payload JSON của dossier.
   - Nếu một bên không có chứng cứ mới ngoài nội dung chat/file đã gửi, họ vẫn phải **nhấn xác nhận** để hệ thống ghi nhận trạng thái “No additional evidence” nhằm đảm bảo hai bên được đối xử công bằng và trọng tài viên biết rằng bên đó đã chốt hồ sơ.
+  - Khi đính kèm file mới tại bước này, hệ thống **không ghi đè** lên các file milestone gốc: mỗi file upload sẽ được lưu như một bản ghi độc lập với `evidenceId`, `uploadedAt`, người thực hiện và `checksum` để trọng tài viên đối chiếu. Nhờ vậy họ biết rõ đây là bản bổ sung (ví dụ bản build mới, ảnh chụp bổ sung) chứ không phải bản đã nộp trong milestone. Nếu muốn dùng lại file cũ, chỉ cần tham chiếu đúng tên/đường dẫn đã tồn tại; hệ thống sẽ tự đưa cả hai bản (gốc và bổ sung) vào bảng evidence với chú thích thời gian, giúp trọng tài dễ so sánh.
+  - **Không cần thêm bảng DB mới** để phục vụ tham chiếu: form có thể gửi danh sách ID của `MilestoneSubmissionAttachment`, `ChatMessageAttachment`… mà hệ thống đã lưu sẵn; backend chỉ cần ánh xạ chúng vào payload JSON/PDF của dossier. Nếu muốn theo dõi riêng các bản upload trong bước này, có thể tái sử dụng bảng lưu file chung (object storage + metadata) và thêm bảng nối `arbitration_evidence_item` gồm khóa ngoại tới dispute/dossier + khóa ngoại tới bản ghi file hiện có. Cả hai cách đều tránh phải tạo kho lưu trữ tách biệt.
   - Nhờ vậy, trọng tài viên luôn có cả **log chat & file tự động gom** lẫn **gói bằng chứng chính thức** do từng bên xác nhận, tránh tình trạng một bên viện lý do “chưa kịp nộp” sau khi hồ sơ bị khóa.
+
+### API triển khai trong backend demo
+
+| Bước | Endpoint | Quyền gọi | Ghi chú chính |
+| --- | --- | --- | --- |
+| Nộp bằng chứng cuối | `POST /contracts/:contractId/milestones/:milestoneId/disputes/:disputeId/final-evidence` | Client hoặc freelancer của hợp đồng | Body gồm `statement?`, `noAdditionalEvidence?`, `items?` (tối đa 50 mục). Mỗi `items[i]` bắt buộc trường `sourceType` (`MILESTONE_ATTACHMENT` \| `CHAT_ATTACHMENT` \| `ASSET` \| `EXTERNAL_URL`) và cung cấp đúng ID/url tương ứng (`sourceId`, `assetId`, `url`). Backend xác thực quyền truy cập file, cập nhật bảng `arbitration_evidence_submission` và `arbitration_evidence_item`, đồng thời trả về submission đã chuẩn hóa. |
+| Khóa hồ sơ dispute | `POST /admin/disputes/:disputeId/lock` | Admin đã join tranh chấp | Body `{ note?: string }`. API chỉ thành công khi trạng thái là `ARBITRATION_READY`, cả client và freelancer đã nộp bằng chứng cuối. Kết quả trả về dispute detail kèm danh sách evidence. |
+| Tổng hợp dossier | `POST /admin/disputes/:disputeId/dossiers` | Admin | Body `{ notes?: string, finalize?: boolean }`. Tạo bản ghi `arbitration_dossier`, chèn payload JSON (kèm `hash` SHA-256, timeline, evidence đã giải tham chiếu) và cập nhật `currentDossierVersion`. Response vẫn là dispute detail với trường `arbitrationDossiers`. |
+
+#### Ví dụ payload khi freelancer nộp bằng chứng
+
+```jsonc
+{
+  "statement": "Freelancer đã đẩy bản build QA cùng log kiểm thử.",
+  "items": [
+    {
+      "sourceType": "MILESTONE_ATTACHMENT",
+      "sourceId": "msa_123",
+      "label": "Bản build milestone",
+      "description": "APK nộp ngày 12/05"
+    },
+    {
+      "sourceType": "EXTERNAL_URL",
+      "url": "https://drive.google.com/file/d/...",
+      "label": "Video walkthrough"
+    }
+  ]
+}
+```
+
+Để xác nhận không có tài liệu mới, gửi `{ "noAdditionalEvidence": true }`. Khi danh sách `items` khác rỗng, cờ này tự động bị bỏ qua.
+
+#### Response mẫu của các API admin
+
+```jsonc
+{
+  "dispute": { "id": "dsp_1", "status": "ARBITRATION_READY", "lockedAt": "2024-09-12T09:15:00.000Z", ... },
+  "evidenceSubmissions": [
+    {
+      "id": "aes_123",
+      "statement": "...",
+      "submittedAt": "2024-09-12T08:30:00.000Z",
+      "items": [
+        {
+          "id": "aei_456",
+          "sourceType": "MILESTONE_ATTACHMENT",
+          "reference": {
+            "type": "MILESTONE_ATTACHMENT",
+            "attachment": {
+              "id": "msa_123",
+              "url": "https://cdn.example.com/milestones/msa_123.apk",
+              "submission": { "milestoneTitle": "UI design" }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "arbitrationDossiers": [
+    { "id": "ads_001", "version": 1, "status": "LOCKED", "hash": "5e4b..." }
+  ]
+}
+```
+
+Từ response trên, giao diện admin có thể hiển thị tiến trình thu thập chứng cứ, ai đã khóa hồ sơ và tải dossier mới nhất.
 - **Ý nghĩa của dossier dạng JSON/PDF so với hiển thị giao diện**:
   - JSON/PDF tạo thành **bản chụp trạng thái (snapshot)** có thể gửi qua email hoặc lưu trữ ngoài hệ thống; giao diện chỉ xem được khi còn quyền truy cập backend.
   - File tĩnh giúp **đảm bảo tính toàn vẹn và dấu vết**: mỗi lần tạo dossier có thể gắn mã hash/timestamp để chứng minh nội dung không bị chỉnh sửa; dữ liệu trên màn hình khó chứng minh vì phụ thuộc API thời điểm xem.

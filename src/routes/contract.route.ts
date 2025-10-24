@@ -21,6 +21,7 @@ import {
         respondDisputeNegotiation,
         updateDisputeNegotiation,
         respondMilestoneCancellation,
+        submitFinalEvidence,
         submitMilestoneWork,
         uploadMilestoneResources
 } from '~/controllers/contract.controller'
@@ -76,6 +77,11 @@ router.post(
         '/:contractId/milestones/:milestoneId/disputes/:disputeId/arbitration-fees/confirm',
         authenticateMiddleware,
         errorHandler(confirmArbitrationFee)
+)
+router.post(
+        '/:contractId/milestones/:milestoneId/disputes/:disputeId/final-evidence',
+        authenticateMiddleware,
+        errorHandler(submitFinalEvidence)
 )
 router.post(
         '/:contractId/milestones/:milestoneId/pay',
