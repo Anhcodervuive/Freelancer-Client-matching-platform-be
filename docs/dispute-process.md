@@ -3,6 +3,7 @@
 Quy trình dưới đây mô tả hành trình đầy đủ một tranh chấp hợp đồng giờ cố định (fixed-price) trên Upwork, bao gồm các mốc thời gian và yêu cầu chính đối với client lẫn freelancer.
 
 ## 1. Giai đoạn thương lượng trực tiếp (Direct Negotiation)
+
 - **Phạm vi áp dụng**: Dispute fixed-price luôn gắn với **khoản tiền đang nằm trong escrow** của một milestone đã được fund. Nếu hợp đồng chỉ có **một milestone** (hoặc milestone cuối đã gom toàn bộ ngân sách), tranh chấp sẽ bao trùm toàn bộ hợp đồng; còn với hợp đồng nhiều milestone, mỗi milestone được xử lý độc lập.
 - **Khởi tạo**: Một bên (client hoặc freelancer) nhấn "Request a refund" / "Open a dispute" trong phần hợp đồng đang escrow và điền lý do.
 - **Thông báo**: Upwork gửi email/app notification cho bên còn lại, yêu cầu phản hồi trong vòng **5 ngày lịch**.
@@ -12,6 +13,7 @@ Quy trình dưới đây mô tả hành trình đầy đủ một tranh chấp h
   - Nếu hết hạn 5 ngày mà không phản hồi hoặc không đạt thỏa thuận, dispute chuyển sang bước tiếp theo.
 
 ## 2. Hòa giải bởi Upwork (Upwork Mediation)
+
 - **Điều phối viên Upwork** tham gia, rà soát bằng chứng (tin nhắn, file, milestone).
 - **Kênh trao đổi**: Điều phối viên vẫn trả lời ngay trong cùng phòng chat dispute. Họ có thể gửi thêm email để nhắc hạn hoặc yêu cầu cung cấp bằng chứng, nhưng không mở cuộc hội thoại riêng trừ khi cần thông tin nhạy cảm.
 - Upwork đưa ra **đề xuất giải pháp** dựa trên chính sách escrow; mỗi bên có **2 ngày** để chấp nhận hoặc bác bỏ.
@@ -19,6 +21,7 @@ Quy trình dưới đây mô tả hành trình đầy đủ một tranh chấp h
 - Nếu một bên từ chối, tranh chấp tiến tới trọng tài. Cả hai bên được yêu cầu đóng phí trọng tài.
 
 ## 3. Thu phí trọng tài (Arbitration Fee Collection)
+
 - Upwork yêu cầu **mỗi bên đóng phí 291 USD** (mức phí hiện hành có thể thay đổi) trong **4 ngày**.
 - Nếu **client** không đóng phí: dispute bị đóng và toàn bộ số tiền escrow được release cho freelancer.
 - Nếu **freelancer** không đóng phí: dispute bị đóng và escrow được hoàn lại cho client.
@@ -28,12 +31,14 @@ Quy trình dưới đây mô tả hành trình đầy đủ một tranh chấp h
 ### API mô phỏng bước thu phí trọng tài trong backend demo
 
 - `POST /admin/disputes/:disputeId/request-arbitration-fees`
+
   - Chỉ admin mới được phép gọi.
   - Body: `{ "deadlineDays": number }` (mặc định 4 ngày, giới hạn 1–14 ngày).
   - Điều kiện: admin đã **join** tranh chấp, trạng thái hiện tại nằm trong giai đoạn hòa giải (`NEGOTIATION`).
   - Hệ thống chuyển dispute sang `AWAITING_ARBITRATION_FEES`, ghi `arbitrationDeadline = now + deadlineDays`, reset `clientArbFeePaid` & `freelancerArbFeePaid` về `false` và trả về bản tóm tắt dành cho admin.
 
 - `POST /contracts/:contractId/milestones/:milestoneId/disputes/:disputeId/arbitration-fees/confirm`
+
   - Dành cho chính **client** hoặc **freelancer** của hợp đồng.
   - Body yêu cầu `{ "paymentMethodRefId": string, "idempotencyKey"?: string }` để backend tra cứu thẻ Stripe đã lưu và đảm bảo tránh bị charge trùng.
   - Khi gọi, backend tạo/khôi phục **Stripe PaymentIntent** cho khoản phí `arbFeePerParty`, xác nhận thanh toán ngay trên server và trả về `clientSecret`, `paymentIntentId`, `requiresAction`, `paymentStatus` cùng bản ghi `payment` (`type = ARBITRATION_FEE`).
@@ -43,22 +48,26 @@ Quy trình dưới đây mô tả hành trình đầy đủ một tranh chấp h
 - Các response vẫn tái sử dụng serializer dispute/timeline hiện có; front-end chỉ cần đọc thêm metadata thanh toán để hiển thị tiến trình thu phí.
 
 ## 4. Trọng tài độc lập (Binding Arbitration)
+
 - Trọng tài viên độc lập liên hệ hai bên, yêu cầu cung cấp bằng chứng, lời khai.
 - Phán quyết của trọng tài là **ràng buộc pháp lý**; Upwork điều chỉnh escrow theo quyết định cuối cùng.
 - Phí trọng tài **hoàn lại cho bên thắng** (Upwork trả lại khoản phí nếu phán quyết ủng hộ họ).
 
 ## 5. Sau khi tranh chấp kết thúc
+
 - Hợp đồng được cập nhật trạng thái tương ứng (hoàn tất, hủy, refunded...).
 - Feedback vẫn có thể để lại bình thường, trừ khi hợp đồng bị hủy trước khi kết thúc.
 - Lịch sử tranh chấp và quyết định được lưu trong hồ sơ công việc để Upwork tham chiếu nếu xảy ra tranh chấp lặp lại.
 
 ## Xử lý khi tiền đã được release cho freelancer
+
 - Khi milestone đã được **release hoàn toàn**, số tiền không còn nằm trong escrow nên không thể mở dispute fixed-price tiêu chuẩn.
 - **Trong 30 ngày** kể từ ngày release, client vẫn có thể dùng tính năng **"Request a refund"**. Nếu freelancer chấp nhận, Upwork sẽ hoàn trả khoản tương ứng.
 - Nếu freelancer **từ chối hoàn tiền**, Upwork chỉ hỗ trợ hòa giải nhẹ (không có cơ chế cưỡng chế hay trọng tài) và thường khuyên hai bên tự thương lượng/đưa thêm bằng chứng.
 - Sau 30 ngày hoặc nếu hòa giải thất bại, lựa chọn còn lại là **thương lượng trực tiếp**, nhờ Upwork Support ghi nhận hoặc (đối với thanh toán thẻ) làm việc với ngân hàng để yêu cầu chargeback.
 
 ## Ghi chú chính sách bổ sung
+
 - Dispute fixed-price chỉ áp dụng khi **vẫn còn tiền trong escrow** hoặc trong khoảng 30 ngày sau khi release.
 - Upwork khuyến khích **tự giải quyết** trước khi leo thang vì phí trọng tài cao và mất thời gian (thường 3–6 tuần).
 - Tranh chấp trên hợp đồng **Hourly** sử dụng quy trình khác (Weekly Review + Payment Protection) nên không đề cập ở đây.
@@ -114,30 +123,30 @@ flowchart TD
 
 ### API triển khai trong backend demo
 
-| Bước | Endpoint | Quyền gọi | Ghi chú chính |
-| --- | --- | --- | --- |
+| Bước                | Endpoint                                                                                 | Quyền gọi                           | Ghi chú chính                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Nộp bằng chứng cuối | `POST /contracts/:contractId/milestones/:milestoneId/disputes/:disputeId/final-evidence` | Client hoặc freelancer của hợp đồng | Body gồm `statement?`, `noAdditionalEvidence?`, `items?` (tối đa 50 mục). Mỗi `items[i]` bắt buộc trường `sourceType` (`MILESTONE_ATTACHMENT` \| `CHAT_ATTACHMENT` \| `ASSET` \| `EXTERNAL_URL`) và cung cấp đúng ID/url tương ứng (`sourceId`, `assetId`, `url`). Backend xác thực quyền truy cập file, cập nhật bảng `arbitration_evidence_submission` và `arbitration_evidence_item`, đồng thời trả về submission đã chuẩn hóa. |
-| Khóa hồ sơ dispute | `POST /admin/disputes/:disputeId/lock` | Admin đã join tranh chấp | Body `{ note?: string }`. API chỉ thành công khi trạng thái là `ARBITRATION_READY`, cả client và freelancer đã nộp bằng chứng cuối. Kết quả trả về dispute detail kèm danh sách evidence. |
-| Tổng hợp dossier | `POST /admin/disputes/:disputeId/dossiers` | Admin | Body `{ notes?: string, finalize?: boolean }`. Tạo bản ghi `arbitration_dossier`, chèn payload JSON (kèm `hash` SHA-256, timeline, evidence đã giải tham chiếu) và cập nhật `currentDossierVersion`. Response vẫn là dispute detail với trường `arbitrationDossiers`. |
+| Khóa hồ sơ dispute  | `POST /admin/disputes/:disputeId/lock`                                                   | Admin đã join tranh chấp            | Body `{ note?: string }`. API chỉ thành công khi trạng thái là `ARBITRATION_READY`, cả client và freelancer đã nộp bằng chứng cuối. Kết quả trả về dispute detail kèm danh sách evidence.                                                                                                                                                                                                                                          |
+| Tổng hợp dossier    | `POST /admin/disputes/:disputeId/dossiers`                                               | Admin                               | Body `{ notes?: string, finalize?: boolean }`. Tạo bản ghi `arbitration_dossier`, chèn payload JSON (kèm `hash` SHA-256, timeline, evidence đã giải tham chiếu) và cập nhật `currentDossierVersion`. Response vẫn là dispute detail với trường `arbitrationDossiers`.                                                                                                                                                              |
 
 #### Ví dụ payload khi freelancer nộp bằng chứng
 
 ```jsonc
 {
-  "statement": "Freelancer đã đẩy bản build QA cùng log kiểm thử.",
-  "items": [
-    {
-      "sourceType": "MILESTONE_ATTACHMENT",
-      "sourceId": "msa_123",
-      "label": "Bản build milestone",
-      "description": "APK nộp ngày 12/05"
-    },
-    {
-      "sourceType": "EXTERNAL_URL",
-      "url": "https://drive.google.com/file/d/...",
-      "label": "Video walkthrough"
-    }
-  ]
+	"statement": "Freelancer đã đẩy bản build QA cùng log kiểm thử.",
+	"items": [
+		{
+			"sourceType": "MILESTONE_ATTACHMENT",
+			"sourceId": "msa_123",
+			"label": "Bản build milestone",
+			"description": "APK nộp ngày 12/05"
+		},
+		{
+			"sourceType": "EXTERNAL_URL",
+			"url": "https://drive.google.com/file/d/...",
+			"label": "Video walkthrough"
+		}
+	]
 }
 ```
 
@@ -176,6 +185,7 @@ flowchart TD
 ```
 
 Từ response trên, giao diện admin có thể hiển thị tiến trình thu thập chứng cứ, ai đã khóa hồ sơ và tải dossier mới nhất.
+
 - **Ý nghĩa của dossier dạng JSON/PDF so với hiển thị giao diện**:
   - JSON/PDF tạo thành **bản chụp trạng thái (snapshot)** có thể gửi qua email hoặc lưu trữ ngoài hệ thống; giao diện chỉ xem được khi còn quyền truy cập backend.
   - File tĩnh giúp **đảm bảo tính toàn vẹn và dấu vết**: mỗi lần tạo dossier có thể gắn mã hash/timestamp để chứng minh nội dung không bị chỉnh sửa; dữ liệu trên màn hình khó chứng minh vì phụ thuộc API thời điểm xem.
@@ -196,107 +206,111 @@ Từ response trên, giao diện admin có thể hiển thị tiến trình thu 
 
 ```json
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "ArbitrationDossier",
-  "type": "object",
-  "required": ["meta", "parties", "financials", "timeline"],
-  "properties": {
-    "meta": {
-      "type": "object",
-      "required": ["dossierId", "disputeId", "generatedAt", "generatedBy", "status"],
-      "properties": {
-        "dossierId": { "type": "string", "description": "UUID của hồ sơ chốt" },
-        "disputeId": { "type": "string" },
-        "status": { "type": "string", "enum": ["NEGOTIATION", "INTERNAL_MEDIATION", "ARBITRATION_READY", "ARBITRATION_DECISION", "RESOLVED"] },
-        "generatedAt": { "type": "string", "format": "date-time" },
-        "generatedBy": { "type": "string", "description": "Admin kích hoạt API" },
-        "hash": { "type": "string", "description": "Tùy chọn: hash SHA-256 để kiểm chứng" }
-      }
-    },
-    "parties": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["role", "userId", "displayName"],
-        "properties": {
-          "role": { "type": "string", "enum": ["CLIENT", "FREELANCER", "ARBITRATION_OFFICER"] },
-          "userId": { "type": "string" },
-          "displayName": { "type": "string" },
-          "feePaid": { "type": "boolean" },
-          "notes": { "type": "string" }
-        }
-      },
-      "minItems": 2
-    },
-    "financials": {
-      "type": "object",
-      "required": ["escrowAmount", "currency", "requested", "decided"],
-      "properties": {
-        "escrowAmount": { "type": "number" },
-        "currency": { "type": "string" },
-        "requested": {
-          "type": "object",
-          "properties": {
-            "client": { "type": "number" },
-            "freelancer": { "type": "number" }
-          }
-        },
-        "decided": {
-          "type": "object",
-          "properties": {
-            "client": { "type": "number" },
-            "freelancer": { "type": "number" },
-            "feeRefund": { "type": "number" }
-          }
-        }
-      }
-    },
-    "timeline": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["at", "actor", "action"],
-        "properties": {
-          "at": { "type": "string", "format": "date-time" },
-          "actor": { "type": "string" },
-          "action": { "type": "string" },
-          "details": { "type": "string" }
-        }
-      }
-    },
-    "evidence": {
-      "type": "object",
-      "properties": {
-        "messages": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["sentAt", "from", "body"],
-            "properties": {
-              "sentAt": { "type": "string", "format": "date-time" },
-              "from": { "type": "string" },
-              "body": { "type": "string" }
-            }
-          }
-        },
-        "attachments": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["name", "url", "hash"],
-            "properties": {
-              "name": { "type": "string" },
-              "url": { "type": "string", "format": "uri" },
-              "hash": { "type": "string" },
-              "uploadedBy": { "type": "string" }
-            }
-          }
-        }
-      }
-    }
-  }
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "ArbitrationDossier",
+	"type": "object",
+	"required": ["meta", "parties", "financials", "timeline"],
+	"properties": {
+		"meta": {
+			"type": "object",
+			"required": ["dossierId", "disputeId", "generatedAt", "generatedBy", "status"],
+			"properties": {
+				"dossierId": { "type": "string", "description": "UUID của hồ sơ chốt" },
+				"disputeId": { "type": "string" },
+				"status": {
+					"type": "string",
+					"enum": ["NEGOTIATION", "INTERNAL_MEDIATION", "ARBITRATION_READY", "ARBITRATION_DECISION", "RESOLVED"]
+				},
+				"generatedAt": { "type": "string", "format": "date-time" },
+				"generatedBy": { "type": "string", "description": "Admin kích hoạt API" },
+				"hash": { "type": "string", "description": "Tùy chọn: hash SHA-256 để kiểm chứng" }
+			}
+		},
+		"parties": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["role", "userId", "displayName"],
+				"properties": {
+					"role": { "type": "string", "enum": ["CLIENT", "FREELANCER", "ARBITRATION_OFFICER"] },
+					"userId": { "type": "string" },
+					"displayName": { "type": "string" },
+					"feePaid": { "type": "boolean" },
+					"notes": { "type": "string" }
+				}
+			},
+			"minItems": 2
+		},
+		"financials": {
+			"type": "object",
+			"required": ["escrowAmount", "currency", "requested", "decided"],
+			"properties": {
+				"escrowAmount": { "type": "number" },
+				"currency": { "type": "string" },
+				"requested": {
+					"type": "object",
+					"properties": {
+						"client": { "type": "number" },
+						"freelancer": { "type": "number" }
+					}
+				},
+				"decided": {
+					"type": "object",
+					"properties": {
+						"client": { "type": "number" },
+						"freelancer": { "type": "number" },
+						"feeRefund": { "type": "number" }
+					}
+				}
+			}
+		},
+		"timeline": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["at", "actor", "action"],
+				"properties": {
+					"at": { "type": "string", "format": "date-time" },
+					"actor": { "type": "string" },
+					"action": { "type": "string" },
+					"details": { "type": "string" }
+				}
+			}
+		},
+		"evidence": {
+			"type": "object",
+			"properties": {
+				"messages": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"required": ["sentAt", "from", "body"],
+						"properties": {
+							"sentAt": { "type": "string", "format": "date-time" },
+							"from": { "type": "string" },
+							"body": { "type": "string" }
+						}
+					}
+				},
+				"attachments": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"required": ["name", "url", "hash"],
+						"properties": {
+							"name": { "type": "string" },
+							"url": { "type": "string", "format": "uri" },
+							"hash": { "type": "string" },
+							"uploadedBy": { "type": "string" }
+						}
+					}
+				}
+			}
+		}
+	}
 }
 ```
+
 - Khi xuất ra PDF, backend chỉ cần render schema này dưới dạng bảng/section. Payload JSON là nguồn sự thật và có thể tái sử dụng cho mọi kênh xuất bản.
 - **Phí trọng tài mô phỏng** vẫn giữ nguyên bằng các cờ boolean để track bên nào đã xác nhận đóng phí.
 - **Lịch sử hoạt động**: log các sự kiện chính (mở dispute, đổi trạng thái, quyết định cuối) để hỗ trợ báo cáo và tái hiện quy trình trong demo.
@@ -366,4 +380,3 @@ model ArbitrationDossier {
 
 - Trên `User`, khai báo quan hệ ngược `disputesLocked` và `arbitrationDossiersGenerated` để truy cập nhanh các hồ sơ mà admin đã thao tác.
 - Với MySQL (đúng như cấu hình Prisma hiện tại), `payload` dùng kiểu `Json`, `hash`/`pdfUrl` dùng `VARCHAR`. Nếu cần audit sâu hơn, có thể bổ sung bảng event log riêng nhưng chưa bắt buộc cho demo.
-
