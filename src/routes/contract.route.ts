@@ -21,6 +21,7 @@ import {
         respondDisputeNegotiation,
         updateDisputeNegotiation,
         respondMilestoneCancellation,
+        listFinalEvidenceSources,
         submitFinalEvidence,
         submitMilestoneWork,
         uploadMilestoneResources
@@ -77,6 +78,11 @@ router.post(
         '/:contractId/milestones/:milestoneId/disputes/:disputeId/arbitration-fees/confirm',
         authenticateMiddleware,
         errorHandler(confirmArbitrationFee)
+)
+router.get(
+        '/:contractId/milestones/:milestoneId/disputes/:disputeId/final-evidence/sources',
+        authenticateMiddleware,
+        errorHandler(listFinalEvidenceSources)
 )
 router.post(
         '/:contractId/milestones/:milestoneId/disputes/:disputeId/final-evidence',

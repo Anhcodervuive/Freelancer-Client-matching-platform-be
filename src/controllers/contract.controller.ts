@@ -455,6 +455,26 @@ export const confirmArbitrationFee = async (req: Request, res: Response) => {
         return res.status(StatusCodes.OK).json(result)
 }
 
+export const listFinalEvidenceSources = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId, milestoneId, disputeId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để xem danh sách chứng cứ', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId || !milestoneId || !disputeId) {
+                throw new BadRequestException(
+                        'Thiếu tham số contractId, milestoneId hoặc disputeId',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const result = await contractService.listFinalEvidenceSources(userId, contractId, milestoneId, disputeId)
+
+        return res.status(StatusCodes.OK).json(result)
+}
+
 export const submitFinalEvidence = async (req: Request, res: Response) => {
         const userId = req.user?.id
         const { contractId, milestoneId, disputeId } = req.params

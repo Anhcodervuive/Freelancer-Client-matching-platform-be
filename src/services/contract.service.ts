@@ -141,23 +141,80 @@ const milestoneResourceInclude = Prisma.validator<Prisma.MilestoneResourceInclud
 })
 
 const milestoneSubmissionAttachmentInclude = Prisma.validator<Prisma.MilestoneSubmissionAttachmentInclude>()({
-	asset: {
-		select: {
-			id: true,
-			kind: true,
+        asset: {
+                select: {
+                        id: true,
+                        kind: true,
 			url: true,
 			mimeType: true,
 			bytes: true,
 			status: true
 		}
-	}
+        }
+})
+
+const finalEvidenceMilestoneAttachmentInclude = Prisma.validator<Prisma.MilestoneSubmissionAttachmentInclude>()({
+        asset: milestoneSubmissionAttachmentInclude.asset,
+        submission: {
+                select: {
+                        id: true,
+                        milestoneId: true,
+                        freelancerId: true,
+                        message: true,
+                        createdAt: true,
+                        freelancer: {
+                                select: {
+                                        userId: true,
+                                        profile: {
+                                                select: {
+                                                        firstName: true,
+                                                        lastName: true
+                                                }
+                                        }
+                                }
+                        }
+                }
+        }
+})
+
+const finalEvidenceChatAttachmentInclude = Prisma.validator<Prisma.ChatMessageAttachmentInclude>()({
+        asset: {
+                select: {
+                        id: true,
+                        kind: true,
+                        url: true,
+                        mimeType: true,
+                        bytes: true,
+                        status: true
+                }
+        },
+        message: {
+                select: {
+                        id: true,
+                        threadId: true,
+                        senderId: true,
+                        sentAt: true,
+                        body: true,
+                        sender: {
+                                select: {
+                                        id: true,
+                                        profile: {
+                                                select: {
+                                                        firstName: true,
+                                                        lastName: true
+                                                }
+                                        }
+                                }
+                        }
+                }
+        }
 })
 
 const arbitrationEvidenceItemInclude = Prisma.validator<Prisma.ArbitrationEvidenceItemInclude>()({
-	asset: {
-		select: {
-			id: true,
-			url: true,
+        asset: {
+                select: {
+                        id: true,
+                        url: true,
 			mimeType: true,
 			bytes: true,
 			status: true
@@ -362,11 +419,17 @@ type ContractDetailPayload = Prisma.ContractGetPayload<{ include: typeof contrac
 type MilestonePayload = Prisma.MilestoneGetPayload<{ include: typeof milestoneInclude }>
 type MilestoneResourcePayload = Prisma.MilestoneResourceGetPayload<{ include: typeof milestoneResourceInclude }>
 type MilestoneSubmissionAttachmentPayload = Prisma.MilestoneSubmissionAttachmentGetPayload<{
-	include: typeof milestoneSubmissionAttachmentInclude
+        include: typeof milestoneSubmissionAttachmentInclude
+}>
+type FinalEvidenceMilestoneAttachmentPayload = Prisma.MilestoneSubmissionAttachmentGetPayload<{
+        include: typeof finalEvidenceMilestoneAttachmentInclude
+}>
+type FinalEvidenceChatAttachmentPayload = Prisma.ChatMessageAttachmentGetPayload<{
+        include: typeof finalEvidenceChatAttachmentInclude
 }>
 type MilestoneSubmissionPayload = Prisma.MilestoneSubmissionGetPayload<{ include: typeof milestoneSubmissionInclude }>
 type ArbitrationEvidenceSubmissionPayload = Prisma.ArbitrationEvidenceSubmissionGetPayload<{
-	include: typeof arbitrationEvidenceSubmissionInclude
+        include: typeof arbitrationEvidenceSubmissionInclude
 }>
 type ArbitrationEvidenceItemPayload = Prisma.ArbitrationEvidenceItemGetPayload<{
 	include: typeof arbitrationEvidenceItemInclude
@@ -1265,16 +1328,86 @@ const computeDisputableCents = (
 const centsToDecimalString = (cents: number) => (cents / 100).toFixed(2)
 
 const composeFullName = (profile?: { firstName: string | null; lastName: string | null } | null) => {
-	const firstName = profile?.firstName?.trim() ?? ''
-	const lastName = profile?.lastName?.trim() ?? ''
-	const combined = `${firstName} ${lastName}`.trim()
-	return combined.length > 0 ? combined : null
+        const firstName = profile?.firstName?.trim() ?? ''
+        const lastName = profile?.lastName?.trim() ?? ''
+        const combined = `${firstName} ${lastName}`.trim()
+        return combined.length > 0 ? combined : null
+}
+
+const serializeNameOnlyProfile = (profile?: { firstName: string | null; lastName: string | null } | null) => ({
+        firstName: profile?.firstName ?? null,
+        lastName: profile?.lastName ?? null,
+        displayName: composeFullName(profile)
+})
+
+const serializeFinalEvidenceMilestoneAttachment = (
+        attachment: FinalEvidenceMilestoneAttachmentPayload
+) => {
+        const base = serializeMilestoneSubmissionAttachment(attachment)
+        const freelancerProfile = attachment.submission?.freelancer?.profile ?? null
+
+        return {
+                ...base,
+                submission: attachment.submission
+                        ? {
+                                        id: attachment.submission.id,
+                                        milestoneId: attachment.submission.milestoneId,
+                                        freelancerId: attachment.submission.freelancerId,
+                                        createdAt: attachment.submission.createdAt,
+                                        message: attachment.submission.message ?? null,
+                                        freelancer: {
+                                                id: attachment.submission.freelancerId,
+                                                ...serializeNameOnlyProfile(freelancerProfile)
+                                        }
+                                  }
+                        : null
+        }
+}
+
+const serializeFinalEvidenceChatAttachment = (attachment: FinalEvidenceChatAttachmentPayload) => {
+        const senderProfile = attachment.message?.sender?.profile ?? null
+
+        return {
+                id: attachment.id,
+                messageId: attachment.messageId,
+                assetId: attachment.assetId ?? null,
+                name: attachment.name ?? null,
+                url: attachment.url ?? attachment.asset?.url ?? null,
+                mimeType: attachment.mimeType ?? attachment.asset?.mimeType ?? null,
+                size: attachment.size ?? attachment.asset?.bytes ?? null,
+                createdAt: attachment.createdAt,
+                asset: attachment.asset
+                        ? {
+                                        id: attachment.asset.id,
+                                        kind: attachment.asset.kind,
+                                        url: attachment.asset.url,
+                                        mimeType: attachment.asset.mimeType,
+                                        bytes: attachment.asset.bytes,
+                                        status: attachment.asset.status
+                                  }
+                        : null,
+                message: attachment.message
+                        ? {
+                                        id: attachment.message.id,
+                                        threadId: attachment.message.threadId,
+                                        senderId: attachment.message.senderId ?? null,
+                                        sentAt: attachment.message.sentAt,
+                                        body: attachment.message.body ?? null,
+                                        sender: attachment.message.sender
+                                                ? {
+                                                        id: attachment.message.sender.id,
+                                                        ...serializeNameOnlyProfile(senderProfile)
+                                                }
+                                                : null
+                                  }
+                        : null
+        }
 }
 
 const ensureDisputeContext = async (
-	contractId: string,
-	milestoneId: string,
-	disputeId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
 	userId: string,
 	allowedStatuses: DisputeStatus[] = [DisputeStatus.OPEN, DisputeStatus.NEGOTIATION]
 ) => {
@@ -2716,15 +2849,15 @@ const deleteDisputeNegotiation = async (
 }
 
 const respondDisputeNegotiation = async (
-	userId: string,
-	contractId: string,
-	milestoneId: string,
-	disputeId: string,
-	negotiationId: string,
-	payload: RespondDisputeNegotiationInput
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
+        negotiationId: string,
+        payload: RespondDisputeNegotiationInput
 ) => {
-	const context = await ensureDisputeContext(contractId, milestoneId, disputeId, userId)
-	const { escrow, dispute } = context
+        const context = await ensureDisputeContext(contractId, milestoneId, disputeId, userId)
+        const { escrow, dispute } = context
 
 	const negotiationRecord = await prismaClient.disputeNegotiation.findUnique({
 		where: { id: negotiationId }
@@ -2824,19 +2957,78 @@ const respondDisputeNegotiation = async (
 		message
 	})
 
-	return {
-		contractId,
-		milestoneId,
-		dispute: serializeDispute(result.dispute),
-		negotiation: serializeDisputeNegotiation(result.negotiation)
-	}
+        return {
+                contractId,
+                milestoneId,
+                dispute: serializeDispute(result.dispute),
+                negotiation: serializeDisputeNegotiation(result.negotiation)
+        }
+}
+
+const listFinalEvidenceSources = async (
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string
+) => {
+        const context = await ensureDisputeContext(contractId, milestoneId, disputeId, userId, [
+                DisputeStatus.AWAITING_ARBITRATION_FEES,
+                DisputeStatus.ARBITRATION_READY,
+                DisputeStatus.ARBITRATION
+        ])
+        const { contract } = context
+
+        const isClient = contract.clientId === userId
+        const isFreelancer = contract.freelancerId === userId
+
+        if (!isClient && !isFreelancer) {
+                throw new UnauthorizedException(
+                        'Bạn không có quyền xem danh sách chứng cứ của tranh chấp này',
+                        ErrorCode.USER_NOT_AUTHORITY
+                )
+        }
+
+        const [milestoneAttachments, chatAttachments] = await Promise.all([
+                prismaClient.milestoneSubmissionAttachment.findMany({
+                        where: {
+                                submission: {
+                                        milestoneId,
+                                        milestone: {
+                                                contractId
+                                        }
+                                }
+                        },
+                        include: finalEvidenceMilestoneAttachmentInclude,
+                        orderBy: { createdAt: 'desc' }
+                }),
+                prismaClient.chatMessageAttachment.findMany({
+                        where: {
+                                message: {
+                                        deletedAt: null,
+                                        thread: {
+                                                contractId
+                                        }
+                                }
+                        },
+                        include: finalEvidenceChatAttachmentInclude,
+                        orderBy: { createdAt: 'desc' }
+                })
+        ])
+
+        return {
+                contractId,
+                milestoneId,
+                disputeId,
+                milestoneAttachments: milestoneAttachments.map(serializeFinalEvidenceMilestoneAttachment),
+                chatAttachments: chatAttachments.map(serializeFinalEvidenceChatAttachment)
+        }
 }
 
 const submitFinalEvidence = async (
-	userId: string,
-	contractId: string,
-	milestoneId: string,
-	disputeId: string,
+        userId: string,
+        contractId: string,
+        milestoneId: string,
+        disputeId: string,
 	payload: SubmitFinalEvidenceInput
 ) => {
 	const context = await ensureDisputeContext(contractId, milestoneId, disputeId, userId, [
@@ -4229,15 +4421,16 @@ const contractService = {
 	cancelMilestone,
 	respondMilestoneCancellation,
 	openMilestoneDispute,
-	createDisputeNegotiation,
-	updateDisputeNegotiation,
-	respondDisputeNegotiation,
-	deleteDisputeNegotiation,
-	submitFinalEvidence,
-	confirmArbitrationFee,
-	payMilestone,
-	submitMilestoneWork,
-	approveMilestoneSubmission,
+        createDisputeNegotiation,
+        updateDisputeNegotiation,
+        respondDisputeNegotiation,
+        deleteDisputeNegotiation,
+        listFinalEvidenceSources,
+        submitFinalEvidence,
+        confirmArbitrationFee,
+        payMilestone,
+        submitMilestoneWork,
+        approveMilestoneSubmission,
 	declineMilestoneSubmission
 }
 
