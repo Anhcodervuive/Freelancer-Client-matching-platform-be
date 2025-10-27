@@ -1683,10 +1683,10 @@ const listContractDisputes = async (user: ContractAuthUser, contractId: string) 
 }
 
 const getMilestoneDispute = async (user: ContractAuthUser, contractId: string, milestoneId: string) => {
-	await ensureContractAccess(contractId, user, { allowAdmin: true })
+        await ensureContractAccess(contractId, user, { allowAdmin: true })
 
-	const milestone = await prismaClient.milestone.findFirst({
-		where: { id: milestoneId, contractId, isDeleted: false },
+        const milestone = await prismaClient.milestone.findFirst({
+                where: { id: milestoneId, contractId, isDeleted: false },
 		select: {
 			id: true,
 			contractId: true,
@@ -1762,47 +1762,65 @@ const getMilestoneDispute = async (user: ContractAuthUser, contractId: string, m
 		}
 	}
 
-	const disputeRecord = await prismaClient.dispute.findUnique({
-		where: { id: escrow.dispute.id },
-		include: disputeDetailInclude
-	})
+        const disputeRecord = await prismaClient.dispute.findUnique({
+                where: { id: escrow.dispute.id },
+                include: disputeDetailInclude
+        })
 
-	if (!disputeRecord || !disputeRecord.escrow || !disputeRecord.escrow.milestone) {
-		throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
-	}
+        if (!disputeRecord || !disputeRecord.escrow || !disputeRecord.escrow.milestone) {
+                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
 
-	const disputeEscrow = disputeRecord.escrow as DisputeDetailEscrowPayload
-	const disputeMilestone = disputeEscrow.milestone as DisputeDetailMilestonePayload
-	const disputeContract = disputeMilestone.contract as DisputeDetailContractPayload
+        const disputeEscrow = disputeRecord.escrow as DisputeDetailEscrowPayload
+        const disputeMilestone = disputeEscrow.milestone as DisputeDetailMilestonePayload
+        const disputeContract = disputeMilestone.contract as DisputeDetailContractPayload
 
-	if (disputeContract.id !== contractId || disputeMilestone.id !== milestoneId) {
-		throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
-	}
+        if (disputeContract.id !== contractId || disputeMilestone.id !== milestoneId) {
+                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
 
-	if (!isAdminUser(user) && disputeContract.clientId !== user.id && disputeContract.freelancerId !== user.id) {
-		throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
-	}
+        if (!isAdminUser(user) && disputeContract.clientId !== user.id && disputeContract.freelancerId !== user.id) {
+                throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+        }
 
-	const disputable = disputeEscrow.amountFunded.minus(disputeEscrow.amountReleased).minus(disputeEscrow.amountRefunded)
-	disputableAmount = Math.max(0, Number(disputable))
-	disputableCents = Math.max(0, Number(disputable.mul(100).toFixed(0)))
+        const evidenceSubmissions = await prismaClient.arbitrationEvidenceSubmission.findMany({
+                where: { disputeId: disputeRecord.id },
+                select: { submittedById: true }
+        })
 
-	return {
-		contract: {
-			id: disputeContract.id,
-			title: disputeContract.title,
+        const clientEvidenceSubmitted = evidenceSubmissions.some(
+                submission => submission.submittedById === disputeContract.clientId
+        )
+        const freelancerEvidenceSubmitted = evidenceSubmissions.some(
+                submission => submission.submittedById === disputeContract.freelancerId
+        )
+        const hasSubmittedEvidence = evidenceSubmissions.some(submission => submission.submittedById === user.id)
+
+        const disputable = disputeEscrow.amountFunded.minus(disputeEscrow.amountReleased).minus(disputeEscrow.amountRefunded)
+        disputableAmount = Math.max(0, Number(disputable))
+        disputableCents = Math.max(0, Number(disputable.mul(100).toFixed(0)))
+
+        return {
+                contract: {
+                        id: disputeContract.id,
+                        title: disputeContract.title,
 			clientId: disputeContract.clientId,
 			freelancerId: disputeContract.freelancerId
 		},
-		milestone: {
-			...serializeDisputeMilestoneSummary(disputeMilestone),
-			escrow: serializeEscrowSummary(disputeEscrow)
-		},
-		dispute: serializeDispute(disputeRecord),
-		negotiations: disputeRecord.negotiations.map(serializeDisputeNegotiation),
-		disputableAmount,
-		disputableCents
-	}
+                milestone: {
+                        ...serializeDisputeMilestoneSummary(disputeMilestone),
+                        escrow: serializeEscrowSummary(disputeEscrow)
+                },
+                dispute: {
+                        ...serializeDispute(disputeRecord),
+                        clientEvidenceSubmitted,
+                        freelancerEvidenceSubmitted,
+                        hasSubmittedEvidence
+                },
+                negotiations: disputeRecord.negotiations.map(serializeDisputeNegotiation),
+                disputableAmount,
+                disputableCents
+        }
 }
 
 const createContractMilestone = async (
@@ -3041,17 +3059,34 @@ const submitFinalEvidence = async (
 	const isClient = contract.clientId === userId
 	const isFreelancer = contract.freelancerId === userId
 
-	if (!isClient && !isFreelancer) {
-		throw new UnauthorizedException(
-			'Bạn không có quyền nộp bằng chứng cho tranh chấp này',
-			ErrorCode.USER_NOT_AUTHORITY
-		)
-	}
+        if (!isClient && !isFreelancer) {
+                throw new UnauthorizedException(
+                        'Bạn không có quyền nộp bằng chứng cho tranh chấp này',
+                        ErrorCode.USER_NOT_AUTHORITY
+                )
+        }
 
-	const evidenceItems = payload.items ?? []
-	const milestoneAttachmentIds = evidenceItems
-		.filter(item => item.sourceType === ArbitrationEvidenceSourceType.MILESTONE_ATTACHMENT && item.sourceId)
-		.map(item => item.sourceId as string)
+        const existingSubmission = await prismaClient.arbitrationEvidenceSubmission.findUnique({
+                where: {
+                        uq_evidence_submission_per_user: {
+                                disputeId,
+                                submittedById: userId
+                        }
+                },
+                select: { id: true }
+        })
+
+        if (existingSubmission) {
+                throw new BadRequestException(
+                        'Bạn đã nộp bằng chứng cho tranh chấp này trước đó',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const evidenceItems = payload.items ?? []
+        const milestoneAttachmentIds = evidenceItems
+                .filter(item => item.sourceType === ArbitrationEvidenceSourceType.MILESTONE_ATTACHMENT && item.sourceId)
+                .map(item => item.sourceId as string)
 	const chatAttachmentIds = evidenceItems
 		.filter(item => item.sourceType === ArbitrationEvidenceSourceType.CHAT_ATTACHMENT && item.sourceId)
 		.map(item => item.sourceId as string)
@@ -3177,49 +3212,49 @@ const submitFinalEvidence = async (
 		}
 	})
 
-	const submissionRecord = await prismaClient.$transaction(async tx => {
-		const now = new Date()
-		const upserted = await tx.arbitrationEvidenceSubmission.upsert({
-			where: {
-				uq_evidence_submission_per_user: {
-					disputeId,
-					submittedById: userId
-				}
-			},
-			update: {
-				statement,
-				noAdditionalEvidence: normalizedNoEvidence,
-				submittedAt: now
-			},
-			create: {
-				disputeId,
-				submittedById: userId,
-				statement,
-				noAdditionalEvidence: normalizedNoEvidence,
-				submittedAt: now
-			}
-		})
+        let submissionRecord = null
 
-		await tx.arbitrationEvidenceItem.deleteMany({ where: { submissionId: upserted.id } })
+        try {
+                submissionRecord = await prismaClient.$transaction(async tx => {
+                        const now = new Date()
+                        const created = await tx.arbitrationEvidenceSubmission.create({
+                                data: {
+                                        disputeId,
+                                        submittedById: userId,
+                                        statement,
+                                        noAdditionalEvidence: normalizedNoEvidence,
+                                        submittedAt: now
+                                }
+                        })
 
-		if (itemData.length > 0) {
-			await tx.arbitrationEvidenceItem.createMany({
-				data: itemData.map(item => ({
-					...item,
-					submissionId: upserted.id
-				}))
-			})
-		}
+                        if (itemData.length > 0) {
+                                await tx.arbitrationEvidenceItem.createMany({
+                                        data: itemData.map(item => ({
+                                                ...item,
+                                                submissionId: created.id
+                                        }))
+                                })
+                        }
 
-		return tx.arbitrationEvidenceSubmission.findUnique({
-			where: { id: upserted.id },
-			include: arbitrationEvidenceSubmissionInclude
-		})
-	})
+                        return tx.arbitrationEvidenceSubmission.findUnique({
+                                where: { id: created.id },
+                                include: arbitrationEvidenceSubmissionInclude
+                        })
+                })
+        } catch (error) {
+                if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                        throw new BadRequestException(
+                                'Bạn đã nộp bằng chứng cho tranh chấp này trước đó',
+                                ErrorCode.PARAM_QUERY_ERROR
+                        )
+                }
 
-	if (!submissionRecord) {
-		throw new NotFoundException('Không thể tải bản ghi bằng chứng sau khi lưu', ErrorCode.ITEM_NOT_FOUND)
-	}
+                throw error
+        }
+
+        if (!submissionRecord) {
+                throw new NotFoundException('Không thể tải bản ghi bằng chứng sau khi lưu', ErrorCode.ITEM_NOT_FOUND)
+        }
 
 	return {
 		contractId,
