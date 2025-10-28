@@ -148,6 +148,7 @@ export const downloadDisputeDossierPdf = async (req: Request, res: Response) => 
         'Content-Disposition',
         `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`
     )
+    res.setHeader('Content-Length', buffer.length)
 
     return res.status(200).send(buffer)
 }
