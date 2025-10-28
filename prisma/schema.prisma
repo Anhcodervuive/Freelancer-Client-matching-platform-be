@@ -18,6 +18,7 @@ enum Role {
   CLIENT
   FREELANCER
   ADMIN
+  ARBITRATOR
 }
 
 enum ArbitrationDossierStatus {
@@ -65,6 +66,7 @@ model User {
   disputeNegotiationsResponded DisputeNegotiation[] @relation("DisputeNegotiationResponder")
   disputesLocked               Dispute[]            @relation("DisputeLockedBy")
   arbitrationDossiersGenerated ArbitrationDossier[] @relation("ArbitrationDossierGeneratedBy")
+  arbitrationsAssigned         Dispute[]            @relation("DisputeArbitrator")
   arbitrationEvidenceSubmissions ArbitrationEvidenceSubmission[] @relation("ArbitrationEvidenceSubmittedBy")
   paymentsAsPayer              Payment[]            @relation("PaymentPayer")
 
@@ -1158,6 +1160,8 @@ model Dispute {
   latestProposalId String?       @unique @map("latest_proposal_id")
   lockedAt         DateTime?     @map("locked_at")
   lockedById       String?       @map("locked_by_id")
+  arbitratorId     String?       @map("arbitrator_id")
+  arbitratorAssignedAt DateTime? @map("arbitrator_assigned_at")
 
   // đề xuất cuối cùng (để 2 bên nhìn & đồng ý)
   proposedRelease Decimal @default(0) @map("proposed_release") @db.Decimal(12, 2) // trả freelancer
@@ -1189,9 +1193,12 @@ model Dispute {
   latestProposal         DisputeNegotiation?  @relation("DisputeLatestProposal", fields: [latestProposalId], references: [id])
   negotiations           DisputeNegotiation[]
   lockedBy               User?                @relation("DisputeLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  arbitrator             User?                @relation("DisputeArbitrator", fields: [arbitratorId], references: [id], onDelete: SetNull)
   arbitrationDossiers    ArbitrationDossier[]
   arbitrationFeePayments Payment[]            @relation("DisputeArbitrationPayments")
   evidenceSubmissions    ArbitrationEvidenceSubmission[]
+
+  @@index([arbitratorId], name: "idx_dispute_arbitrator")
 }
 
 model ArbitrationDossier {

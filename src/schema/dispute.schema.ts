@@ -172,3 +172,16 @@ export const AdminGenerateArbitrationDossierSchema = z.object({
 })
 
 export type AdminGenerateArbitrationDossierInput = z.infer<typeof AdminGenerateArbitrationDossierSchema>
+
+export const AdminAssignArbitratorSchema = z.object({
+        arbitratorId: z.string().trim().min(1)
+})
+
+export type AdminAssignArbitratorInput = z.infer<typeof AdminAssignArbitratorSchema>
+
+export const AdminListDisputeDossiersSchema = z.object({
+        page: z.coerce.number().int().min(1).default(1),
+        limit: z.coerce.number().int().min(1).max(50).default(20)
+})
+
+export type AdminListDisputeDossiersQueryInput = z.infer<typeof AdminListDisputeDossiersSchema>

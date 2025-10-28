@@ -6,7 +6,9 @@ import {
     AdminJoinDisputeSchema,
     AdminRequestArbitrationFeesSchema,
     AdminLockDisputeSchema,
-    AdminGenerateArbitrationDossierSchema
+    AdminGenerateArbitrationDossierSchema,
+    AdminAssignArbitratorSchema,
+    AdminListDisputeDossiersSchema
 } from '~/schema/dispute.schema'
 import { ForbiddenException } from '~/exceptions/Forbidden'
 import { ErrorCode } from '~/exceptions/root'
@@ -29,6 +31,14 @@ export const listAdminDisputes = async (req: Request, res: Response) => {
     const result = await adminDisputeService.listDisputes(filters)
 
     return res.json(result)
+}
+
+export const listArbitrators = async (req: Request, res: Response) => {
+    ensureAdminUser(req)
+
+    const arbitrators = await adminDisputeService.listArbitrators()
+
+    return res.json({ data: arbitrators })
 }
 
 export const getAdminDispute = async (req: Request, res: Response) => {
@@ -97,6 +107,35 @@ export const generateArbitrationDossier = async (req: Request, res: Response) =>
 
     const payload = AdminGenerateArbitrationDossierSchema.parse(req.body)
     const result = await adminDisputeService.generateArbitrationDossier(adminId, disputeId, payload)
+
+    return res.json(result)
+}
+
+export const listDisputeDossiers = async (req: Request, res: Response) => {
+    ensureAdminUser(req)
+
+    const { disputeId } = req.params
+
+    if (!disputeId) {
+        throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const query = AdminListDisputeDossiersSchema.parse(req.query)
+    const result = await adminDisputeService.listDisputeDossiers(disputeId, query)
+
+    return res.json(result)
+}
+
+export const assignArbitratorToDispute = async (req: Request, res: Response) => {
+    const adminId = ensureAdminUser(req)
+    const { disputeId } = req.params
+
+    if (!disputeId) {
+        throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const payload = AdminAssignArbitratorSchema.parse(req.body)
+    const result = await adminDisputeService.assignArbitrator(adminId, disputeId, payload)
 
     return res.json(result)
 }

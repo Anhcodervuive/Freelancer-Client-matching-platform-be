@@ -16,7 +16,9 @@ import {
     AdminJoinDisputeInput,
     AdminRequestArbitrationFeesInput,
     AdminLockDisputeInput,
-    AdminGenerateArbitrationDossierInput
+    AdminGenerateArbitrationDossierInput,
+    AdminAssignArbitratorInput,
+    AdminListDisputeDossiersQueryInput
 } from '~/schema/dispute.schema'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
@@ -211,6 +213,9 @@ const adminDisputeInclude = Prisma.validator<Prisma.DisputeInclude>()({
     lockedBy: {
         select: adminDisputeUserSelect
     },
+    arbitrator: {
+        select: adminDisputeUserSelect
+    },
     arbitrationDossiers: {
         orderBy: { version: 'desc' },
         take: 5,
@@ -301,6 +306,18 @@ const composeUserSummary = (user?: AdminDisputeUser | null) => {
     }
 }
 
+const composeUserSummaryWithEmail = (user?: AdminDisputeUser | null) => {
+    if (!user) {
+        return null
+    }
+
+    return {
+        id: user.id,
+        name: composeFullName(user.profile),
+        email: user.email
+    }
+}
+
 const composeAssetSummary = (asset?: AssetSummaryLike | null) => {
     if (!asset) {
         return null
@@ -314,6 +331,23 @@ const composeAssetSummary = (asset?: AssetSummaryLike | null) => {
         status: asset.status ?? null,
         checksum: asset.checksum ?? null
     }
+}
+
+const listArbitrators = async () => {
+    const arbitrators = await prismaClient.user.findMany({
+        where: {
+            role: Role.ARBITRATOR,
+            isActive: true
+        },
+        orderBy: { createdAt: 'asc' },
+        select: adminDisputeUserSelect
+    })
+
+    return arbitrators.map(user => ({
+        id: user.id,
+        email: user.email,
+        name: composeFullName(user.profile)
+    }))
 }
 
 const serializeLatestProposal = (proposal: AdminDisputeRecord['latestProposal']) => {
@@ -403,6 +437,11 @@ const serializeAdminDossier = (dossier: AdminArbitrationDossier) => ({
     generatedBy: composeUserSummary(dossier.generatedBy)
 })
 
+const serializeAdminDossierDetail = (dossier: AdminArbitrationDossier) => ({
+    ...serializeAdminDossier(dossier),
+    payload: dossier.payload ?? null
+})
+
 const serializeAdminChatLog = (log: AdminDisputeChatLog) => ({
     id: log.id,
     disputeId: log.disputeId ?? null,
@@ -464,11 +503,14 @@ const buildAdminDisputeResponse = (record: AdminDisputeRecord) => {
             note: record.note ?? null,
             lockedAt: record.lockedAt ?? null,
             lockedById: record.lockedById ?? null,
+            arbitratorId: record.arbitratorId ?? null,
+            arbitratorAssignedAt: record.arbitratorAssignedAt ?? null,
             currentDossierVersion: record.currentDossierVersion ?? null,
             createdAt: record.createdAt,
             updatedAt: record.updatedAt,
             latestProposal,
-            lockedBy: composeUserSummary(record.lockedBy)
+            lockedBy: composeUserSummary(record.lockedBy),
+            arbitrator: composeUserSummaryWithEmail(record.arbitrator)
         },
         contract: {
             id: contract.id,
@@ -737,6 +779,97 @@ const getDispute = async (disputeId: string) => {
     }
 
     return buildAdminDisputeDetailResponse(disputeRecord)
+}
+
+const listDisputeDossiers = async (disputeId: string, query: AdminListDisputeDossiersQueryInput) => {
+    const disputeRecord = await prismaClient.dispute.findFirst({
+        where: {
+            id: disputeId,
+            escrow: {
+                milestone: {
+                    isDeleted: false
+                }
+            }
+        },
+        select: { id: true }
+    })
+
+    if (!disputeRecord) {
+        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    const { page, limit } = query
+    const skip = (page - 1) * limit
+
+    const [records, total] = await Promise.all([
+        prismaClient.arbitrationDossier.findMany({
+            where: { disputeId },
+            orderBy: { version: 'desc' },
+            skip,
+            take: limit,
+            include: adminDossierInclude
+        }),
+        prismaClient.arbitrationDossier.count({ where: { disputeId } })
+    ])
+
+    return {
+        disputeId,
+        page,
+        limit,
+        total,
+        hasMore: skip + records.length < total,
+        data: records.map(serializeAdminDossierDetail)
+    }
+}
+
+const assignArbitrator = async (adminId: string, disputeId: string, payload: AdminAssignArbitratorInput) => {
+    void adminId
+
+    const { arbitratorId } = payload
+
+    const [disputeRecord, arbitrator] = await Promise.all([
+        prismaClient.dispute.findUnique({
+            where: { id: disputeId },
+            include: adminDisputeDetailInclude
+        }),
+        prismaClient.user.findFirst({
+            where: {
+                id: arbitratorId,
+                role: Role.ARBITRATOR,
+                isActive: true
+            }
+        })
+    ])
+
+    if (!disputeRecord) {
+        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    if (!arbitrator) {
+        throw new BadRequestException('Không tìm thấy trọng tài hợp lệ', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    if (!disputeRecord.lockedAt) {
+        throw new BadRequestException(
+            'Cần khóa hồ sơ tranh chấp trước khi phân công trọng tài',
+            ErrorCode.PARAM_QUERY_ERROR
+        )
+    }
+
+    if (disputeRecord.arbitratorId === arbitratorId) {
+        return buildAdminDisputeDetailResponse(disputeRecord)
+    }
+
+    const updated = await prismaClient.dispute.update({
+        where: { id: disputeId },
+        data: {
+            arbitratorId,
+            arbitratorAssignedAt: new Date()
+        },
+        include: adminDisputeDetailInclude
+    })
+
+    return buildAdminDisputeDetailResponse(updated)
 }
 
 const joinDispute = async (adminId: string, disputeId: string, payload: AdminJoinDisputeInput) => {
@@ -1344,8 +1477,11 @@ const generateArbitrationDossier = async (
 }
 
 const adminDisputeService = {
+    listArbitrators,
     listDisputes,
     getDispute,
+    listDisputeDossiers,
+    assignArbitrator,
     joinDispute,
     requestArbitrationFees,
     lockDispute,

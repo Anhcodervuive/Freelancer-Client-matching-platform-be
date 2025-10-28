@@ -1,5 +1,6 @@
 import { prisma } from './_utils'
 import { seedTaxonomy } from './taxonomy'
+import { seedArbitrators } from './arbitrator'
 
 /**
  * Cho phép chạy 1 phần:  `npm run seed -- taxonomy`
@@ -9,6 +10,7 @@ const only = new Set(process.argv.slice(2).map(s => s.toLowerCase()))
 
 async function main() {
         if (!only.size || only.has('taxonomy')) await seedTaxonomy()
+        if (!only.size || only.has('arbitrator') || only.has('arbitrators')) await seedArbitrators()
 }
 
 main()
