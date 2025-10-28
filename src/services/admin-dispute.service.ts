@@ -411,7 +411,7 @@ const describeUserFromPayload = (user: unknown, fallbackId: unknown) => {
 const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
     const lines: string[] = []
 
-    appendLines(lines, 'Arbitration Dossier Summary')
+    appendLines(lines, '# Arbitration Dossier Summary')
     appendLines(lines, `Dispute ID: ${dossier.disputeId}`)
     appendLines(lines, `Dossier ID: ${dossier.id}`)
     appendLines(lines, `Version: ${dossier.version}`)
@@ -446,7 +446,7 @@ const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
         const timeline = Array.isArray(payload.timeline) ? payload.timeline : []
         const evidence = Array.isArray(payload.evidence) ? payload.evidence : []
 
-        appendLines(lines, 'Metadata')
+        appendLines(lines, '## Metadata')
 
         if (meta) {
             appendLines(lines, `- Dossier ID: ${toDisplayValue(meta.dossierId)}`)
@@ -462,7 +462,7 @@ const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
         }
 
         appendLines(lines, ' ')
-        appendLines(lines, 'Parties')
+        appendLines(lines, '## Parties')
 
         if (parties.length === 0) {
             appendLines(lines, '- (Không có thông tin đối tác)')
@@ -473,18 +473,20 @@ const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
                     const displayName = toDisplayValue(party.displayName)
                     const userId = toDisplayValue(party.userId)
                     const feePaid = toDisplayValue(party.feePaid)
-                    appendLines(lines, `- Party ${index + 1}: ${role}`)
+                    appendLines(lines, `### Party ${index + 1}`)
+                    appendLines(lines, `  Role: ${role}`)
                     appendLines(lines, `  Name: ${displayName}`)
                     appendLines(lines, `  User ID: ${userId}`)
                     appendLines(lines, `  Fee Paid: ${feePaid}`)
                 } else {
-                    appendLines(lines, `- Party ${index + 1}: ${toDisplayValue(party)}`)
+                    appendLines(lines, `### Party ${index + 1}`)
+                    appendLines(lines, `  ${toDisplayValue(party)}`)
                 }
             })
         }
 
         appendLines(lines, ' ')
-        appendLines(lines, 'Financials')
+        appendLines(lines, '## Financial Summary')
 
         if (financials) {
             appendLines(lines, `- Currency: ${toDisplayValue(financials.currency)}`)
@@ -510,7 +512,7 @@ const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
         }
 
         appendLines(lines, ' ')
-        appendLines(lines, 'Timeline (giới hạn 50 dòng)')
+        appendLines(lines, '## Timeline (giới hạn 50 dòng)')
 
         const limitedTimeline = timeline.slice(0, 50)
 
@@ -540,7 +542,7 @@ const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
         }
 
         appendLines(lines, ' ')
-        appendLines(lines, 'Evidence submissions (giới hạn 10 mục)')
+        appendLines(lines, '## Evidence Submissions (giới hạn 10 mục)')
 
         const limitedEvidence = evidence.slice(0, 10)
 
@@ -608,7 +610,7 @@ const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
     }
 
     appendLines(lines, ' ')
-    appendLines(lines, 'Payload (JSON, giới hạn 200 dòng)')
+    appendLines(lines, '## Payload (JSON, giới hạn 200 dòng)')
 
     try {
         const jsonString = JSON.stringify(payload, null, 2)
