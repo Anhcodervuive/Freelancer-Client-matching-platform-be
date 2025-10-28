@@ -412,7 +412,14 @@ const formatTableRows = (headers: string[], rows: string[][], columnMaxWidths: n
 
     const formatRow = (cells: string[]) =>
         cells
-            .map((cell, index) => cell.padEnd(columnWidths[index], ' '))
+            .map((cell, index) => {
+                const fallbackWidth = Math.min(
+                    Math.max(cell.length, 3),
+                    columnMaxWidths[index] ?? 60
+                )
+                const width = columnWidths[index] ?? fallbackWidth
+                return cell.padEnd(width, ' ')
+            })
             .join(' | ')
 
     const lines: string[] = []
