@@ -376,6 +376,226 @@ const appendLines = (collector: string[], content: string) => {
     collector.push(remaining.length > 0 ? remaining : ' ')
 }
 
+const truncatePrintable = (value: string, maxLength: number) => {
+    const limit = Math.max(4, maxLength)
+
+    if (value.length <= limit) {
+        return value
+    }
+
+    return `${value.slice(0, limit - 3).trimEnd()}...`
+}
+
+const normalizeTableText = (value: string) => value.replace(/\s+/g, ' ').trim()
+
+const formatTableRows = (headers: string[], rows: string[][], columnMaxWidths: number[]): string[] => {
+    if (headers.length === 0) {
+        return []
+    }
+
+    const sanitizedHeaders = headers.map((header, index) =>
+        truncatePrintable(normalizeTableText(header), columnMaxWidths[index] ?? 40)
+    )
+
+    const sanitizedRows = rows.map(row =>
+        row.map((cell, index) =>
+            truncatePrintable(normalizeTableText(cell ?? ''), columnMaxWidths[index] ?? 40)
+        )
+    )
+
+    const allRows = [sanitizedHeaders, ...sanitizedRows]
+    const columnWidths = sanitizedHeaders.map((_, index) => {
+        const maxForColumn = columnMaxWidths[index] ?? 60
+        const measured = allRows.reduce((acc, row) => Math.max(acc, row[index]?.length ?? 0), 0)
+        return Math.min(Math.max(measured, 3), maxForColumn)
+    })
+
+    const formatRow = (cells: string[]) =>
+        cells
+            .map((cell, index) => cell.padEnd(columnWidths[index], ' '))
+            .join(' | ')
+
+    const lines: string[] = []
+    lines.push(formatRow(sanitizedHeaders))
+    lines.push(columnWidths.map(width => '-'.repeat(width)).join('-+-'))
+    sanitizedRows.forEach(row => {
+        lines.push(formatRow(row))
+    })
+
+    return lines
+}
+
+const appendMonospaceTable = (
+    lines: string[],
+    headers: string[],
+    rows: string[][],
+    columnMaxWidths: number[],
+    options?: { emptyMessage?: string }
+) => {
+    if (rows.length === 0) {
+        if (options?.emptyMessage) {
+            appendLines(lines, options.emptyMessage)
+        }
+        lines.push(' ')
+        return
+    }
+
+    const tableLines = formatTableRows(headers, rows, columnMaxWidths)
+
+    lines.push('@@FONT:MONO')
+    tableLines.forEach(row => lines.push(row))
+    lines.push('@@FONT:DEFAULT')
+    lines.push(' ')
+}
+
+const appendKeyValueTable = (
+    lines: string[],
+    entries: { label: string; value: unknown }[],
+    columnMaxWidths: [number, number],
+    options?: { includeEmpty?: boolean }
+) => {
+    const rows = entries
+        .filter(entry => {
+            if (options?.includeEmpty) {
+                return true
+            }
+
+            const value = entry.value
+            if (value === null || value === undefined) {
+                return false
+            }
+
+            if (typeof value === 'string') {
+                return value.trim().length > 0
+            }
+
+            return true
+        })
+        .map(entry => [entry.label, toDisplayValue(entry.value)])
+
+    appendMonospaceTable(lines, ['Field', 'Value'], rows, columnMaxWidths, {
+        emptyMessage: '- Không có dữ liệu để hiển thị'
+    })
+}
+
+const describeBooleanValue = (value: unknown) => {
+    if (typeof value === 'boolean') {
+        return value ? 'Yes' : 'No'
+    }
+
+    if (value === 'true') {
+        return 'Yes'
+    }
+
+    if (value === 'false') {
+        return 'No'
+    }
+
+    return toDisplayValue(value)
+}
+
+const summarizeEvidenceAsset = (value: unknown) => {
+    if (!isRecord(value)) {
+        return null
+    }
+
+    const parts: string[] = []
+
+    if (typeof value.id === 'string' && value.id.length > 0) {
+        parts.push(`Asset ${value.id}`)
+    }
+
+    if (typeof value.mimeType === 'string' && value.mimeType.length > 0) {
+        parts.push(value.mimeType)
+    }
+
+    if (typeof value.bytes === 'number') {
+        parts.push(`${value.bytes} bytes`)
+    }
+
+    if (typeof value.url === 'string' && value.url.length > 0) {
+        parts.push(value.url)
+    }
+
+    return parts.length > 0 ? parts.join(' | ') : null
+}
+
+const summarizeEvidenceReference = (reference: unknown) => {
+    if (!isRecord(reference)) {
+        return toDisplayValue(reference)
+    }
+
+    const type = typeof reference.type === 'string' ? reference.type : 'UNKNOWN'
+
+    if (type === 'MILESTONE_ATTACHMENT' && isRecord(reference.attachment)) {
+        const attachment = reference.attachment
+        const parts: string[] = []
+
+        if (typeof attachment.name === 'string' && attachment.name.length > 0) {
+            parts.push(attachment.name)
+        }
+
+        if (typeof attachment.id === 'string' && attachment.id.length > 0) {
+            parts.push(`ID ${attachment.id}`)
+        }
+
+        if (typeof attachment.url === 'string' && attachment.url.length > 0) {
+            parts.push(attachment.url)
+        }
+
+        if (isRecord(attachment.submission)) {
+            const milestoneTitle =
+                typeof attachment.submission.milestoneTitle === 'string'
+                    ? attachment.submission.milestoneTitle
+                    : null
+            if (milestoneTitle) {
+                parts.push(`Milestone: ${milestoneTitle}`)
+            }
+        }
+
+        return `${type}: ${parts.join(' | ')}`
+    }
+
+    if (type === 'CHAT_ATTACHMENT' && isRecord(reference.attachment)) {
+        const attachment = reference.attachment
+        const parts: string[] = []
+
+        if (typeof attachment.name === 'string' && attachment.name.length > 0) {
+            parts.push(attachment.name)
+        }
+
+        if (typeof attachment.message === 'object' && attachment.message && !Array.isArray(attachment.message)) {
+            const message = attachment.message as Record<string, unknown>
+            const sender = typeof message.senderId === 'string' ? message.senderId : null
+            if (sender) {
+                parts.push(`Sender ${sender}`)
+            }
+
+            const sentAt = typeof message.sentAt === 'string' ? message.sentAt : null
+            if (sentAt) {
+                parts.push(`Sent ${sentAt}`)
+            }
+        }
+
+        if (typeof attachment.url === 'string' && attachment.url.length > 0) {
+            parts.push(attachment.url)
+        }
+
+        return `${type}: ${parts.join(' | ')}`
+    }
+
+    if (type === 'ASSET' && isRecord(reference.asset)) {
+        const summary = summarizeEvidenceAsset(reference.asset)
+        return summary ? `${type}: ${summary}` : type
+    }
+
+    if (type === 'EXTERNAL_URL' && typeof reference.url === 'string') {
+        return `${type}: ${reference.url}`
+    }
+
+    return toDisplayValue(reference)
+}
+
 const formatDateToken = (input: Date) => {
     const year = input.getUTCFullYear()
     const month = String(input.getUTCMonth() + 1).padStart(2, '0')
@@ -411,206 +631,280 @@ const describeUserFromPayload = (user: unknown, fallbackId: unknown) => {
 const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
     const lines: string[] = []
 
-    appendLines(lines, '# Arbitration Dossier Summary')
-    appendLines(lines, `Dispute ID: ${dossier.disputeId}`)
-    appendLines(lines, `Dossier ID: ${dossier.id}`)
-    appendLines(lines, `Version: ${dossier.version}`)
-    appendLines(lines, `Status: ${dossier.status}`)
-    appendLines(lines, `Generated At: ${dossier.generatedAt.toISOString()}`)
+    const generatedByParts: string[] = []
 
-    if (dossier.lockedAt) {
-        appendLines(lines, `Locked At: ${dossier.lockedAt.toISOString()}`)
+    if (dossier.generatedBy) {
+        const name = composeFullName(dossier.generatedBy.profile)
+
+        if (name) {
+            generatedByParts.push(name)
+        }
+
+        if (dossier.generatedBy.email) {
+            generatedByParts.push(dossier.generatedBy.email)
+        }
+
+        generatedByParts.push(dossier.generatedBy.id)
     }
 
-    if (dossier.finalizedAt) {
-        appendLines(lines, `Finalized At: ${dossier.finalizedAt.toISOString()}`)
-    }
+    const generatedBySummary = generatedByParts.length > 0 ? generatedByParts.filter(Boolean).join(' | ') : 'N/A'
 
-    if (dossier.hash) {
-        appendLines(lines, `Hash: ${dossier.hash}`)
-    }
+    appendLines(lines, '# Arbitration Dossier Report')
+    appendLines(lines, `Dispute: ${dossier.disputeId}`)
+    lines.push(' ')
 
-    if (dossier.notes) {
-        appendLines(lines, `Notes: ${dossier.notes}`)
-    }
-
-    appendLines(lines, `Generated By: ${dossier.generatedBy ? toDisplayValue(dossier.generatedBy.id) : 'N/A'}`)
-    appendLines(lines, ' ')
+    appendLines(lines, '## Case Overview')
+    appendKeyValueTable(
+        lines,
+        [
+            { label: 'Dossier ID', value: dossier.id },
+            { label: 'Version', value: dossier.version },
+            { label: 'Status', value: dossier.status },
+            { label: 'Generated At', value: dossier.generatedAt },
+            { label: 'Generated By', value: generatedBySummary },
+            { label: 'Locked At', value: dossier.lockedAt ?? null },
+            { label: 'Finalized At', value: dossier.finalizedAt ?? null },
+            { label: 'Hash', value: dossier.hash ?? null },
+            { label: 'Notes', value: dossier.notes ?? null }
+        ],
+        [26, 70],
+        { includeEmpty: true }
+    )
 
     const payload = dossier.payload
 
-    if (isRecord(payload)) {
-        const meta = isRecord(payload.meta) ? payload.meta : null
-        const parties = Array.isArray(payload.parties) ? payload.parties : []
-        const financials = isRecord(payload.financials) ? payload.financials : null
-        const timeline = Array.isArray(payload.timeline) ? payload.timeline : []
-        const evidence = Array.isArray(payload.evidence) ? payload.evidence : []
-
-        appendLines(lines, '## Metadata')
-
-        if (meta) {
-            appendLines(lines, `- Dossier ID: ${toDisplayValue(meta.dossierId)}`)
-            appendLines(lines, `- Status: ${toDisplayValue(meta.dossierStatus)}`)
-            appendLines(lines, `- Version: ${toDisplayValue(meta.dossierVersion)}`)
-            appendLines(lines, `- Generated At: ${toDisplayValue(meta.generatedAt)}`)
-            appendLines(lines, `- Generated By: ${toDisplayValue(meta.generatedBy)}`)
-            appendLines(lines, `- Locked At: ${toDisplayValue(meta.lockedAt)}`)
-            appendLines(lines, `- Notes: ${toDisplayValue(meta.notes)}`)
-            appendLines(lines, `- Hash: ${toDisplayValue(meta.hash)}`)
-        } else {
-            appendLines(lines, '- (Không có metadata trong payload)')
-        }
-
-        appendLines(lines, ' ')
-        appendLines(lines, '## Parties')
-
-        if (parties.length === 0) {
-            appendLines(lines, '- (Không có thông tin đối tác)')
-        } else {
-            parties.forEach((party, index) => {
-                if (isRecord(party)) {
-                    const role = toDisplayValue(party.role)
-                    const displayName = toDisplayValue(party.displayName)
-                    const userId = toDisplayValue(party.userId)
-                    const feePaid = toDisplayValue(party.feePaid)
-                    appendLines(lines, `### Party ${index + 1}`)
-                    appendLines(lines, `  Role: ${role}`)
-                    appendLines(lines, `  Name: ${displayName}`)
-                    appendLines(lines, `  User ID: ${userId}`)
-                    appendLines(lines, `  Fee Paid: ${feePaid}`)
-                } else {
-                    appendLines(lines, `### Party ${index + 1}`)
-                    appendLines(lines, `  ${toDisplayValue(party)}`)
-                }
-            })
-        }
-
-        appendLines(lines, ' ')
-        appendLines(lines, '## Financial Summary')
-
-        if (financials) {
-            appendLines(lines, `- Currency: ${toDisplayValue(financials.currency)}`)
-            appendLines(lines, `- Escrow Amount: ${toDisplayValue(financials.escrowAmount)}`)
-            appendLines(lines, `- Released: ${toDisplayValue(financials.released)}`)
-            appendLines(lines, `- Refunded: ${toDisplayValue(financials.refunded)}`)
-            appendLines(lines, `- Disputed: ${toDisplayValue(financials.disputed)}`)
-
-            const requested = isRecord(financials.requested) ? financials.requested : null
-            const decided = isRecord(financials.decided) ? financials.decided : null
-
-            if (requested) {
-                appendLines(lines, `- Requested (Client): ${toDisplayValue(requested.client)}`)
-                appendLines(lines, `- Requested (Freelancer): ${toDisplayValue(requested.freelancer)}`)
-            }
-
-            if (decided) {
-                appendLines(lines, `- Decided (Client): ${toDisplayValue(decided.client)}`)
-                appendLines(lines, `- Decided (Freelancer): ${toDisplayValue(decided.freelancer)}`)
-            }
-        } else {
-            appendLines(lines, '- (Không có dữ liệu tài chính)')
-        }
-
-        appendLines(lines, ' ')
-        appendLines(lines, '## Timeline (giới hạn 50 dòng)')
-
-        const limitedTimeline = timeline.slice(0, 50)
-
-        if (limitedTimeline.length === 0) {
-            appendLines(lines, '- (Không có dữ liệu timeline)')
-        } else {
-            limitedTimeline.forEach((entry, index) => {
-                if (isRecord(entry)) {
-                    const at = toDisplayValue(entry.at)
-                    const action = toDisplayValue(entry.action)
-                    const actor = toDisplayValue(entry.actor)
-                    const details = toDisplayValue(entry.details)
-                    appendLines(
-                        lines,
-                        `- ${index + 1}. ${at} | ${action} | Actor: ${actor}${
-                            details && details !== 'N/A' ? ` | Details: ${details}` : ''
-                        }`
-                    )
-                } else {
-                    appendLines(lines, `- ${index + 1}. ${toDisplayValue(entry)}`)
-                }
-            })
-
-            if (timeline.length > limitedTimeline.length) {
-                appendLines(lines, `- ... (${timeline.length - limitedTimeline.length} dòng bổ sung đã được lược bỏ)`)
-            }
-        }
-
-        appendLines(lines, ' ')
-        appendLines(lines, '## Evidence Submissions (giới hạn 10 mục)')
-
-        const limitedEvidence = evidence.slice(0, 10)
-
-        if (limitedEvidence.length === 0) {
-            appendLines(lines, '- (Không có bằng chứng trong payload)')
-        } else {
-            limitedEvidence.forEach((submission, submissionIndex) => {
-                if (isRecord(submission)) {
-                    const submissionId = toDisplayValue(submission.id)
-                    const submittedAt = toDisplayValue(submission.submittedAt)
-                    const submittedBy = describeUserFromPayload(submission.submittedBy, submission.submittedById)
-                    const statement = toDisplayValue(submission.statement)
-                    appendLines(
-                        lines,
-                        `- Submission ${submissionIndex + 1}: ${submissionId} | By: ${submittedBy} | At: ${submittedAt}`
-                    )
-
-                    if (statement && statement !== 'N/A') {
-                        appendLines(lines, `  Statement: ${statement}`)
-                    }
-
-                    const items = Array.isArray(submission.items) ? submission.items.slice(0, 10) : []
-
-                    if (items.length === 0) {
-                        appendLines(lines, '  Items: (không có)')
-                    } else {
-                        items.forEach((item, itemIndex) => {
-                            if (isRecord(item)) {
-                                const label = toDisplayValue(item.label)
-                                const description = toDisplayValue(item.description)
-                                const sourceType = toDisplayValue(item.sourceType)
-                                const reference = toDisplayValue(item.reference)
-                                appendLines(
-                                    lines,
-                                    `  - Item ${itemIndex + 1}: ${label} | Source: ${sourceType} | Description: ${description}`
-                                )
-
-                                if (reference && reference !== 'N/A') {
-                                    appendLines(lines, `    Reference: ${reference}`)
-                                }
-                            } else {
-                                appendLines(lines, `  - Item ${itemIndex + 1}: ${toDisplayValue(item)}`)
-                            }
-                        })
-
-                        if (Array.isArray(submission.items) && submission.items.length > items.length) {
-                            appendLines(
-                                lines,
-                                `  - ... (${submission.items.length - items.length} mục bổ sung đã được lược bỏ)`
-                            )
-                        }
-                    }
-                } else {
-                    appendLines(lines, `- Submission ${submissionIndex + 1}: ${toDisplayValue(submission)}`)
-                }
-            })
-
-            if (evidence.length > limitedEvidence.length) {
-                appendLines(lines, `- ... (${evidence.length - limitedEvidence.length} submission bổ sung đã được lược bỏ)`)
-            }
-        }
-    } else {
+    if (!isRecord(payload)) {
+        lines.push(' ')
         appendLines(lines, 'Payload summary: Không có payload JSON hợp lệ, hiển thị dữ liệu dạng chuỗi:')
         appendLines(lines, toDisplayValue(payload))
+        return lines
     }
 
-    appendLines(lines, ' ')
-    appendLines(lines, '## Payload (JSON, giới hạn 200 dòng)')
+    const meta = isRecord(payload.meta) ? payload.meta : null
+    const parties = Array.isArray(payload.parties) ? payload.parties : []
+    const financials = isRecord(payload.financials) ? payload.financials : null
+    const timeline = Array.isArray(payload.timeline) ? payload.timeline : []
+    const evidence = Array.isArray(payload.evidence) ? payload.evidence : []
+
+    lines.push(' ')
+    appendLines(lines, '## Metadata Overview')
+
+    if (meta) {
+        appendKeyValueTable(
+            lines,
+            [
+                { label: 'Dossier ID', value: meta.dossierId ?? dossier.id },
+                { label: 'Dispute ID', value: meta.disputeId ?? dossier.disputeId },
+                { label: 'Dossier Status', value: meta.dossierStatus ?? dossier.status },
+                { label: 'Version', value: meta.dossierVersion ?? dossier.version },
+                { label: 'Generated At', value: meta.generatedAt ?? dossier.generatedAt },
+                { label: 'Generated By', value: meta.generatedBy ?? generatedBySummary },
+                { label: 'Locked At', value: meta.lockedAt ?? null },
+                { label: 'Notes', value: meta.notes ?? null },
+                { label: 'Hash', value: meta.hash ?? dossier.hash }
+            ],
+            [28, 68],
+            { includeEmpty: true }
+        )
+    } else {
+        appendLines(lines, '- (Không có metadata trong payload)')
+        lines.push(' ')
+    }
+
+    appendLines(lines, '## Parties Involved')
+
+    if (parties.length === 0) {
+        appendLines(lines, '- (Không có thông tin đối tác)')
+        lines.push(' ')
+    } else {
+        const partyRows = parties.map((party, index) => {
+            if (isRecord(party)) {
+                const role = toDisplayValue(party.role ?? `Party ${index + 1}`)
+                const displayName = toDisplayValue(party.displayName ?? null)
+                const userId = toDisplayValue(party.userId ?? null)
+                const feePaid = describeBooleanValue(party.feePaid ?? null)
+
+                return [`${index + 1}. ${role}`, displayName, userId, feePaid]
+            }
+
+            return [`${index + 1}`, toDisplayValue(party), 'N/A', 'N/A']
+        })
+
+        appendMonospaceTable(
+            lines,
+            ['Vai trò', 'Tên hiển thị', 'Mã người dùng', 'Đã đóng phí'],
+            partyRows,
+            [22, 32, 20, 14]
+        )
+    }
+
+    appendLines(lines, '## Financial Overview')
+
+    if (financials) {
+        appendKeyValueTable(
+            lines,
+            [
+                { label: 'Currency', value: financials.currency ?? null },
+                { label: 'Escrow Amount', value: financials.escrowAmount ?? null },
+                { label: 'Released', value: financials.released ?? null },
+                { label: 'Refunded', value: financials.refunded ?? null },
+                { label: 'Disputed', value: financials.disputed ?? null }
+            ],
+            [24, 70],
+            { includeEmpty: true }
+        )
+
+        const requested = isRecord(financials.requested) ? financials.requested : null
+
+        if (requested) {
+            appendLines(lines, '### Requested Awards')
+            appendMonospaceTable(
+                lines,
+                ['Bên', 'Giá trị'],
+                [
+                    ['Client', toDisplayValue(requested.client ?? null)],
+                    ['Freelancer', toDisplayValue(requested.freelancer ?? null)]
+                ],
+                [16, 24]
+            )
+        }
+
+        const decided = isRecord(financials.decided) ? financials.decided : null
+
+        if (decided) {
+            appendLines(lines, '### Decided Awards')
+            appendMonospaceTable(
+                lines,
+                ['Bên', 'Giá trị'],
+                [
+                    ['Client', toDisplayValue(decided.client ?? null)],
+                    ['Freelancer', toDisplayValue(decided.freelancer ?? null)]
+                ],
+                [16, 24]
+            )
+        }
+    } else {
+        appendLines(lines, '- (Không có dữ liệu tài chính)')
+        lines.push(' ')
+    }
+
+    appendLines(lines, '## Timeline (tối đa 40 mốc)')
+
+    const limitedTimeline = timeline.slice(0, 40)
+
+    if (limitedTimeline.length === 0) {
+        appendLines(lines, '- (Không có dữ liệu timeline)')
+        lines.push(' ')
+    } else {
+        const timelineRows = limitedTimeline.map(entry => {
+            if (isRecord(entry)) {
+                const at = toDisplayValue(entry.at ?? null)
+                const actor = describeUserFromPayload(entry.actor ?? null, entry.actor ?? null)
+                const action = toDisplayValue(entry.action ?? null)
+                const details = entry.details !== undefined ? toDisplayValue(entry.details) : ''
+
+                return [at, actor, action, details === 'N/A' ? '' : details]
+            }
+
+            return [toDisplayValue(entry), '', '', '']
+        })
+
+        appendMonospaceTable(
+            lines,
+            ['Thời gian', 'Tác nhân', 'Hành động', 'Chi tiết'],
+            timelineRows,
+            [24, 22, 20, 40]
+        )
+
+        if (timeline.length > limitedTimeline.length) {
+            appendLines(lines, `- ... (${timeline.length - limitedTimeline.length} mốc bổ sung đã được lược bỏ)`)
+            lines.push(' ')
+        }
+    }
+
+    appendLines(lines, '## Evidence Submissions')
+
+    const limitedEvidence = evidence.slice(0, 10)
+
+    if (limitedEvidence.length === 0) {
+        appendLines(lines, '- (Không có bằng chứng trong payload)')
+        lines.push(' ')
+    } else {
+        limitedEvidence.forEach((submission, submissionIndex) => {
+            if (isRecord(submission)) {
+                appendLines(lines, `### Submission ${submissionIndex + 1}`)
+                appendKeyValueTable(
+                    lines,
+                    [
+                        { label: 'Submission ID', value: submission.id ?? null },
+                        {
+                            label: 'Submitted By',
+                            value: describeUserFromPayload(submission.submittedBy ?? null, submission.submittedById ?? null)
+                        },
+                        { label: 'Statement', value: submission.statement ?? null },
+                        {
+                            label: 'No Additional Evidence',
+                            value: describeBooleanValue(submission.noAdditionalEvidence ?? null)
+                        },
+                        { label: 'Submitted At', value: submission.submittedAt ?? null }
+                    ],
+                    [30, 66],
+                    { includeEmpty: true }
+                )
+
+                const items = Array.isArray(submission.items) ? submission.items : []
+
+                if (items.length > 0) {
+                    const limitedItems = items.slice(0, 15)
+
+                    const itemRows = limitedItems.map((item, itemIndex) => {
+                        if (isRecord(item)) {
+                            const label = item.label ?? item.id ?? `Item ${itemIndex + 1}`
+                            const sourceType = toDisplayValue(item.sourceType ?? null)
+                            const sourceId = item.sourceId ? ` (${toDisplayValue(item.sourceId)})` : ''
+                            const referenceSummary = summarizeEvidenceReference(item.reference ?? null)
+                            const assetSummary = summarizeEvidenceAsset(item.asset ?? null)
+                            const combinedReference = [referenceSummary, assetSummary].filter(Boolean).join(' | ')
+
+                            return [
+                                `${itemIndex + 1}. ${toDisplayValue(label)}`,
+                                `${sourceType}${sourceId}`,
+                                combinedReference.length > 0 ? combinedReference : 'N/A',
+                                toDisplayValue(item.createdAt ?? null)
+                            ]
+                        }
+
+                        return [`${itemIndex + 1}`, toDisplayValue(item), 'N/A', 'N/A']
+                    })
+
+                    appendMonospaceTable(
+                        lines,
+                        ['Nhãn', 'Nguồn', 'Tham chiếu', 'Thời gian'],
+                        itemRows,
+                        [24, 26, 44, 18]
+                    )
+
+                    if (items.length > limitedItems.length) {
+                        appendLines(lines, `  ... (${items.length - limitedItems.length} mục bổ sung đã được lược bỏ)`)
+                        lines.push(' ')
+                    }
+                } else {
+                    appendLines(lines, '  Không có mục bằng chứng đính kèm')
+                    lines.push(' ')
+                }
+            } else {
+                appendLines(lines, `- Submission ${submissionIndex + 1}: ${toDisplayValue(submission)}`)
+                lines.push(' ')
+            }
+        })
+
+        if (evidence.length > limitedEvidence.length) {
+            appendLines(lines, `- ... (${evidence.length - limitedEvidence.length} submission bổ sung đã được lược bỏ)`)
+            lines.push(' ')
+        }
+    }
+
+    appendLines(lines, '## Payload Snapshot (JSON, giới hạn 200 dòng)')
 
     try {
         const jsonString = JSON.stringify(payload, null, 2)

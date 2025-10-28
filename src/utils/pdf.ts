@@ -7,6 +7,13 @@ const PAGE_HEIGHT = 792
 const DEFAULT_LEADING = 18
 const NEWLINE = '\r\n'
 
+const FONT_KEYS = {
+    default: 'F1',
+    monospace: 'F2'
+} as const
+
+type FontKey = keyof typeof FONT_KEYS
+
 const normalizeLine = (line: string) =>
     line
         .replace(/\r\n/g, '\n')
@@ -58,13 +65,17 @@ const buildContentStream = (lines: string[]): Buffer => {
     ]
 
     let currentFontSize = DEFAULT_FONT_SIZE
+    let currentFontKey: FontKey = 'default'
     let currentLeading = DEFAULT_LEADING
     let isFirstLine = true
     let pendingBlankLines = 0
+    let activeFontKey: FontKey = 'default'
 
-    const ensureFontSize = (size: number) => {
-        if (currentFontSize !== size) {
-            contentParts.push(`/F1 ${size} Tf`)
+    const ensureFont = (fontKey: FontKey, size: number) => {
+        if (currentFontKey !== fontKey || currentFontSize !== size) {
+            const fontRef = FONT_KEYS[fontKey]
+            contentParts.push(`/${fontRef} ${size} Tf`)
+            currentFontKey = fontKey
             currentFontSize = size
         }
 
@@ -89,12 +100,12 @@ const buildContentStream = (lines: string[]): Buffer => {
         }
     }
 
-    const writeSegments = (text: string, fontSize: number) => {
+    const writeSegments = (text: string, fontSize: number, fontKey: FontKey) => {
         const segments = chunkLine(text)
 
         segments.forEach(segment => {
             moveToNextLine()
-            ensureFontSize(fontSize)
+            ensureFont(fontKey, fontSize)
 
             const printable = segment.length > 0 ? segment : ' '
             const escaped = escapePdfString(removeDiacritics(printable))
@@ -110,15 +121,25 @@ const buildContentStream = (lines: string[]): Buffer => {
             return
         }
 
-        writeSegments(normalized, fontSize)
+        writeSegments(normalized, fontSize, 'default')
         pendingBlankLines = Math.max(pendingBlankLines, extraSpacing)
     }
 
     if (lines.length === 0) {
-        writeSegments('No content', DEFAULT_FONT_SIZE)
+        writeSegments('No content', DEFAULT_FONT_SIZE, 'default')
     } else {
         lines.forEach(rawLine => {
             const line = rawLine ?? ''
+
+            if (line === '@@FONT:MONO') {
+                activeFontKey = 'monospace'
+                return
+            }
+
+            if (line === '@@FONT:DEFAULT') {
+                activeFontKey = 'default'
+                return
+            }
 
             if (line.startsWith('# ')) {
                 writeHeading(line.slice(2).toUpperCase(), 18, 2)
@@ -140,7 +161,7 @@ const buildContentStream = (lines: string[]): Buffer => {
                 return
             }
 
-            writeSegments(line, DEFAULT_FONT_SIZE)
+            writeSegments(line, DEFAULT_FONT_SIZE, activeFontKey)
         })
     }
 
@@ -160,7 +181,7 @@ export const createSimplePdf = (lines: string[]): Buffer => {
         Buffer.from(`1 0 obj${NEWLINE}<< /Type /Catalog /Pages 2 0 R >>${NEWLINE}endobj${NEWLINE}`, 'utf8'),
         Buffer.from(`2 0 obj${NEWLINE}<< /Type /Pages /Kids [3 0 R] /Count 1 >>${NEWLINE}endobj${NEWLINE}`, 'utf8'),
         Buffer.from(
-            `3 0 obj${NEWLINE}<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>${NEWLINE}endobj${NEWLINE}`,
+            `3 0 obj${NEWLINE}<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>${NEWLINE}endobj${NEWLINE}`,
             'utf8'
         ),
         Buffer.concat([
@@ -170,6 +191,10 @@ export const createSimplePdf = (lines: string[]): Buffer => {
         ]),
         Buffer.from(
             `5 0 obj${NEWLINE}<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>${NEWLINE}endobj${NEWLINE}`,
+            'utf8'
+        ),
+        Buffer.from(
+            `6 0 obj${NEWLINE}<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>${NEWLINE}endobj${NEWLINE}`,
             'utf8'
         )
     ]
