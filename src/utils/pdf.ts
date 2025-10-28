@@ -1,10 +1,11 @@
 import { Buffer } from 'node:buffer'
 
 const DEFAULT_FONT_SIZE = 12
-const DEFAULT_LINE_WIDTH = 110
-const PAGE_MARGIN = 72
+const DEFAULT_LINE_WIDTH = 100
+const PAGE_MARGIN = 64
 const PAGE_HEIGHT = 792
-const DEFAULT_LEADING = 16
+const DEFAULT_LEADING = 18
+const NEWLINE = '\r\n'
 
 const normalizeLine = (line: string) =>
     line
@@ -48,7 +49,7 @@ const escapePdfString = (input: string) =>
         .replace(/\(/g, '\\(')
         .replace(/\)/g, '\\)')
 
-const buildContentStream = (lines: string[]): string => {
+const buildContentStream = (lines: string[]): Buffer => {
     const contentParts: string[] = [
         'BT',
         `/F1 ${DEFAULT_FONT_SIZE} Tf`,
@@ -145,43 +146,56 @@ const buildContentStream = (lines: string[]): string => {
 
     contentParts.push('ET')
 
-    return contentParts.join('\n')
+    return Buffer.from(contentParts.join(NEWLINE), 'utf8')
 }
 
 export const createSimplePdf = (lines: string[]): Buffer => {
-    const contentStream = buildContentStream(lines)
-    const contentLength = Buffer.byteLength(contentStream, 'binary')
+    const streamBuffer = buildContentStream(lines)
 
-    const header = '%PDF-1.4\n%âãÏÓ\n'
-    const objects: string[] = [
-        '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
-        '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
-        `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n`,
-        `4 0 obj\n<< /Length ${contentLength} >>\nstream\n${contentStream}\nendstream\nendobj\n`,
-        '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n'
+    const contentLength = streamBuffer.length
+
+    const headerBuffer = Buffer.from(`%PDF-1.4${NEWLINE}%âãÏÓ${NEWLINE}`, 'utf8')
+
+    const objects: Buffer[] = [
+        Buffer.from(`1 0 obj${NEWLINE}<< /Type /Catalog /Pages 2 0 R >>${NEWLINE}endobj${NEWLINE}`, 'utf8'),
+        Buffer.from(`2 0 obj${NEWLINE}<< /Type /Pages /Kids [3 0 R] /Count 1 >>${NEWLINE}endobj${NEWLINE}`, 'utf8'),
+        Buffer.from(
+            `3 0 obj${NEWLINE}<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>${NEWLINE}endobj${NEWLINE}`,
+            'utf8'
+        ),
+        Buffer.concat([
+            Buffer.from(`4 0 obj${NEWLINE}<< /Length ${contentLength} >>${NEWLINE}stream${NEWLINE}`, 'utf8'),
+            streamBuffer,
+            Buffer.from(`${NEWLINE}endstream${NEWLINE}endobj${NEWLINE}`, 'utf8')
+        ]),
+        Buffer.from(
+            `5 0 obj${NEWLINE}<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>${NEWLINE}endobj${NEWLINE}`,
+            'utf8'
+        )
     ]
 
     const offsets: number[] = [0]
-    let position = Buffer.byteLength(header, 'binary')
+    let position = headerBuffer.length
 
-    objects.forEach(obj => {
+    objects.forEach(objectBuffer => {
         offsets.push(position)
-        position += Buffer.byteLength(obj, 'binary')
+        position += objectBuffer.length
     })
 
-    const startXref = position
-    let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+    const xrefEntries = offsets
+        .map((offset, index) =>
+            index === 0 ? '0000000000 65535 f ' : `${offset.toString().padStart(10, '0')} 00000 n `
+        )
+        .map(entry => `${entry}${NEWLINE}`)
+        .join('')
 
-    for (let i = 1; i < offsets.length; i += 1) {
-        const offsetValue = offsets[i] ?? 0
-        xref += `${offsetValue.toString().padStart(10, '0')} 00000 n \n`
-    }
+    const xrefBuffer = Buffer.from(`xref${NEWLINE}0 ${objects.length + 1}${NEWLINE}${xrefEntries}`, 'utf8')
+    const trailerBuffer = Buffer.from(
+        `trailer${NEWLINE}<< /Size ${objects.length + 1} /Root 1 0 R >>${NEWLINE}startxref${NEWLINE}${position}${NEWLINE}%%EOF${NEWLINE}`,
+        'utf8'
+    )
 
-    const trailer = `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF`
-
-    const pdfContent = header + objects.join('') + xref + trailer
-
-    return Buffer.from(pdfContent, 'binary')
+    return Buffer.concat([headerBuffer, ...objects, xrefBuffer, trailerBuffer])
 }
 
 export default createSimplePdf
