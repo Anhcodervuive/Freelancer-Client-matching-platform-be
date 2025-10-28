@@ -93,6 +93,17 @@ const contractFreelancerSelect = Prisma.validator<Prisma.FreelancerSelect>()({
 	}
 })
 
+const disputeArbitratorSelect = Prisma.validator<Prisma.UserSelect>()({
+	id: true,
+	email: true,
+	profile: {
+		select: {
+			firstName: true,
+			lastName: true
+		}
+	}
+})
+
 const contractSummaryInclude = Prisma.validator<Prisma.ContractInclude>()({
 	jobPost: {
 		select: contractJobSummarySelect
@@ -315,7 +326,10 @@ const disputeContextInclude = Prisma.validator<Prisma.DisputeInclude>()({
 			}
 		}
 	},
-	latestProposal: true
+	latestProposal: true,
+	arbitrator: {
+		select: disputeArbitratorSelect
+	}
 })
 
 const contractDisputeMilestoneSelect = Prisma.validator<Prisma.MilestoneSelect>()({
@@ -338,7 +352,10 @@ const contractDisputeMilestoneSelect = Prisma.validator<Prisma.MilestoneSelect>(
 			amountRefunded: true,
 			dispute: {
 				include: {
-					latestProposal: true
+					latestProposal: true,
+					arbitrator: {
+						select: disputeArbitratorSelect
+					}
 				}
 			}
 		}
@@ -347,6 +364,9 @@ const contractDisputeMilestoneSelect = Prisma.validator<Prisma.MilestoneSelect>(
 
 const disputeDetailInclude = Prisma.validator<Prisma.DisputeInclude>()({
 	latestProposal: true,
+	arbitrator: {
+		select: disputeArbitratorSelect
+	},
 	negotiations: {
 		orderBy: { createdAt: 'asc' }
 	},
@@ -438,7 +458,7 @@ type PaymentEntity = Prisma.PaymentGetPayload<Prisma.PaymentDefaultArgs>
 type TransferEntity = Prisma.TransferGetPayload<{}>
 type RefundEntity = Prisma.RefundGetPayload<{}>
 type DisputeNegotiationEntity = Prisma.DisputeNegotiationGetPayload<{}>
-type DisputeEntity = Prisma.DisputeGetPayload<{ include: { latestProposal: true } }>
+type DisputeEntity = Prisma.DisputeGetPayload<{ include: { latestProposal: true; arbitrator: { select: typeof disputeArbitratorSelect } } }>
 type DisputeContextPayload = Prisma.DisputeGetPayload<{ include: typeof disputeContextInclude }>
 type DisputeEscrowPayload = NonNullable<DisputeContextPayload['escrow']>
 type DisputeMilestonePayload = NonNullable<DisputeEscrowPayload['milestone']>
@@ -1289,6 +1309,11 @@ const serializeDisputeNegotiation = (negotiation: DisputeNegotiationEntity) => {
 }
 
 const serializeDispute = (dispute: DisputeEntity) => {
+	const arbitratorProfile = dispute.arbitrator?.profile ?? null
+	const arbitratorFirstName = arbitratorProfile?.firstName ?? null
+	const arbitratorLastName = arbitratorProfile?.lastName ?? null
+	const arbitratorDisplayName = composeFullName(arbitratorProfile)
+
 	return {
 		id: dispute.id,
 		escrowId: dispute.escrowId,
@@ -1306,6 +1331,17 @@ const serializeDispute = (dispute: DisputeEntity) => {
 		decidedRefund: Number(dispute.decidedRefund),
 		decidedById: dispute.decidedById ?? null,
 		note: dispute.note ?? null,
+		arbitratorId: dispute.arbitratorId ?? null,
+		arbitratorAssignedAt: dispute.arbitratorAssignedAt ?? null,
+		arbitrator: dispute.arbitrator
+			? {
+				id: dispute.arbitrator.id,
+				email: dispute.arbitrator.email,
+				firstName: arbitratorFirstName,
+				lastName: arbitratorLastName,
+				displayName: arbitratorDisplayName
+			}
+			: null,
 		createdAt: dispute.createdAt,
 		updatedAt: dispute.updatedAt,
 		latestProposal: dispute.latestProposal ? serializeDisputeNegotiation(dispute.latestProposal) : null
@@ -2385,7 +2421,12 @@ const respondMilestoneCancellation = async (
 				openedById: freelancerUserId,
 				note: disputeNote
 			},
-			include: { latestProposal: true }
+			include: {
+				latestProposal: true,
+				arbitrator: {
+					select: disputeArbitratorSelect
+				}
+			}
 		})
 
 		await tx.escrow.update({
@@ -2555,7 +2596,12 @@ const openMilestoneDispute = async (
 				proposedRelease: new Prisma.Decimal(releaseValue),
 				proposedRefund: new Prisma.Decimal(refundValue)
 			},
-			include: { latestProposal: true }
+			include: {
+				latestProposal: true,
+				arbitrator: {
+					select: disputeArbitratorSelect
+				}
+			}
 		})
 
 		await tx.escrow.update({
@@ -2655,7 +2701,12 @@ const createDisputeNegotiation = async (
 				responseDeadline,
 				status: DisputeStatus.NEGOTIATION
 			},
-			include: { latestProposal: true }
+			include: {
+				latestProposal: true,
+				arbitrator: {
+					select: disputeArbitratorSelect
+				}
+			}
 		})
 
 		return { negotiation, dispute: updatedDispute }
@@ -2754,7 +2805,12 @@ const updateDisputeNegotiation = async (
 				responseDeadline,
 				status: DisputeStatus.NEGOTIATION
 			},
-			include: { latestProposal: true }
+			include: {
+				latestProposal: true,
+				arbitrator: {
+					select: disputeArbitratorSelect
+				}
+			}
 		})
 
 		return { negotiation: updatedNegotiation, dispute: updatedDispute }
@@ -2840,7 +2896,12 @@ const deleteDisputeNegotiation = async (
 						responseDeadline: null,
 						status: DisputeStatus.OPEN
 				  },
-			include: { latestProposal: true }
+			include: {
+				latestProposal: true,
+				arbitrator: {
+					select: disputeArbitratorSelect
+				}
+			}
 		})
 
 		await tx.disputeNegotiation.delete({ where: { id: negotiationRecord.id } })
@@ -2943,7 +3004,12 @@ const respondDisputeNegotiation = async (
 							decidedById: null,
 							responseDeadline: null
 						},
-						include: { latestProposal: true }
+						include: {
+							latestProposal: true,
+							arbitrator: {
+								select: disputeArbitratorSelect
+							}
+						}
 				  })
 				: await tx.dispute.update({
 						where: { id: disputeId },
@@ -2957,7 +3023,12 @@ const respondDisputeNegotiation = async (
 							decidedById: null,
 							responseDeadline: null
 						},
-						include: { latestProposal: true }
+						include: {
+							latestProposal: true,
+							arbitrator: {
+								select: disputeArbitratorSelect
+							}
+						}
 				  })
 
 		return { dispute: updatedDispute, negotiation: updatedNegotiation }
