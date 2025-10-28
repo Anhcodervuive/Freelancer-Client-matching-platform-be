@@ -11,7 +11,8 @@ import {
     generateArbitrationDossier,
     listArbitrators,
     assignArbitratorToDispute,
-    listDisputeDossiers
+    listDisputeDossiers,
+    downloadDisputeDossierPdf
 } from '~/controllers/admin/dispute.controller'
 
 const router = Router()
@@ -20,6 +21,11 @@ router.get('/', authenticateMiddleware, errorHandler(listAdminDisputes))
 router.get('/arbitrators', authenticateMiddleware, errorHandler(listArbitrators))
 router.get('/:disputeId', authenticateMiddleware, errorHandler(getAdminDispute))
 router.get('/:disputeId/dossiers', authenticateMiddleware, errorHandler(listDisputeDossiers))
+router.get(
+    '/:disputeId/dossiers/:dossierId/pdf',
+    authenticateMiddleware,
+    errorHandler(downloadDisputeDossierPdf)
+)
 router.post('/:disputeId/join', authenticateMiddleware, errorHandler(joinDisputeAsAdmin))
 router.post(
     '/:disputeId/request-arbitration-fees',

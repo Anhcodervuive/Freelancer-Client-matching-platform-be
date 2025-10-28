@@ -126,6 +126,32 @@ export const listDisputeDossiers = async (req: Request, res: Response) => {
     return res.json(result)
 }
 
+export const downloadDisputeDossierPdf = async (req: Request, res: Response) => {
+    ensureAdminUser(req)
+
+    const { disputeId, dossierId } = req.params
+
+    if (!disputeId) {
+        throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    if (!dossierId) {
+        throw new BadRequestException('Thiếu dossierId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const { buffer, filename } = await adminDisputeService.getDisputeDossierPdf(disputeId, dossierId)
+    const safeFilename = filename.replace(/"/g, '')
+    const encodedFilename = encodeURIComponent(safeFilename)
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`
+    )
+
+    return res.status(200).send(buffer)
+}
+
 export const assignArbitratorToDispute = async (req: Request, res: Response) => {
     const adminId = ensureAdminUser(req)
     const { disputeId } = req.params
