@@ -771,6 +771,14 @@ export interface DossierPdfContent {
         requested?: PdfTableContent | null
         decided?: PdfTableContent | null
     }
+    milestone?: {
+        details: PdfKeyValuePair[] | null
+        note?: string | null
+    } | null
+    milestoneSubmissions?: {
+        table: PdfTableContent | null
+        note?: string | null
+    } | null
     timeline?: PdfTableContent | null
     evidenceSections: PdfEvidenceSection[]
     evidenceNote?: string | null
@@ -1255,6 +1263,23 @@ const renderDossierPdf = (content: DossierPdfContent): Buffer => {
     if (content.financialOverview.decided) {
         builder.addSubheading('Decided Awards')
         builder.addTable(content.financialOverview.decided)
+    }
+
+    builder.addSectionHeading('Milestone Details')
+    if (content.milestone?.details && content.milestone.details.length > 0) {
+        builder.addKeyValuePairs(content.milestone.details)
+    } else {
+        builder.addNote(content.milestone?.note ?? 'Không có thông tin milestone trong payload')
+    }
+
+    builder.addSectionHeading('Milestone Submissions')
+    if (content.milestoneSubmissions?.table) {
+        builder.addTable(content.milestoneSubmissions.table)
+        if (content.milestoneSubmissions.note) {
+            builder.addNote(content.milestoneSubmissions.note)
+        }
+    } else {
+        builder.addNote(content.milestoneSubmissions?.note ?? 'Không có milestone submission trong payload')
     }
 
     builder.addSectionHeading('Timeline (tối đa 40 mốc)')
