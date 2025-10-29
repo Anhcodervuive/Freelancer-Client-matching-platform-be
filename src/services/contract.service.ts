@@ -2414,17 +2414,18 @@ const respondMilestoneCancellation = async (
 
 	const disputeNote = payload.reason ? payload.reason.trim() : null
 
-	const disputeRecord = await prismaClient.$transaction(async tx => {
-		const createdDispute = await tx.dispute.create({
-			data: {
-				escrowId: escrow.id,
-				openedById: freelancerUserId,
-				note: disputeNote
-			},
-			include: {
-				latestProposal: true,
-				arbitrator: {
-					select: disputeArbitratorSelect
+        const disputeRecord = await prismaClient.$transaction(async tx => {
+                const createdDispute = await tx.dispute.create({
+                        data: {
+                                escrowId: escrow.id,
+                                openedById: freelancerUserId,
+                                note: disputeNote,
+                                arbFeePerParty: new Prisma.Decimal(10)
+                        },
+                        include: {
+                                latestProposal: true,
+                                arbitrator: {
+                                        select: disputeArbitratorSelect
 				}
 			}
 		})
@@ -2564,18 +2565,19 @@ const openMilestoneDispute = async (
 
 	const counterpartyId = isClient ? contract.freelancerId : contract.clientId
 
-	const disputeRecord = await prismaClient.$transaction(async tx => {
-		const createdDispute = await tx.dispute.create({
-			data: {
-				escrowId: escrow.id,
-				openedById: userId,
-				status: DisputeStatus.OPEN,
-				note: disputeNote,
-				proposedRelease: new Prisma.Decimal(releaseValue),
-				proposedRefund: new Prisma.Decimal(refundValue),
-				responseDeadline
-			}
-		})
+        const disputeRecord = await prismaClient.$transaction(async tx => {
+                const createdDispute = await tx.dispute.create({
+                        data: {
+                                escrowId: escrow.id,
+                                openedById: userId,
+                                status: DisputeStatus.OPEN,
+                                note: disputeNote,
+                                proposedRelease: new Prisma.Decimal(releaseValue),
+                                proposedRefund: new Prisma.Decimal(refundValue),
+                                responseDeadline,
+                                arbFeePerParty: new Prisma.Decimal(10)
+                        }
+                })
 
 		const negotiation = await tx.disputeNegotiation.create({
 			data: {

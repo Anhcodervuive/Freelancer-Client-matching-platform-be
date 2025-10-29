@@ -1167,8 +1167,8 @@ model Dispute {
   proposedRelease Decimal @default(0) @map("proposed_release") @db.Decimal(12, 2) // trả freelancer
   proposedRefund  Decimal @default(0) @map("proposed_refund") @db.Decimal(12, 2) // trả client
 
-  // phí trọng tài (demo: flat $20 mỗi bên)
-  arbFeePerParty       Decimal @default(20) @map("arb_fee_per_party") @db.Decimal(12, 2)
+  // phí trọng tài (demo: flat $10 mỗi bên cho môi trường test)
+  arbFeePerParty       Decimal @default(10) @map("arb_fee_per_party") @db.Decimal(12, 2)
   clientArbFeePaid     Boolean @default(false) @map("client_arb_fee_paid")
   freelancerArbFeePaid Boolean @default(false) @map("freelancer_arb_fee_paid")
 

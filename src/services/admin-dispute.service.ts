@@ -23,6 +23,12 @@ import {
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
+import createDossierPdf, {
+    type DossierPdfContent,
+    type PdfEvidenceSection,
+    type PdfKeyValuePair,
+    type PdfTableContent
+} from '~/utils/pdf'
 
 const MEDIATION_RESPONSE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
 const MEDIATION_STATUSES: DisputeStatus[] = [DisputeStatus.OPEN, DisputeStatus.NEGOTIATION]
@@ -330,6 +336,498 @@ const composeAssetSummary = (asset?: AssetSummaryLike | null) => {
         bytes: asset.bytes ?? null,
         status: asset.status ?? null,
         checksum: asset.checksum ?? null
+    }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const toDisplayValue = (value: unknown): string => {
+    if (value === null || value === undefined) {
+        return 'N/A'
+    }
+
+    if (typeof value === 'string') {
+        return value
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+        return String(value)
+    }
+
+    if (value instanceof Date) {
+        return value.toISOString()
+    }
+
+    try {
+        return JSON.stringify(value)
+    } catch (error) {
+        void error
+    }
+
+    return String(value)
+}
+
+const describeBooleanValue = (value: unknown) => {
+    if (typeof value === 'boolean') {
+        return value ? 'Yes' : 'No'
+    }
+
+    if (value === 'true') {
+        return 'Yes'
+    }
+
+    if (value === 'false') {
+        return 'No'
+    }
+
+    return toDisplayValue(value)
+}
+
+const summarizeEvidenceAsset = (value: unknown) => {
+    if (!isRecord(value)) {
+        return null
+    }
+
+    const parts: string[] = []
+
+    if (typeof value.id === 'string' && value.id.length > 0) {
+        parts.push(`Asset ${value.id}`)
+    }
+
+    if (typeof value.mimeType === 'string' && value.mimeType.length > 0) {
+        parts.push(value.mimeType)
+    }
+
+    if (typeof value.bytes === 'number') {
+        parts.push(`${value.bytes} bytes`)
+    }
+
+    if (typeof value.url === 'string' && value.url.length > 0) {
+        parts.push(value.url)
+    }
+
+    return parts.length > 0 ? parts.join(' | ') : null
+}
+
+const summarizeEvidenceReference = (reference: unknown) => {
+    if (!isRecord(reference)) {
+        return toDisplayValue(reference)
+    }
+
+    const type = typeof reference.type === 'string' ? reference.type : 'UNKNOWN'
+
+    if (type === 'MILESTONE_ATTACHMENT' && isRecord(reference.attachment)) {
+        const attachment = reference.attachment
+        const parts: string[] = []
+
+        if (typeof attachment.name === 'string' && attachment.name.length > 0) {
+            parts.push(attachment.name)
+        }
+
+        if (typeof attachment.id === 'string' && attachment.id.length > 0) {
+            parts.push(`ID ${attachment.id}`)
+        }
+
+        if (typeof attachment.url === 'string' && attachment.url.length > 0) {
+            parts.push(attachment.url)
+        }
+
+        if (isRecord(attachment.submission)) {
+            const milestoneTitle =
+                typeof attachment.submission.milestoneTitle === 'string'
+                    ? attachment.submission.milestoneTitle
+                    : null
+            if (milestoneTitle) {
+                parts.push(`Milestone: ${milestoneTitle}`)
+            }
+        }
+
+        return `${type}: ${parts.join(' | ')}`
+    }
+
+    if (type === 'CHAT_ATTACHMENT' && isRecord(reference.attachment)) {
+        const attachment = reference.attachment
+        const parts: string[] = []
+
+        if (typeof attachment.name === 'string' && attachment.name.length > 0) {
+            parts.push(attachment.name)
+        }
+
+        if (typeof attachment.message === 'object' && attachment.message && !Array.isArray(attachment.message)) {
+            const message = attachment.message as Record<string, unknown>
+            const sender = typeof message.senderId === 'string' ? message.senderId : null
+            if (sender) {
+                parts.push(`Sender ${sender}`)
+            }
+
+            const sentAt = typeof message.sentAt === 'string' ? message.sentAt : null
+            if (sentAt) {
+                parts.push(`Sent ${sentAt}`)
+            }
+        }
+
+        if (typeof attachment.url === 'string' && attachment.url.length > 0) {
+            parts.push(attachment.url)
+        }
+
+        return `${type}: ${parts.join(' | ')}`
+    }
+
+    if (type === 'ASSET' && isRecord(reference.asset)) {
+        const summary = summarizeEvidenceAsset(reference.asset)
+        return summary ? `${type}: ${summary}` : type
+    }
+
+    if (type === 'EXTERNAL_URL' && typeof reference.url === 'string') {
+        return `${type}: ${reference.url}`
+    }
+
+    return toDisplayValue(reference)
+}
+
+const formatDateToken = (input: Date) => {
+    const year = input.getUTCFullYear()
+    const month = String(input.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(input.getUTCDate()).padStart(2, '0')
+    const hours = String(input.getUTCHours()).padStart(2, '0')
+    const minutes = String(input.getUTCMinutes()).padStart(2, '0')
+    const seconds = String(input.getUTCSeconds()).padStart(2, '0')
+
+    return `${year}${month}${day}-${hours}${minutes}${seconds}`
+}
+
+const describeUserFromPayload = (user: unknown, fallbackId: unknown) => {
+    if (isRecord(user)) {
+        const name = typeof user.name === 'string' && user.name.trim().length > 0 ? user.name : null
+        const id = typeof user.id === 'string' && user.id.trim().length > 0 ? user.id : null
+
+        if (name && id) {
+            return `${name} (${id})`
+        }
+
+        if (name) {
+            return name
+        }
+
+        if (id) {
+            return id
+        }
+    }
+
+    return toDisplayValue(fallbackId ?? user)
+}
+
+const toKeyValuePairs = (entries: { label: string; value: unknown }[]): PdfKeyValuePair[] =>
+    entries.map(entry => ({ label: entry.label, value: toDisplayValue(entry.value) }))
+
+const buildDossierPdfContent = (dossier: AdminArbitrationDossier): DossierPdfContent => {
+    const generatedByParts: string[] = []
+
+    if (dossier.generatedBy) {
+        const name = composeFullName(dossier.generatedBy.profile)
+
+        if (name) {
+            generatedByParts.push(name)
+        }
+
+        if (dossier.generatedBy.email) {
+            generatedByParts.push(dossier.generatedBy.email)
+        }
+
+        generatedByParts.push(dossier.generatedBy.id)
+    }
+
+    const generatedBySummary =
+        generatedByParts.length > 0 ? generatedByParts.filter(Boolean).join(' • ') : 'N/A'
+
+    const caseOverview = toKeyValuePairs([
+        { label: 'Dossier ID', value: dossier.id },
+        { label: 'Dispute ID', value: dossier.disputeId },
+        { label: 'Version', value: dossier.version },
+        { label: 'Status', value: dossier.status },
+        { label: 'Generated At', value: dossier.generatedAt },
+        { label: 'Generated By', value: generatedBySummary },
+        { label: 'Locked At', value: dossier.lockedAt ?? null },
+        { label: 'Finalized At', value: dossier.finalizedAt ?? null },
+        { label: 'Hash', value: dossier.hash ?? null },
+        { label: 'Notes', value: dossier.notes ?? null }
+    ])
+
+    const baseFinancialSummary = toKeyValuePairs([
+        { label: 'Currency', value: null },
+        { label: 'Escrow Amount', value: null },
+        { label: 'Released', value: null },
+        { label: 'Refunded', value: null },
+        { label: 'Disputed', value: null }
+    ])
+
+    const defaultTimelineTable: PdfTableContent = {
+        columns: ['Thời gian', 'Tác nhân', 'Hành động', 'Chi tiết'],
+        rows: [],
+        columnRatios: [0.22, 0.2, 0.2, 0.38],
+        emptyMessage: 'Không có dữ liệu timeline trong payload'
+    }
+
+    const payload = dossier.payload
+
+    const content: DossierPdfContent = {
+        disputeId: dossier.disputeId,
+        status: toDisplayValue(dossier.status),
+        version: dossier.version,
+        generatedAt: toDisplayValue(dossier.generatedAt),
+        generatedBy: generatedBySummary,
+        lockedAt: dossier.lockedAt ? toDisplayValue(dossier.lockedAt) : null,
+        finalizedAt: dossier.finalizedAt ? toDisplayValue(dossier.finalizedAt) : null,
+        caseOverview,
+        metadataOverview: null,
+        parties: null,
+        financialOverview: {
+            summary: baseFinancialSummary,
+            requested: null,
+            decided: null
+        },
+        timeline: defaultTimelineTable,
+        evidenceSections: [],
+        evidenceNote: null,
+        payloadSnapshot: null,
+        payloadFallback: null
+    }
+
+    if (!isRecord(payload)) {
+        return {
+            ...content,
+            metadataOverview: {
+                items: null,
+                note: 'Payload không phải JSON hợp lệ, hiển thị dữ liệu dạng chuỗi.'
+            },
+            parties: null,
+            payloadFallback: `Payload summary: ${toDisplayValue(payload)}`
+        }
+    }
+
+    const meta = isRecord(payload.meta) ? payload.meta : null
+    const parties = Array.isArray(payload.parties) ? payload.parties : []
+    const financials = isRecord(payload.financials) ? payload.financials : null
+    const timeline = Array.isArray(payload.timeline) ? payload.timeline : []
+    const evidence = Array.isArray(payload.evidence) ? payload.evidence : []
+
+    const metadataOverview: DossierPdfContent['metadataOverview'] = meta
+        ? {
+              items: toKeyValuePairs([
+                  { label: 'Dossier ID', value: meta.dossierId ?? dossier.id },
+                  { label: 'Dispute ID', value: meta.disputeId ?? dossier.disputeId },
+                  { label: 'Dossier Status', value: meta.dossierStatus ?? dossier.status },
+                  { label: 'Version', value: meta.dossierVersion ?? dossier.version },
+                  { label: 'Generated At', value: meta.generatedAt ?? dossier.generatedAt },
+                  { label: 'Generated By', value: meta.generatedBy ?? generatedBySummary },
+                  { label: 'Locked At', value: meta.lockedAt ?? null },
+                  { label: 'Notes', value: meta.notes ?? null },
+                  { label: 'Hash', value: meta.hash ?? dossier.hash }
+              ])
+          }
+        : {
+              items: null,
+              note: 'Không có metadata trong payload'
+          }
+
+    const partyRows = parties.map((party, index) => {
+        if (isRecord(party)) {
+            const role = toDisplayValue(party.role ?? `Party ${index + 1}`)
+            const displayName = toDisplayValue(party.displayName ?? null)
+            const userId = toDisplayValue(party.userId ?? null)
+            const feePaid = describeBooleanValue(party.feePaid ?? null)
+
+            return [`${index + 1}. ${role}`, displayName, userId, feePaid]
+        }
+
+        return [`${index + 1}`, toDisplayValue(party), 'N/A', 'N/A']
+    })
+
+    const partiesTable: PdfTableContent = {
+        columns: ['Vai trò', 'Tên hiển thị', 'Mã người dùng', 'Đã đóng phí'],
+        rows: partyRows,
+        columnRatios: [0.24, 0.28, 0.24, 0.14],
+        emptyMessage: 'Không có thông tin đối tác trong payload'
+    }
+
+    const financialSummary = financials
+        ? toKeyValuePairs([
+              { label: 'Currency', value: financials.currency ?? null },
+              { label: 'Escrow Amount', value: financials.escrowAmount ?? null },
+              { label: 'Released', value: financials.released ?? null },
+              { label: 'Refunded', value: financials.refunded ?? null },
+              { label: 'Disputed', value: financials.disputed ?? null }
+          ])
+        : baseFinancialSummary
+
+    const requested = financials && isRecord(financials.requested) ? financials.requested : null
+    const decided = financials && isRecord(financials.decided) ? financials.decided : null
+
+    const requestedTable: PdfTableContent | null = requested
+        ? {
+              columns: ['Bên', 'Giá trị'],
+              rows: [
+                  ['Client', toDisplayValue(requested.client ?? null)],
+                  ['Freelancer', toDisplayValue(requested.freelancer ?? null)]
+              ],
+              columnRatios: [0.4, 0.6]
+          }
+        : null
+
+    const decidedTable: PdfTableContent | null = decided
+        ? {
+              columns: ['Bên', 'Giá trị'],
+              rows: [
+                  ['Client', toDisplayValue(decided.client ?? null)],
+                  ['Freelancer', toDisplayValue(decided.freelancer ?? null)]
+              ],
+              columnRatios: [0.4, 0.6]
+          }
+        : null
+
+    const limitedTimeline = timeline.slice(0, 40)
+    const timelineRows = limitedTimeline.map(entry => {
+        if (isRecord(entry)) {
+            const at = toDisplayValue(entry.at ?? null)
+            const actor = describeUserFromPayload(entry.actor ?? null, entry.actor ?? null)
+            const action = toDisplayValue(entry.action ?? null)
+            const details = entry.details !== undefined ? toDisplayValue(entry.details) : ''
+
+            return [at, actor, action, details === 'N/A' ? '' : details]
+        }
+
+        return [toDisplayValue(entry), '', '', '']
+    })
+
+    const timelineTable: PdfTableContent = {
+        ...defaultTimelineTable,
+        rows: timelineRows,
+        note:
+            timeline.length > limitedTimeline.length
+                ? `${timeline.length - limitedTimeline.length} mốc bổ sung đã được lược bỏ`
+                : null
+    }
+
+    const limitedEvidence = evidence.slice(0, 10)
+
+    const evidenceSections: PdfEvidenceSection[] = limitedEvidence.map((submission, submissionIndex) => {
+        const title = `Submission ${submissionIndex + 1}`
+
+        if (isRecord(submission)) {
+            const summary = toKeyValuePairs([
+                { label: 'Submission ID', value: submission.id ?? null },
+                {
+                    label: 'Submitted By',
+                    value: describeUserFromPayload(submission.submittedBy ?? null, submission.submittedById ?? null)
+                },
+                { label: 'Statement', value: submission.statement ?? null },
+                {
+                    label: 'No Additional Evidence',
+                    value: describeBooleanValue(submission.noAdditionalEvidence ?? null)
+                },
+                { label: 'Submitted At', value: submission.submittedAt ?? null }
+            ])
+
+            const items = Array.isArray(submission.items) ? submission.items : []
+            const limitedItems = items.slice(0, 15)
+
+            const itemRows = limitedItems.map((item, itemIndex) => {
+                if (isRecord(item)) {
+                    const label = item.label ?? item.id ?? `Item ${itemIndex + 1}`
+                    const sourceType = toDisplayValue(item.sourceType ?? null)
+                    const sourceId = item.sourceId ? ` (${toDisplayValue(item.sourceId)})` : ''
+                    const referenceSummary = summarizeEvidenceReference(item.reference ?? null)
+                    const assetSummary = summarizeEvidenceAsset(item.asset ?? null)
+                    const combinedReference = [referenceSummary, assetSummary].filter(Boolean).join(' | ')
+
+                    return [
+                        `${itemIndex + 1}. ${toDisplayValue(label)}`,
+                        `${sourceType}${sourceId}`,
+                        combinedReference.length > 0 ? combinedReference : 'N/A',
+                        toDisplayValue(item.createdAt ?? null)
+                    ]
+                }
+
+                return [`${itemIndex + 1}`, toDisplayValue(item), 'N/A', 'N/A']
+            })
+
+            const table: PdfTableContent | null = itemRows.length > 0
+                ? {
+                      columns: ['Nhãn', 'Nguồn', 'Tham chiếu', 'Thời gian'],
+                      rows: itemRows,
+                      columnRatios: [0.26, 0.24, 0.32, 0.18]
+                  }
+                : null
+
+            const notes: string[] = []
+
+            if (itemRows.length === 0) {
+                notes.push('Không có mục bằng chứng đính kèm')
+            }
+
+            if (items.length > limitedItems.length) {
+                notes.push(`${items.length - limitedItems.length} mục bổ sung đã được lược bỏ`)
+            }
+
+            return {
+                title,
+                summary,
+                table,
+                note: notes.length > 0 ? notes.join('. ') : null
+            }
+        }
+
+        return {
+            title,
+            summary: [],
+            table: null,
+            note: toDisplayValue(submission)
+        }
+    })
+
+    const evidenceNote =
+        evidence.length > limitedEvidence.length
+            ? `${evidence.length - limitedEvidence.length} submission bổ sung đã được lược bỏ`
+            : null
+
+    let payloadSnapshot: DossierPdfContent['payloadSnapshot'] = null
+    let payloadFallback: string | null = null
+
+    try {
+        const jsonString = JSON.stringify(payload, null, 2)
+
+        if (jsonString) {
+            const jsonLines = jsonString.split('\n')
+            const limitedJson = jsonLines.slice(0, 200)
+
+            payloadSnapshot = {
+                lines: limitedJson,
+                note:
+                    jsonLines.length > limitedJson.length
+                        ? `${jsonLines.length - limitedJson.length} dòng bổ sung đã được lược bỏ`
+                        : null
+            }
+        }
+    } catch (error) {
+        void error
+        payloadFallback = 'Không thể stringify payload sang JSON'
+    }
+
+    return {
+        ...content,
+        metadataOverview,
+        parties: partiesTable,
+        financialOverview: {
+            summary: financialSummary,
+            requested: requestedTable,
+            decided: decidedTable
+        },
+        timeline: timelineTable,
+        evidenceSections,
+        evidenceNote,
+        payloadSnapshot,
+        payloadFallback
     }
 }
 
@@ -820,6 +1318,28 @@ const listDisputeDossiers = async (disputeId: string, query: AdminListDisputeDos
         hasMore: skip + records.length < total,
         data: records.map(serializeAdminDossierDetail)
     }
+}
+
+const getDisputeDossierPdf = async (disputeId: string, dossierId: string) => {
+    const dossierRecord = await prismaClient.arbitrationDossier.findFirst({
+        where: { id: dossierId, disputeId },
+        include: adminDossierInclude
+    })
+
+    if (!dossierRecord) {
+        throw new NotFoundException('Không tìm thấy dossier của tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    const pdfContent = buildDossierPdfContent(dossierRecord)
+    const buffer = createDossierPdf(pdfContent)
+
+    const sanitizedDisputeId = dossierRecord.disputeId.replace(/[^A-Za-z0-9_-]/g, '')
+    const sanitizedBase = sanitizedDisputeId.length > 0 ? sanitizedDisputeId : 'dispute'
+    const versionLabel = String(dossierRecord.version).padStart(2, '0')
+    const timestampLabel = formatDateToken(dossierRecord.generatedAt)
+    const filename = `dossier-${sanitizedBase}-v${versionLabel}-${timestampLabel}.pdf`
+
+    return { buffer, filename }
 }
 
 const assignArbitrator = async (adminId: string, disputeId: string, payload: AdminAssignArbitratorInput) => {
@@ -1481,6 +2001,7 @@ const adminDisputeService = {
     listDisputes,
     getDispute,
     listDisputeDossiers,
+    getDisputeDossierPdf,
     assignArbitrator,
     joinDispute,
     requestArbitrationFees,
