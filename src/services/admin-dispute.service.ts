@@ -164,6 +164,48 @@ const adminEvidenceAssetSelect = Prisma.validator<Prisma.AssetSelect>()({
     createdAt: true
 })
 
+const adminMilestoneSubmissionAttachmentSelect =
+    Prisma.validator<Prisma.MilestoneSubmissionAttachmentSelect>()({
+        id: true,
+        submissionId: true,
+        assetId: true,
+        url: true,
+        name: true,
+        mimeType: true,
+        size: true,
+        createdAt: true,
+        asset: {
+            select: adminEvidenceAssetSelect
+        }
+    })
+
+const adminMilestoneSubmissionInclude = Prisma.validator<Prisma.MilestoneSubmissionInclude>()({
+    attachments: {
+        select: adminMilestoneSubmissionAttachmentSelect,
+        orderBy: { createdAt: 'asc' }
+    },
+    freelancer: {
+        select: {
+            profile: {
+                select: {
+                    firstName: true,
+                    lastName: true
+                }
+            }
+        }
+    },
+    reviewer: {
+        select: {
+            profile: {
+                select: {
+                    firstName: true,
+                    lastName: true
+                }
+            }
+        }
+    }
+})
+
 const adminDisputeInclude = Prisma.validator<Prisma.DisputeInclude>()({
     latestProposal: true,
     escrow: {
@@ -293,6 +335,7 @@ type AssetSummaryLike = {
 type AdminMilestoneEvidenceAttachment = Prisma.MilestoneSubmissionAttachmentGetPayload<{ select: typeof adminMilestoneEvidenceAttachmentSelect }>
 type AdminChatEvidenceAttachment = Prisma.ChatMessageAttachmentGetPayload<{ select: typeof adminChatEvidenceAttachmentSelect }>
 type AdminEvidenceAsset = Prisma.AssetGetPayload<{ select: typeof adminEvidenceAssetSelect }>
+type AdminMilestoneSubmission = Prisma.MilestoneSubmissionGetPayload<{ include: typeof adminMilestoneSubmissionInclude }>
 
 const composeFullName = (profile?: { firstName: string | null; lastName: string | null } | null) => {
     const firstName = profile?.firstName?.trim() ?? ''
@@ -389,25 +432,25 @@ const summarizeEvidenceAsset = (value: unknown) => {
         return null
     }
 
-    const parts: string[] = []
+    const details: string[] = []
 
     if (typeof value.id === 'string' && value.id.length > 0) {
-        parts.push(`Asset ${value.id}`)
+        details.push(`ID: ${value.id}`)
     }
 
     if (typeof value.mimeType === 'string' && value.mimeType.length > 0) {
-        parts.push(value.mimeType)
+        details.push(`MIME: ${value.mimeType}`)
     }
 
     if (typeof value.bytes === 'number') {
-        parts.push(`${value.bytes} bytes`)
+        details.push(`Size: ${value.bytes} bytes`)
     }
 
     if (typeof value.url === 'string' && value.url.length > 0) {
-        parts.push(value.url)
+        details.push(`URL: ${value.url}`)
     }
 
-    return parts.length > 0 ? parts.join(' | ') : null
+    return details.length > 0 ? ['Asset', ...details.map(entry => `• ${entry}`)].join('\n') : null
 }
 
 const summarizeEvidenceReference = (reference: unknown) => {
@@ -419,18 +462,18 @@ const summarizeEvidenceReference = (reference: unknown) => {
 
     if (type === 'MILESTONE_ATTACHMENT' && isRecord(reference.attachment)) {
         const attachment = reference.attachment
-        const parts: string[] = []
+        const details: string[] = []
 
         if (typeof attachment.name === 'string' && attachment.name.length > 0) {
-            parts.push(attachment.name)
+            details.push(`Tên tệp: ${attachment.name}`)
         }
 
         if (typeof attachment.id === 'string' && attachment.id.length > 0) {
-            parts.push(`ID ${attachment.id}`)
+            details.push(`ID: ${attachment.id}`)
         }
 
         if (typeof attachment.url === 'string' && attachment.url.length > 0) {
-            parts.push(attachment.url)
+            details.push(`URL: ${attachment.url}`)
         }
 
         if (isRecord(attachment.submission)) {
@@ -439,48 +482,51 @@ const summarizeEvidenceReference = (reference: unknown) => {
                     ? attachment.submission.milestoneTitle
                     : null
             if (milestoneTitle) {
-                parts.push(`Milestone: ${milestoneTitle}`)
+                details.push(`Milestone: ${milestoneTitle}`)
             }
         }
 
-        return `${type}: ${parts.join(' | ')}`
+        return ['Milestone Attachment', ...details.map(entry => `• ${entry}`)].join('\n')
     }
 
     if (type === 'CHAT_ATTACHMENT' && isRecord(reference.attachment)) {
         const attachment = reference.attachment
-        const parts: string[] = []
+        const details: string[] = []
 
         if (typeof attachment.name === 'string' && attachment.name.length > 0) {
-            parts.push(attachment.name)
+            details.push(`Tên tệp: ${attachment.name}`)
         }
 
         if (typeof attachment.message === 'object' && attachment.message && !Array.isArray(attachment.message)) {
             const message = attachment.message as Record<string, unknown>
             const sender = typeof message.senderId === 'string' ? message.senderId : null
             if (sender) {
-                parts.push(`Sender ${sender}`)
+                details.push(`Người gửi: ${sender}`)
             }
 
             const sentAt = typeof message.sentAt === 'string' ? message.sentAt : null
             if (sentAt) {
-                parts.push(`Sent ${sentAt}`)
+                details.push(`Gửi lúc: ${sentAt}`)
             }
         }
 
         if (typeof attachment.url === 'string' && attachment.url.length > 0) {
-            parts.push(attachment.url)
+            details.push(`URL: ${attachment.url}`)
         }
 
-        return `${type}: ${parts.join(' | ')}`
+        return ['Chat Attachment', ...details.map(entry => `• ${entry}`)].join('\n')
     }
 
     if (type === 'ASSET' && isRecord(reference.asset)) {
         const summary = summarizeEvidenceAsset(reference.asset)
-        return summary ? `${type}: ${summary}` : type
+        if (summary) {
+            return ['Asset Reference', summary].join('\n')
+        }
+        return 'Asset Reference'
     }
 
     if (type === 'EXTERNAL_URL' && typeof reference.url === 'string') {
-        return `${type}: ${reference.url}`
+        return ['External URL', `• ${reference.url}`].join('\n')
     }
 
     return toDisplayValue(reference)
@@ -602,6 +648,8 @@ const buildDossierPdfContent = (dossier: AdminArbitrationDossier): DossierPdfCon
                 note: 'Payload không phải JSON hợp lệ, hiển thị dữ liệu dạng chuỗi.'
             },
             parties: null,
+            milestone: { details: null, note: 'Không có milestone trong payload' },
+            milestoneSubmissions: { table: null, note: 'Không có milestone submission trong payload' },
             payloadFallback: `Payload summary: ${toDisplayValue(payload)}`
         }
     }
@@ -611,6 +659,10 @@ const buildDossierPdfContent = (dossier: AdminArbitrationDossier): DossierPdfCon
     const financials = isRecord(payload.financials) ? payload.financials : null
     const timeline = Array.isArray(payload.timeline) ? payload.timeline : []
     const evidence = Array.isArray(payload.evidence) ? payload.evidence : []
+    const milestonePayload = isRecord(payload.milestone) ? payload.milestone : null
+    const milestoneSubmissionsPayload = Array.isArray(payload.milestoneSubmissions)
+        ? payload.milestoneSubmissions
+        : []
 
     const metadataOverview: DossierPdfContent['metadataOverview'] = meta
         ? {
@@ -686,6 +738,108 @@ const buildDossierPdfContent = (dossier: AdminArbitrationDossier): DossierPdfCon
           }
         : null
 
+    const milestoneSection = milestonePayload
+        ? {
+              details: toKeyValuePairs([
+                  { label: 'Milestone ID', value: milestonePayload.id ?? null },
+                  { label: 'Tiêu đề', value: milestonePayload.title ?? null },
+                  { label: 'Trạng thái', value: milestonePayload.status ?? null },
+                  { label: 'Giá trị', value: milestonePayload.amount ?? null },
+                  { label: 'Tiền tệ', value: milestonePayload.currency ?? null },
+                  { label: 'Bắt đầu', value: milestonePayload.startAt ?? null },
+                  { label: 'Kết thúc', value: milestonePayload.endAt ?? null },
+                  { label: 'Contract ID', value: milestonePayload.contractId ?? null },
+                  { label: 'Contract Title', value: milestonePayload.contractTitle ?? null }
+              ])
+          }
+        : {
+              details: null,
+              note: 'Không có milestone trong payload'
+          }
+
+    const limitedMilestoneSubmissions = milestoneSubmissionsPayload.slice(0, 12)
+    const milestoneSubmissionRows = limitedMilestoneSubmissions.map((submission, index) => {
+        if (isRecord(submission)) {
+            const attachments = Array.isArray(submission.attachments) ? submission.attachments : []
+            const limitedAttachments = attachments.slice(0, 5)
+            const attachmentLines = limitedAttachments.map((attachment, attachmentIndex) => {
+                if (isRecord(attachment)) {
+                    const name = attachment.name ?? attachment.id ?? `Attachment ${attachmentIndex + 1}`
+                    const lines = [`• ${toDisplayValue(name)}`]
+                    if (attachment.url) {
+                        lines.push(`  URL: ${toDisplayValue(attachment.url)}`)
+                    }
+                    if (attachment.mimeType) {
+                        lines.push(`  MIME: ${toDisplayValue(attachment.mimeType)}`)
+                    }
+                    if (attachment.size !== undefined && attachment.size !== null) {
+                        lines.push(`  Size: ${toDisplayValue(attachment.size)}`)
+                    }
+                    return lines.join('\n')
+                }
+
+                return `• ${toDisplayValue(attachment)}`
+            })
+
+            if (attachments.length > limitedAttachments.length) {
+                attachmentLines.push(`• +${attachments.length - limitedAttachments.length} tệp bổ sung đã được lược bỏ`)
+            }
+
+            const submissionLines = [`ID: ${toDisplayValue(submission.id ?? null)}`]
+            if (submission.message) {
+                submissionLines.push(`Statement: ${toDisplayValue(submission.message)}`)
+            }
+            if (submission.reviewNote) {
+                submissionLines.push(`Review: ${toDisplayValue(submission.reviewNote)}`)
+            }
+
+            const freelancerLines: string[] = []
+            if (submission.freelancer) {
+                freelancerLines.push(toDisplayValue(submission.freelancer))
+            }
+            if (submission.freelancerId) {
+                freelancerLines.push(`ID: ${toDisplayValue(submission.freelancerId)}`)
+            }
+
+            const statusLines = [`Trạng thái: ${toDisplayValue(submission.status ?? null)}`]
+            statusLines.push(`Nộp lúc: ${toDisplayValue(submission.createdAt ?? null)}`)
+            if (submission.reviewedAt) {
+                statusLines.push(`Duyệt lúc: ${toDisplayValue(submission.reviewedAt ?? null)}`)
+            }
+            if (submission.reviewedBy) {
+                statusLines.push(`Người duyệt: ${toDisplayValue(submission.reviewedBy)}`)
+            }
+            if (submission.reviewRating !== undefined && submission.reviewRating !== null) {
+                statusLines.push(`Đánh giá: ${toDisplayValue(submission.reviewRating)}`)
+            }
+
+            return [
+                `${index + 1}. ${submissionLines.join('\n')}`,
+                freelancerLines.length > 0 ? freelancerLines.join('\n') : 'N/A',
+                statusLines.join('\n'),
+                attachmentLines.length > 0 ? attachmentLines.join('\n') : 'Không có tệp'
+            ]
+        }
+
+        return [`${index + 1}. ${toDisplayValue(submission)}`, 'N/A', 'N/A', 'N/A']
+    })
+
+    const milestoneSubmissionTable: PdfTableContent | null = milestoneSubmissionRows.length > 0
+        ? {
+              columns: ['Submission', 'Freelancer', 'Trạng thái & Thời gian', 'Đính kèm'],
+              rows: milestoneSubmissionRows,
+              columnRatios: [0.3, 0.2, 0.26, 0.24],
+              note:
+                  milestoneSubmissionsPayload.length > limitedMilestoneSubmissions.length
+                      ? `${milestoneSubmissionsPayload.length - limitedMilestoneSubmissions.length} submission bổ sung đã được lược bỏ`
+                      : null
+          }
+        : null
+
+    const milestoneSubmissionsSection = milestoneSubmissionTable
+        ? { table: milestoneSubmissionTable, note: null }
+        : { table: null, note: 'Không có milestone submission trong payload' }
+
     const limitedTimeline = timeline.slice(0, 40)
     const timelineRows = limitedTimeline.map(entry => {
         if (isRecord(entry)) {
@@ -736,15 +890,31 @@ const buildDossierPdfContent = (dossier: AdminArbitrationDossier): DossierPdfCon
                 if (isRecord(item)) {
                     const label = item.label ?? item.id ?? `Item ${itemIndex + 1}`
                     const sourceType = toDisplayValue(item.sourceType ?? null)
-                    const sourceId = item.sourceId ? ` (${toDisplayValue(item.sourceId)})` : ''
                     const referenceSummary = summarizeEvidenceReference(item.reference ?? null)
                     const assetSummary = summarizeEvidenceAsset(item.asset ?? null)
-                    const combinedReference = [referenceSummary, assetSummary].filter(Boolean).join(' | ')
+                    const description =
+                        typeof item.description === 'string' && item.description.trim().length > 0
+                            ? item.description
+                            : null
+
+                    const sourceLines = [`Loại: ${sourceType}`]
+                    if (item.sourceId) {
+                        sourceLines.push(`ID: ${toDisplayValue(item.sourceId)}`)
+                    }
+                    if (item.url) {
+                        sourceLines.push(`URL: ${toDisplayValue(item.url)}`)
+                    }
+
+                    const detailSections = [
+                        description ? `Mô tả: ${description}` : null,
+                        referenceSummary,
+                        assetSummary
+                    ].filter((value): value is string => Boolean(value && value.length > 0))
 
                     return [
                         `${itemIndex + 1}. ${toDisplayValue(label)}`,
-                        `${sourceType}${sourceId}`,
-                        combinedReference.length > 0 ? combinedReference : 'N/A',
+                        sourceLines.join('\n'),
+                        detailSections.length > 0 ? detailSections.join('\n\n') : 'N/A',
                         toDisplayValue(item.createdAt ?? null)
                     ]
                 }
@@ -754,9 +924,9 @@ const buildDossierPdfContent = (dossier: AdminArbitrationDossier): DossierPdfCon
 
             const table: PdfTableContent | null = itemRows.length > 0
                 ? {
-                      columns: ['Nhãn', 'Nguồn', 'Tham chiếu', 'Thời gian'],
+                      columns: ['Mục', 'Nguồn', 'Chi tiết', 'Thời gian'],
                       rows: itemRows,
-                      columnRatios: [0.26, 0.24, 0.32, 0.18]
+                      columnRatios: [0.25, 0.24, 0.33, 0.18]
                   }
                 : null
 
@@ -823,6 +993,8 @@ const buildDossierPdfContent = (dossier: AdminArbitrationDossier): DossierPdfCon
             requested: requestedTable,
             decided: decidedTable
         },
+        milestone: milestoneSection,
+        milestoneSubmissions: milestoneSubmissionsSection,
         timeline: timelineTable,
         evidenceSections,
         evidenceNote,
@@ -1738,6 +1910,12 @@ const generateArbitrationDossier = async (
     const chatAttachmentMap = new Map(chatAttachments.map(attachment => [attachment.id, attachment]))
     const assetMap = new Map(assetRecords.map(asset => [asset.id, asset]))
 
+    const milestoneSubmissions: AdminMilestoneSubmission[] = await prismaClient.milestoneSubmission.findMany({
+        where: { milestoneId: milestone.id },
+        include: adminMilestoneSubmissionInclude,
+        orderBy: { createdAt: 'asc' }
+    })
+
     const dossierStatus = payload.finalize ? ArbitrationDossierStatus.FINALIZED : ArbitrationDossierStatus.LOCKED
     const notes = payload.notes?.trim() ?? null
     const nextVersion = (disputeRecord.currentDossierVersion ?? 0) + 1
@@ -1906,6 +2084,50 @@ const generateArbitrationDossier = async (
         const released = Number(escrow.amountReleased)
         const refunded = Number(escrow.amountRefunded)
 
+        const milestonePayload = {
+            id: milestone.id,
+            title: milestone.title,
+            status: milestone.status,
+            amount: Number(milestone.amount),
+            currency: milestone.currency,
+            startAt: milestone.startAt ? milestone.startAt.toISOString() : null,
+            endAt: milestone.endAt ? milestone.endAt.toISOString() : null,
+            contractId: milestone.contractId,
+            contractTitle: milestone.contract?.title ?? null
+        }
+
+        const milestoneSubmissionPayload = milestoneSubmissions.map(submission => {
+            const attachments = submission.attachments.map(attachment => {
+                const asset = attachment.asset ?? (attachment.assetId ? assetMap.get(attachment.assetId) ?? null : null)
+                return {
+                    id: attachment.id,
+                    assetId: attachment.assetId ?? asset?.id ?? null,
+                    name: attachment.name ?? null,
+                    url: attachment.url ?? asset?.url ?? null,
+                    mimeType: attachment.mimeType ?? asset?.mimeType ?? null,
+                    size: attachment.size ?? asset?.bytes ?? null,
+                    createdAt: attachment.createdAt.toISOString()
+                }
+            })
+
+            return {
+                id: submission.id,
+                milestoneId: submission.milestoneId,
+                freelancerId: submission.freelancerId,
+                freelancer: composeFullName(submission.freelancer?.profile) ?? null,
+                status: submission.status,
+                message: submission.message ?? null,
+                reviewNote: submission.reviewNote ?? null,
+                reviewRating: submission.reviewRating ?? null,
+                reviewedAt: submission.reviewedAt ? submission.reviewedAt.toISOString() : null,
+                reviewedById: submission.reviewedById ?? null,
+                reviewedBy: composeFullName(submission.reviewer?.profile) ?? null,
+                createdAt: submission.createdAt.toISOString(),
+                updatedAt: submission.updatedAt.toISOString(),
+                attachments
+            }
+        })
+
         const payloadData: Record<string, unknown> = {
             meta: {
                 dossierId: created.id,
@@ -1954,6 +2176,8 @@ const generateArbitrationDossier = async (
                     freelancer: Number(disputeRecord.decidedRelease)
                 }
             },
+            milestone: milestonePayload,
+            milestoneSubmissions: milestoneSubmissionPayload,
             timeline: timelineEntries.map(entry => ({
                 at: entry.at.toISOString(),
                 actor: entry.actor,
