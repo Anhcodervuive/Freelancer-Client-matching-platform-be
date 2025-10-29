@@ -67,6 +67,7 @@ model User {
   disputesLocked               Dispute[]            @relation("DisputeLockedBy")
   arbitrationDossiersGenerated ArbitrationDossier[] @relation("ArbitrationDossierGeneratedBy")
   arbitrationsAssigned         Dispute[]            @relation("DisputeArbitrator")
+  disputesDecided              Dispute[]            @relation("DisputeDecidedBy")
   arbitrationEvidenceSubmissions ArbitrationEvidenceSubmission[] @relation("ArbitrationEvidenceSubmittedBy")
   paymentsAsPayer              Payment[]            @relation("PaymentPayer")
 
@@ -356,6 +357,7 @@ model Asset {
   milestoneSubmissionAttachments MilestoneSubmissionAttachment[]
   milestoneResources             MilestoneResource[]
   arbitrationEvidenceItems       ArbitrationEvidenceItem[] @relation("ArbitrationEvidenceAsset")
+  arbitrationDecisionAttachments ArbitrationDecisionAttachment[]
 
   @@index([provider, bucket, storageKey])
   @@index([status])
@@ -1183,6 +1185,9 @@ model Dispute {
   decidedRelease Decimal @default(0) @map("decided_release") @db.Decimal(12, 2)
   decidedRefund  Decimal @default(0) @map("decided_refund") @db.Decimal(12, 2)
   decidedById    String? @map("decided_by_id")
+  decidedAt      DateTime? @map("decided_at")
+  decisionSummary   String?  @map("decision_summary") @db.Text
+  decisionReasoning String?  @map("decision_reasoning") @db.Text
 
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
@@ -1194,9 +1199,11 @@ model Dispute {
   negotiations           DisputeNegotiation[]
   lockedBy               User?                @relation("DisputeLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
   arbitrator             User?                @relation("DisputeArbitrator", fields: [arbitratorId], references: [id], onDelete: SetNull)
+  decidedBy              User?                @relation("DisputeDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
   arbitrationDossiers    ArbitrationDossier[]
   arbitrationFeePayments Payment[]            @relation("DisputeArbitrationPayments")
   evidenceSubmissions    ArbitrationEvidenceSubmission[]
+  decisionAttachments    ArbitrationDecisionAttachment[]
 
   @@index([arbitratorId], name: "idx_dispute_arbitrator")
 }
@@ -1258,6 +1265,21 @@ model ArbitrationEvidenceItem {
   @@index([submissionId])
   @@index([assetId])
   @@map("arbitration_evidence_item")
+}
+
+model ArbitrationDecisionAttachment {
+  id        String   @id @default(cuid())
+  disputeId String   @map("dispute_id")
+  assetId   String   @map("asset_id")
+  label     String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  asset   Asset   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId], name: "idx_arbitration_decision_attachment_dispute")
+  @@index([assetId], name: "idx_arbitration_decision_attachment_asset")
+  @@map("arbitration_decision_attachment")
 }
 
 model DisputeNegotiation {

@@ -12,7 +12,9 @@ import {
     listArbitrators,
     assignArbitratorToDispute,
     listDisputeDossiers,
-    downloadDisputeDossierPdf
+    downloadDisputeDossierPdf,
+    getArbitrationContext,
+    recordArbitrationDecision
 } from '~/controllers/admin/dispute.controller'
 
 const router = Router()
@@ -35,5 +37,15 @@ router.post(
 router.post('/:disputeId/lock', authenticateMiddleware, errorHandler(lockDisputeForArbitration))
 router.post('/:disputeId/dossiers', authenticateMiddleware, errorHandler(generateArbitrationDossier))
 router.post('/:disputeId/arbitrator', authenticateMiddleware, errorHandler(assignArbitratorToDispute))
+router.get(
+    '/:disputeId/arbitration/context',
+    authenticateMiddleware,
+    errorHandler(getArbitrationContext)
+)
+router.post(
+    '/:disputeId/arbitration/decision',
+    authenticateMiddleware,
+    errorHandler(recordArbitrationDecision)
+)
 
 export default router

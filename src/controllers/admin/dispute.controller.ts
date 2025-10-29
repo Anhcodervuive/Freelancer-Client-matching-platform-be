@@ -8,7 +8,8 @@ import {
     AdminLockDisputeSchema,
     AdminGenerateArbitrationDossierSchema,
     AdminAssignArbitratorSchema,
-    AdminListDisputeDossiersSchema
+    AdminListDisputeDossiersSchema,
+    AdminRecordArbitrationDecisionSchema
 } from '~/schema/dispute.schema'
 import { ForbiddenException } from '~/exceptions/Forbidden'
 import { ErrorCode } from '~/exceptions/root'
@@ -163,6 +164,33 @@ export const assignArbitratorToDispute = async (req: Request, res: Response) => 
 
     const payload = AdminAssignArbitratorSchema.parse(req.body)
     const result = await adminDisputeService.assignArbitrator(adminId, disputeId, payload)
+
+    return res.json(result)
+}
+
+export const getArbitrationContext = async (req: Request, res: Response) => {
+    const adminId = ensureAdminUser(req)
+    const { disputeId } = req.params
+
+    if (!disputeId) {
+        throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const result = await adminDisputeService.getArbitrationContext(adminId, disputeId)
+
+    return res.json(result)
+}
+
+export const recordArbitrationDecision = async (req: Request, res: Response) => {
+    const adminId = ensureAdminUser(req)
+    const { disputeId } = req.params
+
+    if (!disputeId) {
+        throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const payload = AdminRecordArbitrationDecisionSchema.parse(req.body)
+    const result = await adminDisputeService.recordArbitrationDecision(adminId, disputeId, payload)
 
     return res.json(result)
 }

@@ -185,3 +185,66 @@ export const AdminListDisputeDossiersSchema = z.object({
 })
 
 export type AdminListDisputeDossiersQueryInput = z.infer<typeof AdminListDisputeDossiersSchema>
+
+const ArbitrationDecisionAttachmentSchema = z.object({
+        assetId: z.string().trim().min(1),
+        label: z.string().trim().max(255).optional()
+})
+
+export const AdminRecordArbitrationDecisionSchema = z
+        .object({
+                awardType: z.enum(['RELEASE_ALL', 'REFUND_ALL', 'SPLIT']),
+                releaseAmount: z.coerce.number().min(0),
+                refundAmount: z.coerce.number().min(0),
+                summary: z.string().trim().min(1).max(2000),
+                reasoning: z.string().trim().max(10000).optional(),
+                attachments: z.array(ArbitrationDecisionAttachmentSchema).max(20).optional()
+        })
+        .superRefine((data, ctx) => {
+                const releaseCents = Math.round(data.releaseAmount * 100)
+                const refundCents = Math.round(data.refundAmount * 100)
+                const normalizedRelease = releaseCents / 100
+                const normalizedRefund = refundCents / 100
+
+                if (Math.abs(normalizedRelease - data.releaseAmount) > 0.000001) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'Số tiền trả freelancer chỉ hỗ trợ tối đa 2 chữ số thập phân',
+                                path: ['releaseAmount']
+                        })
+                }
+
+                if (Math.abs(normalizedRefund - data.refundAmount) > 0.000001) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'Số tiền hoàn cho client chỉ hỗ trợ tối đa 2 chữ số thập phân',
+                                path: ['refundAmount']
+                        })
+                }
+
+                if (data.awardType === 'RELEASE_ALL' && refundCents > 0) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'Phán quyết trả hết cho freelancer nên số tiền hoàn cho client phải bằng 0',
+                                path: ['refundAmount']
+                        })
+                }
+
+                if (data.awardType === 'REFUND_ALL' && releaseCents > 0) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'Phán quyết hoàn hết cho client nên số tiền trả cho freelancer phải bằng 0',
+                                path: ['releaseAmount']
+                        })
+                }
+
+                if (data.awardType === 'SPLIT' && releaseCents + refundCents === 0) {
+                        ctx.addIssue({
+                                code: z.ZodIssueCode.custom,
+                                message: 'Phán quyết chia số tiền tranh chấp phải phân bổ cho ít nhất một bên',
+                                path: ['releaseAmount']
+                        })
+                }
+        })
+
+export type AdminRecordArbitrationDecisionInput = z.infer<typeof AdminRecordArbitrationDecisionSchema>

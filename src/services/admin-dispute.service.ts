@@ -18,7 +18,8 @@ import {
     AdminLockDisputeInput,
     AdminGenerateArbitrationDossierInput,
     AdminAssignArbitratorInput,
-    AdminListDisputeDossiersQueryInput
+    AdminListDisputeDossiersQueryInput,
+    AdminRecordArbitrationDecisionInput
 } from '~/schema/dispute.schema'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
@@ -87,6 +88,12 @@ const adminEvidenceSubmissionInclude = Prisma.validator<Prisma.ArbitrationEviden
 const adminDossierInclude = Prisma.validator<Prisma.ArbitrationDossierInclude>()({
     generatedBy: {
         select: adminDisputeUserSelect
+    }
+})
+
+const adminDecisionAttachmentInclude = Prisma.validator<Prisma.ArbitrationDecisionAttachmentInclude>()({
+    asset: {
+        select: adminEvidenceAssetSelect
     }
 })
 
@@ -264,6 +271,13 @@ const adminDisputeInclude = Prisma.validator<Prisma.DisputeInclude>()({
     arbitrator: {
         select: adminDisputeUserSelect
     },
+    decidedBy: {
+        select: adminDisputeUserSelect
+    },
+    decisionAttachments: {
+        include: adminDecisionAttachmentInclude,
+        orderBy: { createdAt: 'asc' }
+    },
     arbitrationDossiers: {
         orderBy: { version: 'desc' },
         take: 5,
@@ -336,6 +350,23 @@ type AdminMilestoneEvidenceAttachment = Prisma.MilestoneSubmissionAttachmentGetP
 type AdminChatEvidenceAttachment = Prisma.ChatMessageAttachmentGetPayload<{ select: typeof adminChatEvidenceAttachmentSelect }>
 type AdminEvidenceAsset = Prisma.AssetGetPayload<{ select: typeof adminEvidenceAssetSelect }>
 type AdminMilestoneSubmission = Prisma.MilestoneSubmissionGetPayload<{ include: typeof adminMilestoneSubmissionInclude }>
+type AdminDecisionAttachment = Prisma.ArbitrationDecisionAttachmentGetPayload<{ include: typeof adminDecisionAttachmentInclude }>
+type ArbitrationTimelineEntry = {
+    at: Date
+    actor: string | null
+    action: string
+    details?: string | null
+}
+type PreparedArbitrationCase = {
+    payload: {
+        parties: unknown[]
+        financials: Record<string, unknown>
+        milestone: Record<string, unknown>
+        milestoneSubmissions: unknown[]
+        evidence: unknown[]
+    }
+    timelineEntries: ArbitrationTimelineEntry[]
+}
 
 const composeFullName = (profile?: { firstName: string | null; lastName: string | null } | null) => {
     const firstName = profile?.firstName?.trim() ?? ''
@@ -343,6 +374,9 @@ const composeFullName = (profile?: { firstName: string | null; lastName: string 
     const fullName = `${firstName} ${lastName}`.trim()
     return fullName.length > 0 ? fullName : null
 }
+
+const decimalToCents = (value: Prisma.Decimal) => Number(value.mul(100).toFixed(0))
+const centsToDecimal = (value: number) => new Prisma.Decimal((value / 100).toFixed(2))
 
 const composeUserSummary = (user?: AdminDisputeUser | null) => {
     if (!user) {
@@ -1094,6 +1128,23 @@ const serializeAdminEvidenceSubmission = (submission: AdminEvidenceSubmission) =
     items: submission.items.map(serializeAdminEvidenceItem)
 })
 
+const serializeDecisionAttachment = (attachment: AdminDecisionAttachment) => ({
+    id: attachment.id,
+    disputeId: attachment.disputeId,
+    assetId: attachment.assetId,
+    label: attachment.label ?? null,
+    createdAt: attachment.createdAt,
+    asset: attachment.asset
+        ? {
+              id: attachment.asset.id,
+              url: attachment.asset.url ?? null,
+              mimeType: attachment.asset.mimeType ?? null,
+              bytes: attachment.asset.bytes ?? null,
+              status: attachment.asset.status
+          }
+        : null
+})
+
 const serializeAdminDossier = (dossier: AdminArbitrationDossier) => ({
     id: dossier.id,
     disputeId: dossier.disputeId,
@@ -1206,6 +1257,16 @@ const buildAdminDisputeResponse = (record: AdminDisputeRecord) => {
                 id: contract.freelancerId,
                 name: composeFullName(contract.freelancer?.profile)
             }
+        },
+        decision: {
+            releaseAmount: Number(record.decidedRelease),
+            refundAmount: Number(record.decidedRefund),
+            decidedById: record.decidedById ?? null,
+            decidedAt: record.decidedAt ?? null,
+            summary: record.decisionSummary ?? null,
+            reasoning: record.decisionReasoning ?? null,
+            decidedBy: composeUserSummaryWithEmail(record.decidedBy),
+            attachments: record.decisionAttachments?.map(serializeDecisionAttachment) ?? []
         },
         amounts: {
             currency: escrow.currency,
@@ -1822,22 +1883,214 @@ const lockDispute = async (adminId: string, disputeId: string, payload: AdminLoc
     return buildAdminDisputeDetailResponse(updated)
 }
 
-const generateArbitrationDossier = async (
-    adminId: string,
-    disputeId: string,
-    payload: AdminGenerateArbitrationDossierInput
-) => {
-    const disputeRecord = await prismaClient.dispute.findUnique({
-        where: { id: disputeId },
-        include: adminDisputeDetailInclude
+const buildArbitrationTimelineEntries = (
+    disputeRecord: AdminDisputeDetailRecord,
+    evidenceSubmissions: AdminEvidenceSubmission[]
+): ArbitrationTimelineEntry[] => {
+    const timelineEntries: ArbitrationTimelineEntry[] = []
+    timelineEntries.push({ at: disputeRecord.createdAt, actor: disputeRecord.openedById, action: 'DISPUTE_OPENED' })
+
+    const negotiationsAsc = [...(disputeRecord.negotiations ?? [])].sort(
+        (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+    )
+
+    negotiationsAsc.forEach(negotiation => {
+        timelineEntries.push({
+            at: negotiation.createdAt,
+            actor: negotiation.proposerId,
+            action: 'NEGOTIATION_PROPOSAL',
+            details: `Release ${Number(negotiation.releaseAmount)} • Refund ${Number(negotiation.refundAmount)}`
+        })
+
+        if (negotiation.respondedAt) {
+            timelineEntries.push({
+                at: negotiation.respondedAt,
+                actor: negotiation.respondedById ?? null,
+                action: `NEGOTIATION_${negotiation.status}`,
+                details: negotiation.responseMessage ?? null
+            })
+        }
     })
 
-    if (!disputeRecord || !disputeRecord.escrow || !disputeRecord.escrow.milestone || !disputeRecord.escrow.milestone.contract) {
-        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    evidenceSubmissions
+        .slice()
+        .sort((a, b) => a.submittedAt.getTime() - b.submittedAt.getTime())
+        .forEach(submission => {
+            timelineEntries.push({
+                at: submission.submittedAt,
+                actor: submission.submittedById,
+                action: 'EVIDENCE_SUBMITTED',
+                details: submission.statement ?? (submission.noAdditionalEvidence ? 'No additional evidence' : null)
+            })
+        })
+
+    if (disputeRecord.lockedAt) {
+        timelineEntries.push({
+            at: disputeRecord.lockedAt,
+            actor: disputeRecord.lockedById ?? null,
+            action: 'DOSSIER_LOCKED'
+        })
     }
 
-    if (!disputeRecord.lockedAt) {
-        throw new BadRequestException('Cần khóa hồ sơ trước khi tổng hợp tài liệu trọng tài', ErrorCode.PARAM_QUERY_ERROR)
+    timelineEntries.sort((a, b) => a.at.getTime() - b.at.getTime())
+
+    return timelineEntries
+}
+
+const composeMilestoneSubmissionPayload = (
+    submissions: AdminMilestoneSubmission[],
+    assetMap: Map<string, AdminEvidenceAsset>
+) => {
+    return submissions.map(submission => {
+        const attachments = submission.attachments.map(attachment => {
+            const asset = attachment.asset ?? (attachment.assetId ? assetMap.get(attachment.assetId) ?? null : null)
+
+            return {
+                id: attachment.id,
+                assetId: attachment.assetId ?? asset?.id ?? null,
+                name: attachment.name ?? null,
+                url: attachment.url ?? asset?.url ?? null,
+                mimeType: attachment.mimeType ?? asset?.mimeType ?? null,
+                size: attachment.size ?? asset?.bytes ?? null,
+                createdAt: attachment.createdAt.toISOString()
+            }
+        })
+
+        return {
+            id: submission.id,
+            milestoneId: submission.milestoneId,
+            freelancerId: submission.freelancerId,
+            freelancer: composeFullName(submission.freelancer?.profile) ?? null,
+            status: submission.status,
+            message: submission.message ?? null,
+            reviewNote: submission.reviewNote ?? null,
+            reviewRating: submission.reviewRating ?? null,
+            reviewedAt: submission.reviewedAt ? submission.reviewedAt.toISOString() : null,
+            reviewedById: submission.reviewedById ?? null,
+            reviewedBy: composeFullName(submission.reviewer?.profile) ?? null,
+            createdAt: submission.createdAt.toISOString(),
+            updatedAt: submission.updatedAt.toISOString(),
+            attachments
+        }
+    })
+}
+
+const composeEvidencePayload = (
+    submissions: AdminEvidenceSubmission[],
+    maps: {
+        milestoneAttachmentMap: Map<string, AdminMilestoneEvidenceAttachment>
+        chatAttachmentMap: Map<string, AdminChatEvidenceAttachment>
+        assetMap: Map<string, AdminEvidenceAsset>
+    }
+) => {
+    return submissions.map(submission => {
+        const evidenceItems = submission.items.map(item => {
+            const baseAsset = item.asset ?? (item.assetId ? maps.assetMap.get(item.assetId) ?? null : null)
+            const assetSummary = composeAssetSummary(baseAsset ?? null)
+
+            let reference: Record<string, unknown> | null = null
+
+            if (item.sourceType === ArbitrationEvidenceSourceType.MILESTONE_ATTACHMENT && item.sourceId) {
+                const attachment = maps.milestoneAttachmentMap.get(item.sourceId)
+                if (attachment) {
+                    const attachmentAsset = attachment.asset ?? (attachment.assetId ? maps.assetMap.get(attachment.assetId) ?? null : null)
+                    reference = {
+                        type: 'MILESTONE_ATTACHMENT',
+                        attachment: {
+                            id: attachment.id,
+                            submissionId: attachment.submissionId,
+                            name: attachment.name ?? null,
+                            url: attachment.url ?? attachmentAsset?.url ?? null,
+                            mimeType: attachment.mimeType ?? attachmentAsset?.mimeType ?? null,
+                            size: attachment.size ?? attachmentAsset?.bytes ?? null,
+                            createdAt: attachment.createdAt.toISOString(),
+                            submission: attachment.submission
+                                ? {
+                                      id: attachment.submission.id,
+                                      milestoneId: attachment.submission.milestoneId,
+                                      milestoneTitle: attachment.submission.milestone?.title ?? null,
+                                      freelancerId: attachment.submission.freelancerId,
+                                      createdAt: attachment.submission.createdAt.toISOString()
+                                  }
+                                : null
+                        }
+                    }
+                }
+            } else if (item.sourceType === ArbitrationEvidenceSourceType.CHAT_ATTACHMENT && item.sourceId) {
+                const attachment = maps.chatAttachmentMap.get(item.sourceId)
+                if (attachment) {
+                    const attachmentAsset = attachment.asset ?? (attachment.assetId ? maps.assetMap.get(attachment.assetId) ?? null : null)
+                    reference = {
+                        type: 'CHAT_ATTACHMENT',
+                        attachment: {
+                            id: attachment.id,
+                            messageId: attachment.messageId,
+                            name: attachment.name ?? null,
+                            url: attachment.url ?? attachmentAsset?.url ?? null,
+                            mimeType: attachment.mimeType ?? attachmentAsset?.mimeType ?? null,
+                            size: attachment.size ?? attachmentAsset?.bytes ?? null,
+                            createdAt: attachment.createdAt.toISOString(),
+                            message: attachment.message
+                                ? {
+                                      id: attachment.message.id,
+                                      senderId: attachment.message.senderId ?? null,
+                                      sentAt: attachment.message.sentAt.toISOString(),
+                                      body: attachment.message.body ?? null
+                                  }
+                                : null
+                        }
+                    }
+                }
+            } else if (item.sourceType === ArbitrationEvidenceSourceType.ASSET && item.assetId) {
+                const asset = maps.assetMap.get(item.assetId)
+                if (asset) {
+                    reference = {
+                        type: 'ASSET',
+                        asset: composeAssetSummary(asset)
+                    }
+                }
+            } else if (item.sourceType === ArbitrationEvidenceSourceType.EXTERNAL_URL) {
+                reference = {
+                    type: 'EXTERNAL_URL',
+                    url: item.url ?? null
+                }
+            }
+
+            return {
+                id: item.id,
+                submissionId: item.submissionId,
+                label: item.label ?? null,
+                description: item.description ?? null,
+                sourceType: item.sourceType,
+                sourceId: item.sourceId ?? null,
+                url: item.url ?? null,
+                assetId: item.assetId ?? null,
+                createdAt: item.createdAt.toISOString(),
+                asset: assetSummary,
+                reference
+            }
+        })
+
+        return {
+            id: submission.id,
+            disputeId: submission.disputeId,
+            submittedById: submission.submittedById,
+            statement: submission.statement ?? null,
+            noAdditionalEvidence: submission.noAdditionalEvidence,
+            submittedAt: submission.submittedAt.toISOString(),
+            updatedAt: submission.updatedAt.toISOString(),
+            submittedBy: composeUserSummary(submission.submittedBy),
+            items: evidenceItems
+        }
+    })
+}
+
+const buildArbitrationCaseData = async (
+    disputeRecord: AdminDisputeDetailRecord,
+    adminId: string
+): Promise<PreparedArbitrationCase> => {
+    if (!disputeRecord.escrow || !disputeRecord.escrow.milestone || !disputeRecord.escrow.milestone.contract) {
+        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
     }
 
     const escrow = disputeRecord.escrow as AdminDisputeEscrow
@@ -1916,6 +2169,94 @@ const generateArbitrationDossier = async (
         orderBy: { createdAt: 'asc' }
     })
 
+    const timelineEntries = buildArbitrationTimelineEntries(disputeRecord, evidenceSubmissions)
+    const milestoneSubmissionPayload = composeMilestoneSubmissionPayload(milestoneSubmissions, assetMap)
+    const evidencePayload = composeEvidencePayload(evidenceSubmissions, {
+        milestoneAttachmentMap,
+        chatAttachmentMap,
+        assetMap
+    })
+
+    const milestonePayload = {
+        id: milestone.id,
+        title: milestone.title,
+        status: milestone.status,
+        amount: Number(milestone.amount),
+        currency: milestone.currency,
+        startAt: milestone.startAt ? milestone.startAt.toISOString() : null,
+        endAt: milestone.endAt ? milestone.endAt.toISOString() : null,
+        contractId: milestone.contractId,
+        contractTitle: milestone.contract?.title ?? null
+    }
+
+    const funded = Number(escrow.amountFunded)
+    const released = Number(escrow.amountReleased)
+    const refunded = Number(escrow.amountRefunded)
+
+    const payload = {
+        parties: [
+            {
+                role: 'CLIENT',
+                userId: contract.clientId,
+                displayName: composeFullName(contract.client?.profile) ?? null,
+                feePaid: disputeRecord.clientArbFeePaid
+            },
+            {
+                role: 'FREELANCER',
+                userId: contract.freelancerId,
+                displayName: composeFullName(contract.freelancer?.profile) ?? null,
+                feePaid: disputeRecord.freelancerArbFeePaid
+            },
+            {
+                role: 'ARBITRATION_OFFICER',
+                userId: adminId,
+                displayName: null,
+                feePaid: null
+            }
+        ],
+        financials: {
+            escrowAmount: funded,
+            currency: escrow.currency,
+            released,
+            refunded,
+            disputed: Math.max(0, funded - released - refunded),
+            requested: {
+                client: Number(disputeRecord.proposedRefund),
+                freelancer: Number(disputeRecord.proposedRelease)
+            },
+            decided: {
+                client: Number(disputeRecord.decidedRefund),
+                freelancer: Number(disputeRecord.decidedRelease)
+            }
+        },
+        milestone: milestonePayload,
+        milestoneSubmissions: milestoneSubmissionPayload,
+        evidence: evidencePayload
+    }
+
+    return { payload, timelineEntries }
+}
+
+const generateArbitrationDossier = async (
+    adminId: string,
+    disputeId: string,
+    payload: AdminGenerateArbitrationDossierInput
+) => {
+    const disputeRecord = await prismaClient.dispute.findUnique({
+        where: { id: disputeId },
+        include: adminDisputeDetailInclude
+    })
+
+    if (!disputeRecord || !disputeRecord.escrow || !disputeRecord.escrow.milestone || !disputeRecord.escrow.milestone.contract) {
+        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    if (!disputeRecord.lockedAt) {
+        throw new BadRequestException('Cần khóa hồ sơ trước khi tổng hợp tài liệu trọng tài', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const preparedCase = await buildArbitrationCaseData(disputeRecord, adminId)
+
     const dossierStatus = payload.finalize ? ArbitrationDossierStatus.FINALIZED : ArbitrationDossierStatus.LOCKED
     const notes = payload.notes?.trim() ?? null
     const nextVersion = (disputeRecord.currentDossierVersion ?? 0) + 1
@@ -1932,200 +2273,12 @@ const generateArbitrationDossier = async (
             }
         })
 
-        const timelineEntries: { at: Date; actor: string | null; action: string; details?: string | null }[] = []
-        timelineEntries.push({ at: disputeRecord.createdAt, actor: disputeRecord.openedById, action: 'DISPUTE_OPENED' })
-
-        const negotiationsAsc = [...(disputeRecord.negotiations ?? [])].sort(
-            (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
-        )
-
-        negotiationsAsc.forEach(negotiation => {
-            timelineEntries.push({
-                at: negotiation.createdAt,
-                actor: negotiation.proposerId,
-                action: 'NEGOTIATION_PROPOSAL',
-                details: `Release ${Number(negotiation.releaseAmount)} • Refund ${Number(negotiation.refundAmount)}`
-            })
-
-            if (negotiation.respondedAt) {
-                timelineEntries.push({
-                    at: negotiation.respondedAt,
-                    actor: negotiation.respondedById ?? null,
-                    action: `NEGOTIATION_${negotiation.status}`,
-                    details: negotiation.responseMessage ?? null
-                })
-            }
-        })
-
-        evidenceSubmissions
-            .slice()
-            .sort((a, b) => a.submittedAt.getTime() - b.submittedAt.getTime())
-            .forEach(submission => {
-                timelineEntries.push({
-                    at: submission.submittedAt,
-                    actor: submission.submittedById,
-                    action: 'EVIDENCE_SUBMITTED',
-                    details: submission.statement ?? (submission.noAdditionalEvidence ? 'No additional evidence' : null)
-                })
-            })
-
-        if (disputeRecord.lockedAt) {
-            timelineEntries.push({
-                at: disputeRecord.lockedAt,
-                actor: disputeRecord.lockedById ?? null,
-                action: 'DOSSIER_LOCKED'
-            })
-        }
-
+        const timelineEntries: ArbitrationTimelineEntry[] = [...preparedCase.timelineEntries]
         timelineEntries.push({
             at: created.generatedAt,
             actor: adminId,
             action: 'DOSSIER_GENERATED',
             details: `Version ${nextVersion}`
-        })
-
-        timelineEntries.sort((a, b) => a.at.getTime() - b.at.getTime())
-
-        const evidencePayload = evidenceSubmissions.map(submission => {
-            const evidenceItems = submission.items.map(item => {
-                const baseAsset = item.asset ?? (item.assetId ? assetMap.get(item.assetId) ?? null : null)
-                const assetSummary = composeAssetSummary(baseAsset ?? null)
-
-                let reference: Record<string, unknown> | null = null
-
-                if (item.sourceType === ArbitrationEvidenceSourceType.MILESTONE_ATTACHMENT && item.sourceId) {
-                    const attachment = milestoneAttachmentMap.get(item.sourceId)
-                    if (attachment) {
-                        const attachmentAsset = attachment.asset ?? (attachment.assetId ? assetMap.get(attachment.assetId) ?? null : null)
-                        reference = {
-                            type: 'MILESTONE_ATTACHMENT',
-                            attachment: {
-                                id: attachment.id,
-                                submissionId: attachment.submissionId,
-                                name: attachment.name ?? null,
-                                url: attachment.url ?? attachmentAsset?.url ?? null,
-                                mimeType: attachment.mimeType ?? attachmentAsset?.mimeType ?? null,
-                                size: attachment.size ?? attachmentAsset?.bytes ?? null,
-                                createdAt: attachment.createdAt.toISOString(),
-                                submission: attachment.submission
-                                    ? {
-                                          id: attachment.submission.id,
-                                          milestoneId: attachment.submission.milestoneId,
-                                          milestoneTitle: attachment.submission.milestone?.title ?? null,
-                                          freelancerId: attachment.submission.freelancerId,
-                                          createdAt: attachment.submission.createdAt.toISOString()
-                                      }
-                                    : null
-                            }
-                        }
-                    }
-                } else if (item.sourceType === ArbitrationEvidenceSourceType.CHAT_ATTACHMENT && item.sourceId) {
-                    const attachment = chatAttachmentMap.get(item.sourceId)
-                    if (attachment) {
-                        const attachmentAsset = attachment.asset ?? (attachment.assetId ? assetMap.get(attachment.assetId) ?? null : null)
-                        reference = {
-                            type: 'CHAT_ATTACHMENT',
-                            attachment: {
-                                id: attachment.id,
-                                messageId: attachment.messageId,
-                                name: attachment.name ?? null,
-                                url: attachment.url ?? attachmentAsset?.url ?? null,
-                                mimeType: attachment.mimeType ?? attachmentAsset?.mimeType ?? null,
-                                size: attachment.size ?? attachmentAsset?.bytes ?? null,
-                                createdAt: attachment.createdAt.toISOString(),
-                                message: attachment.message
-                                    ? {
-                                          id: attachment.message.id,
-                                          senderId: attachment.message.senderId ?? null,
-                                          sentAt: attachment.message.sentAt.toISOString(),
-                                          body: attachment.message.body ?? null
-                                      }
-                                    : null
-                            }
-                        }
-                    }
-                } else if (item.sourceType === ArbitrationEvidenceSourceType.ASSET && item.assetId) {
-                    const asset = assetMap.get(item.assetId)
-                    if (asset) {
-                        reference = {
-                            type: 'ASSET',
-                            asset: composeAssetSummary(asset)
-                        }
-                    }
-                } else if (item.sourceType === ArbitrationEvidenceSourceType.EXTERNAL_URL && item.url) {
-                    reference = { type: 'EXTERNAL_URL', url: item.url }
-                }
-
-                return {
-                    id: item.id,
-                    label: item.label ?? null,
-                    description: item.description ?? null,
-                    sourceType: item.sourceType,
-                    sourceId: item.sourceId ?? null,
-                    url: item.url ?? null,
-                    createdAt: item.createdAt.toISOString(),
-                    asset: assetSummary,
-                    reference
-                }
-            })
-
-            return {
-                id: submission.id,
-                submittedById: submission.submittedById,
-                submittedBy: composeUserSummary(submission.submittedBy),
-                statement: submission.statement ?? null,
-                noAdditionalEvidence: submission.noAdditionalEvidence,
-                submittedAt: submission.submittedAt.toISOString(),
-                items: evidenceItems
-            }
-        })
-
-        const funded = Number(escrow.amountFunded)
-        const released = Number(escrow.amountReleased)
-        const refunded = Number(escrow.amountRefunded)
-
-        const milestonePayload = {
-            id: milestone.id,
-            title: milestone.title,
-            status: milestone.status,
-            amount: Number(milestone.amount),
-            currency: milestone.currency,
-            startAt: milestone.startAt ? milestone.startAt.toISOString() : null,
-            endAt: milestone.endAt ? milestone.endAt.toISOString() : null,
-            contractId: milestone.contractId,
-            contractTitle: milestone.contract?.title ?? null
-        }
-
-        const milestoneSubmissionPayload = milestoneSubmissions.map(submission => {
-            const attachments = submission.attachments.map(attachment => {
-                const asset = attachment.asset ?? (attachment.assetId ? assetMap.get(attachment.assetId) ?? null : null)
-                return {
-                    id: attachment.id,
-                    assetId: attachment.assetId ?? asset?.id ?? null,
-                    name: attachment.name ?? null,
-                    url: attachment.url ?? asset?.url ?? null,
-                    mimeType: attachment.mimeType ?? asset?.mimeType ?? null,
-                    size: attachment.size ?? asset?.bytes ?? null,
-                    createdAt: attachment.createdAt.toISOString()
-                }
-            })
-
-            return {
-                id: submission.id,
-                milestoneId: submission.milestoneId,
-                freelancerId: submission.freelancerId,
-                freelancer: composeFullName(submission.freelancer?.profile) ?? null,
-                status: submission.status,
-                message: submission.message ?? null,
-                reviewNote: submission.reviewNote ?? null,
-                reviewRating: submission.reviewRating ?? null,
-                reviewedAt: submission.reviewedAt ? submission.reviewedAt.toISOString() : null,
-                reviewedById: submission.reviewedById ?? null,
-                reviewedBy: composeFullName(submission.reviewer?.profile) ?? null,
-                createdAt: submission.createdAt.toISOString(),
-                updatedAt: submission.updatedAt.toISOString(),
-                attachments
-            }
         })
 
         const payloadData: Record<string, unknown> = {
@@ -2141,56 +2294,19 @@ const generateArbitrationDossier = async (
                 notes: notes && notes.length > 0 ? notes : null,
                 hash: null
             },
-            parties: [
-                {
-                    role: 'CLIENT',
-                    userId: contract.clientId,
-                    displayName: composeFullName(contract.client?.profile) ?? null,
-                    feePaid: disputeRecord.clientArbFeePaid
-                },
-                {
-                    role: 'FREELANCER',
-                    userId: contract.freelancerId,
-                    displayName: composeFullName(contract.freelancer?.profile) ?? null,
-                    feePaid: disputeRecord.freelancerArbFeePaid
-                },
-                {
-                    role: 'ARBITRATION_OFFICER',
-                    userId: adminId,
-                    displayName: null,
-                    feePaid: null
-                }
-            ],
-            financials: {
-                escrowAmount: funded,
-                currency: escrow.currency,
-                released,
-                refunded,
-                disputed: Math.max(0, funded - released - refunded),
-                requested: {
-                    client: Number(disputeRecord.proposedRefund),
-                    freelancer: Number(disputeRecord.proposedRelease)
-                },
-                decided: {
-                    client: Number(disputeRecord.decidedRefund),
-                    freelancer: Number(disputeRecord.decidedRelease)
-                }
-            },
-            milestone: milestonePayload,
-            milestoneSubmissions: milestoneSubmissionPayload,
+            ...preparedCase.payload,
             timeline: timelineEntries.map(entry => ({
                 at: entry.at.toISOString(),
                 actor: entry.actor,
                 action: entry.action,
                 details: entry.details ?? null
-            })),
-            evidence: evidencePayload
+            }))
         }
 
         const hash = createHash('sha256').update(JSON.stringify(payloadData)).digest('hex')
         ;(payloadData.meta as Record<string, unknown>).hash = hash
 
-        const updated = await tx.arbitrationDossier.update({
+        await tx.arbitrationDossier.update({
             where: { id: created.id },
             data: {
                 payload: payloadData,
@@ -2204,8 +2320,6 @@ const generateArbitrationDossier = async (
             where: { id: disputeId },
             data: { currentDossierVersion: nextVersion }
         })
-
-        return updated
     })
 
     const refreshed = await prismaClient.dispute.findUnique({
@@ -2220,6 +2334,183 @@ const generateArbitrationDossier = async (
     return buildAdminDisputeDetailResponse(refreshed)
 }
 
+const getArbitrationContext = async (adminId: string, disputeId: string) => {
+    const disputeRecord = await prismaClient.dispute.findUnique({
+        where: { id: disputeId },
+        include: adminDisputeDetailInclude
+    })
+
+    if (!disputeRecord) {
+        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    if (!disputeRecord.lockedAt) {
+        throw new BadRequestException('Tranh chấp chưa được khóa hồ sơ trọng tài', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    if (
+        disputeRecord.status !== DisputeStatus.ARBITRATION &&
+        disputeRecord.status !== DisputeStatus.ARBITRATION_READY
+    ) {
+        throw new BadRequestException('Tranh chấp chưa ở giai đoạn xem xét trọng tài', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const preparedCase = await buildArbitrationCaseData(disputeRecord, adminId)
+    const timeline = preparedCase.timelineEntries.map(entry => ({
+        at: entry.at.toISOString(),
+        actor: entry.actor,
+        action: entry.action,
+        details: entry.details ?? null
+    }))
+
+    const arbitrationContext = {
+        meta: {
+            disputeId,
+            status: disputeRecord.status,
+            lockedAt: disputeRecord.lockedAt.toISOString(),
+            arbitrationDeadline: disputeRecord.arbitrationDeadline
+                ? disputeRecord.arbitrationDeadline.toISOString()
+                : null,
+            currentDossierVersion: disputeRecord.currentDossierVersion ?? null
+        },
+        ...preparedCase.payload,
+        timeline
+    }
+
+    return {
+        dispute: buildAdminDisputeDetailResponse(disputeRecord),
+        arbitrationContext
+    }
+}
+
+const recordArbitrationDecision = async (
+    adminId: string,
+    disputeId: string,
+    payload: AdminRecordArbitrationDecisionInput
+) => {
+    const disputeRecord = await prismaClient.dispute.findUnique({
+        where: { id: disputeId },
+        include: adminDisputeDetailInclude
+    })
+
+    if (!disputeRecord || !disputeRecord.escrow || !disputeRecord.escrow.milestone) {
+        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    if (!disputeRecord.lockedAt) {
+        throw new BadRequestException('Cần khóa hồ sơ trước khi ra phán quyết', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    if (disputeRecord.status !== DisputeStatus.ARBITRATION) {
+        throw new BadRequestException('Tranh chấp chưa ở giai đoạn trọng tài', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const escrow = disputeRecord.escrow as AdminDisputeEscrow
+
+    const availableCents = Math.max(
+        0,
+        decimalToCents(escrow.amountFunded) -
+            decimalToCents(escrow.amountReleased) -
+            decimalToCents(escrow.amountRefunded)
+    )
+
+    if (availableCents <= 0) {
+        throw new BadRequestException('Không còn giá trị đang tranh chấp để phân bổ', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const releaseCents = Math.round(payload.releaseAmount * 100)
+    const refundCents = Math.round(payload.refundAmount * 100)
+
+    if (releaseCents > availableCents || refundCents > availableCents) {
+        throw new BadRequestException('Số tiền phán quyết vượt quá giá trị đang tranh chấp', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    if (payload.awardType === 'RELEASE_ALL') {
+        if (releaseCents !== availableCents || refundCents !== 0) {
+            throw new BadRequestException(
+                'Phán quyết trả hết cho freelancer phải phân bổ toàn bộ số tiền tranh chấp cho freelancer',
+                ErrorCode.PARAM_QUERY_ERROR
+            )
+        }
+    } else if (payload.awardType === 'REFUND_ALL') {
+        if (refundCents !== availableCents || releaseCents !== 0) {
+            throw new BadRequestException(
+                'Phán quyết hoàn hết cho client phải phân bổ toàn bộ số tiền tranh chấp cho client',
+                ErrorCode.PARAM_QUERY_ERROR
+            )
+        }
+    } else if (releaseCents + refundCents !== availableCents) {
+        throw new BadRequestException(
+            'Tổng tiền phân bổ phải đúng bằng giá trị đang tranh chấp',
+            ErrorCode.PARAM_QUERY_ERROR
+        )
+    }
+
+    const summary = payload.summary.trim()
+    const reasoning = payload.reasoning?.trim() ?? null
+    const decidedAt = new Date()
+
+    const resolvedStatus =
+        releaseCents === availableCents
+            ? DisputeStatus.RESOLVED_RELEASE_ALL
+            : refundCents === availableCents
+            ? DisputeStatus.RESOLVED_REFUND_ALL
+            : DisputeStatus.RESOLVED_SPLIT
+
+    const attachments = (payload.attachments ?? []).map(item => ({
+        assetId: item.assetId,
+        label: item.label?.trim() && item.label.trim().length > 0 ? item.label.trim() : null
+    }))
+
+    const uniqueAssetIds = Array.from(new Set(attachments.map(item => item.assetId)))
+    if (uniqueAssetIds.length > 0) {
+        const assetCount = await prismaClient.asset.count({ where: { id: { in: uniqueAssetIds } } })
+        if (assetCount !== uniqueAssetIds.length) {
+            throw new BadRequestException('Một số tài liệu đính kèm không tồn tại', ErrorCode.ITEM_NOT_FOUND)
+        }
+    }
+
+    await prismaClient.$transaction(async tx => {
+        await tx.dispute.update({
+            where: { id: disputeId },
+            data: {
+                status: resolvedStatus,
+                decidedRelease: centsToDecimal(releaseCents),
+                decidedRefund: centsToDecimal(refundCents),
+                decidedById: adminId,
+                decidedAt,
+                decisionSummary: summary,
+                decisionReasoning: reasoning,
+                responseDeadline: null
+            }
+        })
+
+        await tx.arbitrationDecisionAttachment.deleteMany({ where: { disputeId } })
+
+        if (attachments.length > 0) {
+            await tx.arbitrationDecisionAttachment.createMany({
+                data: attachments.map(item => ({
+                    disputeId,
+                    assetId: item.assetId,
+                    label: item.label
+                }))
+            })
+        }
+    })
+
+    const refreshed = await prismaClient.dispute.findUnique({
+        where: { id: disputeId },
+        include: adminDisputeDetailInclude
+    })
+
+    if (!refreshed) {
+        throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    return buildAdminDisputeDetailResponse(refreshed)
+}
+
+
 const adminDisputeService = {
     listArbitrators,
     listDisputes,
@@ -2230,7 +2521,9 @@ const adminDisputeService = {
     joinDispute,
     requestArbitrationFees,
     lockDispute,
-    generateArbitrationDossier
+    generateArbitrationDossier,
+    getArbitrationContext,
+    recordArbitrationDecision
 }
 
 export default adminDisputeService
