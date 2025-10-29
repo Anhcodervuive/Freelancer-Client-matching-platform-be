@@ -9,7 +9,7 @@ import { BadRequestException } from '~/exceptions/bad-request'
 const ensureArbitratorUser = (req: Request) => {
     const user = req.user
 
-    if (!user || user.role !== 'ARBITRATOR') {
+    if (!user || user.role !== Role.ARBITRATOR) {
         throw new ForbiddenException(
             'Chỉ trọng tài mới được phép truy cập tính năng này',
             ErrorCode.FORBIDDEN

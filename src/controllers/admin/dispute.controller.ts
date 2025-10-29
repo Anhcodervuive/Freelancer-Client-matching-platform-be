@@ -19,11 +19,32 @@ import { BadRequestException } from '~/exceptions/bad-request'
 const ensureAdminUser = (req: Request) => {
     const user = req.user
 
-    if (!user || user.role !== 'ADMIN') {
+    if (!user || user.role !== Role.ADMIN) {
         throw new ForbiddenException('Chỉ admin mới được phép truy cập tính năng này', ErrorCode.FORBIDDEN)
     }
 
     return user.id
+}
+
+const resolveArbitrationContextViewer = (req: Request) => {
+    const user = req.user
+
+    if (!user) {
+        throw new ForbiddenException('Không có thông tin người dùng', ErrorCode.FORBIDDEN)
+    }
+
+    if (user.role === Role.ADMIN) {
+        return { role: Role.ADMIN, userId: user.id }
+    }
+
+    if (user.role === Role.ARBITRATOR) {
+        return { role: Role.ARBITRATOR, userId: user.id }
+    }
+
+    throw new ForbiddenException(
+        'Chỉ admin hoặc trọng tài được phép truy cập ngữ cảnh trọng tài',
+        ErrorCode.FORBIDDEN
+    )
 }
 
 export const listAdminDisputes = async (req: Request, res: Response) => {
@@ -170,7 +191,7 @@ export const assignArbitratorToDispute = async (req: Request, res: Response) => 
 }
 
 export const getArbitrationContext = async (req: Request, res: Response) => {
-    const adminId = ensureAdminUser(req)
+    const viewer = resolveArbitrationContextViewer(req)
     const { disputeId } = req.params
 
     if (!disputeId) {
@@ -178,7 +199,7 @@ export const getArbitrationContext = async (req: Request, res: Response) => {
     }
 
     const result = await adminDisputeService.getArbitrationContext(
-        { role: Role.ADMIN, userId: adminId },
+        viewer,
         disputeId
     )
 
