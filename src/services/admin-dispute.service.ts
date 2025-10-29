@@ -2503,6 +2503,50 @@ const recordArbitrationDecision = async (
     return buildAdminDisputeDetailResponse(refreshed)
 }
 
+const listArbitratorAssignedDisputes = async (arbitratorId: string) => {
+    const disputeRecords = await prismaClient.dispute.findMany({
+        where: {
+            arbitratorId,
+            escrow: {
+                milestone: {
+                    isDeleted: false
+                }
+            }
+        },
+        orderBy: { createdAt: 'desc' },
+        include: adminDisputeInclude
+    })
+
+    return {
+        total: disputeRecords.length,
+        data: disputeRecords.map(buildAdminDisputeResponse)
+    }
+}
+
+const getArbitratorAssignedDispute = async (arbitratorId: string, disputeId: string) => {
+    const disputeRecord = await prismaClient.dispute.findFirst({
+        where: {
+            id: disputeId,
+            arbitratorId,
+            escrow: {
+                milestone: {
+                    isDeleted: false
+                }
+            }
+        },
+        include: adminDisputeDetailInclude
+    })
+
+    if (!disputeRecord) {
+        throw new NotFoundException(
+            'Không tìm thấy tranh chấp được phân công cho trọng tài',
+            ErrorCode.ITEM_NOT_FOUND
+        )
+    }
+
+    return buildAdminDisputeDetailResponse(disputeRecord)
+}
+
 
 const adminDisputeService = {
     listArbitrators,
@@ -2516,7 +2560,9 @@ const adminDisputeService = {
     lockDispute,
     generateArbitrationDossier,
     getArbitrationContext,
-    recordArbitrationDecision
+    recordArbitrationDecision,
+    listArbitratorAssignedDisputes,
+    getArbitratorAssignedDispute
 }
 
 export default adminDisputeService
