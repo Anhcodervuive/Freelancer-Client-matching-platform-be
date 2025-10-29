@@ -62,16 +62,19 @@ const adminDisputeChatAccessLogSelect = Prisma.validator<Prisma.ChatAdminAccessL
     }
 })
 
+const adminEvidenceAssetSelect = Prisma.validator<Prisma.AssetSelect>()({
+    id: true,
+    url: true,
+    mimeType: true,
+    bytes: true,
+    status: true,
+    checksum: true,
+    createdAt: true
+})
+
 const adminEvidenceItemInclude = Prisma.validator<Prisma.ArbitrationEvidenceItemInclude>()({
     asset: {
-        select: {
-            id: true,
-            url: true,
-            mimeType: true,
-            bytes: true,
-            status: true,
-            checksum: true
-        }
+        select: adminEvidenceAssetSelect
     }
 })
 
@@ -159,16 +162,6 @@ const adminChatEvidenceAttachmentSelect = Prisma.validator<Prisma.ChatMessageAtt
             checksum: true
         }
     }
-})
-
-const adminEvidenceAssetSelect = Prisma.validator<Prisma.AssetSelect>()({
-    id: true,
-    url: true,
-    mimeType: true,
-    bytes: true,
-    status: true,
-    checksum: true,
-    createdAt: true
 })
 
 const adminMilestoneSubmissionAttachmentSelect =
