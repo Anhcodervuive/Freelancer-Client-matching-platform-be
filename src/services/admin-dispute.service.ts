@@ -23,7 +23,12 @@ import {
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
-import createSimplePdf from '~/utils/pdf'
+import createDossierPdf, {
+    type DossierPdfContent,
+    type PdfEvidenceSection,
+    type PdfKeyValuePair,
+    type PdfTableContent
+} from '~/utils/pdf'
 
 const MEDIATION_RESPONSE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
 const MEDIATION_STATUSES: DisputeStatus[] = [DisputeStatus.OPEN, DisputeStatus.NEGOTIATION]
@@ -363,128 +368,6 @@ const toDisplayValue = (value: unknown): string => {
     return String(value)
 }
 
-const appendLines = (collector: string[], content: string) => {
-    const normalized = content.length > 0 ? content : ' '
-
-    let remaining = normalized
-
-    while (remaining.length > 110) {
-        collector.push(remaining.slice(0, 110))
-        remaining = remaining.slice(110)
-    }
-
-    collector.push(remaining.length > 0 ? remaining : ' ')
-}
-
-const truncatePrintable = (value: string, maxLength: number) => {
-    const limit = Math.max(4, maxLength)
-
-    if (value.length <= limit) {
-        return value
-    }
-
-    return `${value.slice(0, limit - 3).trimEnd()}...`
-}
-
-const normalizeTableText = (value: string) => value.replace(/\s+/g, ' ').trim()
-
-const formatTableRows = (headers: string[], rows: string[][], columnMaxWidths: number[]): string[] => {
-    if (headers.length === 0) {
-        return []
-    }
-
-    const sanitizedHeaders = headers.map((header, index) =>
-        truncatePrintable(normalizeTableText(header), columnMaxWidths[index] ?? 40)
-    )
-
-    const sanitizedRows = rows.map(row =>
-        row.map((cell, index) =>
-            truncatePrintable(normalizeTableText(cell ?? ''), columnMaxWidths[index] ?? 40)
-        )
-    )
-
-    const allRows = [sanitizedHeaders, ...sanitizedRows]
-    const columnWidths = sanitizedHeaders.map((_, index) => {
-        const maxForColumn = columnMaxWidths[index] ?? 60
-        const measured = allRows.reduce((acc, row) => Math.max(acc, row[index]?.length ?? 0), 0)
-        return Math.min(Math.max(measured, 3), maxForColumn)
-    })
-
-    const formatRow = (cells: string[]) =>
-        cells
-            .map((cell, index) => {
-                const fallbackWidth = Math.min(
-                    Math.max(cell.length, 3),
-                    columnMaxWidths[index] ?? 60
-                )
-                const width = columnWidths[index] ?? fallbackWidth
-                return cell.padEnd(width, ' ')
-            })
-            .join(' | ')
-
-    const lines: string[] = []
-    lines.push(formatRow(sanitizedHeaders))
-    lines.push(columnWidths.map(width => '-'.repeat(width)).join('-+-'))
-    sanitizedRows.forEach(row => {
-        lines.push(formatRow(row))
-    })
-
-    return lines
-}
-
-const appendMonospaceTable = (
-    lines: string[],
-    headers: string[],
-    rows: string[][],
-    columnMaxWidths: number[],
-    options?: { emptyMessage?: string }
-) => {
-    if (rows.length === 0) {
-        if (options?.emptyMessage) {
-            appendLines(lines, options.emptyMessage)
-        }
-        lines.push(' ')
-        return
-    }
-
-    const tableLines = formatTableRows(headers, rows, columnMaxWidths)
-
-    lines.push('@@FONT:MONO')
-    tableLines.forEach(row => lines.push(row))
-    lines.push('@@FONT:DEFAULT')
-    lines.push(' ')
-}
-
-const appendKeyValueTable = (
-    lines: string[],
-    entries: { label: string; value: unknown }[],
-    columnMaxWidths: [number, number],
-    options?: { includeEmpty?: boolean }
-) => {
-    const rows = entries
-        .filter(entry => {
-            if (options?.includeEmpty) {
-                return true
-            }
-
-            const value = entry.value
-            if (value === null || value === undefined) {
-                return false
-            }
-
-            if (typeof value === 'string') {
-                return value.trim().length > 0
-            }
-
-            return true
-        })
-        .map(entry => [entry.label, toDisplayValue(entry.value)])
-
-    appendMonospaceTable(lines, ['Field', 'Value'], rows, columnMaxWidths, {
-        emptyMessage: '- Không có dữ liệu để hiển thị'
-    })
-}
-
 const describeBooleanValue = (value: unknown) => {
     if (typeof value === 'boolean') {
         return value ? 'Yes' : 'No'
@@ -635,9 +518,10 @@ const describeUserFromPayload = (user: unknown, fallbackId: unknown) => {
     return toDisplayValue(fallbackId ?? user)
 }
 
-const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
-    const lines: string[] = []
+const toKeyValuePairs = (entries: { label: string; value: unknown }[]): PdfKeyValuePair[] =>
+    entries.map(entry => ({ label: entry.label, value: toDisplayValue(entry.value) }))
 
+const buildDossierPdfContent = (dossier: AdminArbitrationDossier): DossierPdfContent => {
     const generatedByParts: string[] = []
 
     if (dossier.generatedBy) {
@@ -654,37 +538,72 @@ const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
         generatedByParts.push(dossier.generatedBy.id)
     }
 
-    const generatedBySummary = generatedByParts.length > 0 ? generatedByParts.filter(Boolean).join(' | ') : 'N/A'
+    const generatedBySummary =
+        generatedByParts.length > 0 ? generatedByParts.filter(Boolean).join(' • ') : 'N/A'
 
-    appendLines(lines, '# Arbitration Dossier Report')
-    appendLines(lines, `Dispute: ${dossier.disputeId}`)
-    lines.push(' ')
+    const caseOverview = toKeyValuePairs([
+        { label: 'Dossier ID', value: dossier.id },
+        { label: 'Dispute ID', value: dossier.disputeId },
+        { label: 'Version', value: dossier.version },
+        { label: 'Status', value: dossier.status },
+        { label: 'Generated At', value: dossier.generatedAt },
+        { label: 'Generated By', value: generatedBySummary },
+        { label: 'Locked At', value: dossier.lockedAt ?? null },
+        { label: 'Finalized At', value: dossier.finalizedAt ?? null },
+        { label: 'Hash', value: dossier.hash ?? null },
+        { label: 'Notes', value: dossier.notes ?? null }
+    ])
 
-    appendLines(lines, '## Case Overview')
-    appendKeyValueTable(
-        lines,
-        [
-            { label: 'Dossier ID', value: dossier.id },
-            { label: 'Version', value: dossier.version },
-            { label: 'Status', value: dossier.status },
-            { label: 'Generated At', value: dossier.generatedAt },
-            { label: 'Generated By', value: generatedBySummary },
-            { label: 'Locked At', value: dossier.lockedAt ?? null },
-            { label: 'Finalized At', value: dossier.finalizedAt ?? null },
-            { label: 'Hash', value: dossier.hash ?? null },
-            { label: 'Notes', value: dossier.notes ?? null }
-        ],
-        [26, 70],
-        { includeEmpty: true }
-    )
+    const baseFinancialSummary = toKeyValuePairs([
+        { label: 'Currency', value: null },
+        { label: 'Escrow Amount', value: null },
+        { label: 'Released', value: null },
+        { label: 'Refunded', value: null },
+        { label: 'Disputed', value: null }
+    ])
+
+    const defaultTimelineTable: PdfTableContent = {
+        columns: ['Thời gian', 'Tác nhân', 'Hành động', 'Chi tiết'],
+        rows: [],
+        columnRatios: [0.22, 0.2, 0.2, 0.38],
+        emptyMessage: 'Không có dữ liệu timeline trong payload'
+    }
 
     const payload = dossier.payload
 
+    const content: DossierPdfContent = {
+        disputeId: dossier.disputeId,
+        status: toDisplayValue(dossier.status),
+        version: dossier.version,
+        generatedAt: toDisplayValue(dossier.generatedAt),
+        generatedBy: generatedBySummary,
+        lockedAt: dossier.lockedAt ? toDisplayValue(dossier.lockedAt) : null,
+        finalizedAt: dossier.finalizedAt ? toDisplayValue(dossier.finalizedAt) : null,
+        caseOverview,
+        metadataOverview: null,
+        parties: null,
+        financialOverview: {
+            summary: baseFinancialSummary,
+            requested: null,
+            decided: null
+        },
+        timeline: defaultTimelineTable,
+        evidenceSections: [],
+        evidenceNote: null,
+        payloadSnapshot: null,
+        payloadFallback: null
+    }
+
     if (!isRecord(payload)) {
-        lines.push(' ')
-        appendLines(lines, 'Payload summary: Không có payload JSON hợp lệ, hiển thị dữ liệu dạng chuỗi:')
-        appendLines(lines, toDisplayValue(payload))
-        return lines
+        return {
+            ...content,
+            metadataOverview: {
+                items: null,
+                note: 'Payload không phải JSON hợp lệ, hiển thị dữ liệu dạng chuỗi.'
+            },
+            parties: null,
+            payloadFallback: `Payload summary: ${toDisplayValue(payload)}`
+        }
     }
 
     const meta = isRecord(payload.meta) ? payload.meta : null
@@ -693,225 +612,187 @@ const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
     const timeline = Array.isArray(payload.timeline) ? payload.timeline : []
     const evidence = Array.isArray(payload.evidence) ? payload.evidence : []
 
-    lines.push(' ')
-    appendLines(lines, '## Metadata Overview')
+    const metadataOverview: DossierPdfContent['metadataOverview'] = meta
+        ? {
+              items: toKeyValuePairs([
+                  { label: 'Dossier ID', value: meta.dossierId ?? dossier.id },
+                  { label: 'Dispute ID', value: meta.disputeId ?? dossier.disputeId },
+                  { label: 'Dossier Status', value: meta.dossierStatus ?? dossier.status },
+                  { label: 'Version', value: meta.dossierVersion ?? dossier.version },
+                  { label: 'Generated At', value: meta.generatedAt ?? dossier.generatedAt },
+                  { label: 'Generated By', value: meta.generatedBy ?? generatedBySummary },
+                  { label: 'Locked At', value: meta.lockedAt ?? null },
+                  { label: 'Notes', value: meta.notes ?? null },
+                  { label: 'Hash', value: meta.hash ?? dossier.hash }
+              ])
+          }
+        : {
+              items: null,
+              note: 'Không có metadata trong payload'
+          }
 
-    if (meta) {
-        appendKeyValueTable(
-            lines,
-            [
-                { label: 'Dossier ID', value: meta.dossierId ?? dossier.id },
-                { label: 'Dispute ID', value: meta.disputeId ?? dossier.disputeId },
-                { label: 'Dossier Status', value: meta.dossierStatus ?? dossier.status },
-                { label: 'Version', value: meta.dossierVersion ?? dossier.version },
-                { label: 'Generated At', value: meta.generatedAt ?? dossier.generatedAt },
-                { label: 'Generated By', value: meta.generatedBy ?? generatedBySummary },
-                { label: 'Locked At', value: meta.lockedAt ?? null },
-                { label: 'Notes', value: meta.notes ?? null },
-                { label: 'Hash', value: meta.hash ?? dossier.hash }
-            ],
-            [28, 68],
-            { includeEmpty: true }
-        )
-    } else {
-        appendLines(lines, '- (Không có metadata trong payload)')
-        lines.push(' ')
-    }
+    const partyRows = parties.map((party, index) => {
+        if (isRecord(party)) {
+            const role = toDisplayValue(party.role ?? `Party ${index + 1}`)
+            const displayName = toDisplayValue(party.displayName ?? null)
+            const userId = toDisplayValue(party.userId ?? null)
+            const feePaid = describeBooleanValue(party.feePaid ?? null)
 
-    appendLines(lines, '## Parties Involved')
-
-    if (parties.length === 0) {
-        appendLines(lines, '- (Không có thông tin đối tác)')
-        lines.push(' ')
-    } else {
-        const partyRows = parties.map((party, index) => {
-            if (isRecord(party)) {
-                const role = toDisplayValue(party.role ?? `Party ${index + 1}`)
-                const displayName = toDisplayValue(party.displayName ?? null)
-                const userId = toDisplayValue(party.userId ?? null)
-                const feePaid = describeBooleanValue(party.feePaid ?? null)
-
-                return [`${index + 1}. ${role}`, displayName, userId, feePaid]
-            }
-
-            return [`${index + 1}`, toDisplayValue(party), 'N/A', 'N/A']
-        })
-
-        appendMonospaceTable(
-            lines,
-            ['Vai trò', 'Tên hiển thị', 'Mã người dùng', 'Đã đóng phí'],
-            partyRows,
-            [22, 32, 20, 14]
-        )
-    }
-
-    appendLines(lines, '## Financial Overview')
-
-    if (financials) {
-        appendKeyValueTable(
-            lines,
-            [
-                { label: 'Currency', value: financials.currency ?? null },
-                { label: 'Escrow Amount', value: financials.escrowAmount ?? null },
-                { label: 'Released', value: financials.released ?? null },
-                { label: 'Refunded', value: financials.refunded ?? null },
-                { label: 'Disputed', value: financials.disputed ?? null }
-            ],
-            [24, 70],
-            { includeEmpty: true }
-        )
-
-        const requested = isRecord(financials.requested) ? financials.requested : null
-
-        if (requested) {
-            appendLines(lines, '### Requested Awards')
-            appendMonospaceTable(
-                lines,
-                ['Bên', 'Giá trị'],
-                [
-                    ['Client', toDisplayValue(requested.client ?? null)],
-                    ['Freelancer', toDisplayValue(requested.freelancer ?? null)]
-                ],
-                [16, 24]
-            )
+            return [`${index + 1}. ${role}`, displayName, userId, feePaid]
         }
 
-        const decided = isRecord(financials.decided) ? financials.decided : null
+        return [`${index + 1}`, toDisplayValue(party), 'N/A', 'N/A']
+    })
 
-        if (decided) {
-            appendLines(lines, '### Decided Awards')
-            appendMonospaceTable(
-                lines,
-                ['Bên', 'Giá trị'],
-                [
-                    ['Client', toDisplayValue(decided.client ?? null)],
-                    ['Freelancer', toDisplayValue(decided.freelancer ?? null)]
-                ],
-                [16, 24]
-            )
-        }
-    } else {
-        appendLines(lines, '- (Không có dữ liệu tài chính)')
-        lines.push(' ')
+    const partiesTable: PdfTableContent = {
+        columns: ['Vai trò', 'Tên hiển thị', 'Mã người dùng', 'Đã đóng phí'],
+        rows: partyRows,
+        columnRatios: [0.24, 0.28, 0.24, 0.14],
+        emptyMessage: 'Không có thông tin đối tác trong payload'
     }
 
-    appendLines(lines, '## Timeline (tối đa 40 mốc)')
+    const financialSummary = financials
+        ? toKeyValuePairs([
+              { label: 'Currency', value: financials.currency ?? null },
+              { label: 'Escrow Amount', value: financials.escrowAmount ?? null },
+              { label: 'Released', value: financials.released ?? null },
+              { label: 'Refunded', value: financials.refunded ?? null },
+              { label: 'Disputed', value: financials.disputed ?? null }
+          ])
+        : baseFinancialSummary
+
+    const requested = financials && isRecord(financials.requested) ? financials.requested : null
+    const decided = financials && isRecord(financials.decided) ? financials.decided : null
+
+    const requestedTable: PdfTableContent | null = requested
+        ? {
+              columns: ['Bên', 'Giá trị'],
+              rows: [
+                  ['Client', toDisplayValue(requested.client ?? null)],
+                  ['Freelancer', toDisplayValue(requested.freelancer ?? null)]
+              ],
+              columnRatios: [0.4, 0.6]
+          }
+        : null
+
+    const decidedTable: PdfTableContent | null = decided
+        ? {
+              columns: ['Bên', 'Giá trị'],
+              rows: [
+                  ['Client', toDisplayValue(decided.client ?? null)],
+                  ['Freelancer', toDisplayValue(decided.freelancer ?? null)]
+              ],
+              columnRatios: [0.4, 0.6]
+          }
+        : null
 
     const limitedTimeline = timeline.slice(0, 40)
+    const timelineRows = limitedTimeline.map(entry => {
+        if (isRecord(entry)) {
+            const at = toDisplayValue(entry.at ?? null)
+            const actor = describeUserFromPayload(entry.actor ?? null, entry.actor ?? null)
+            const action = toDisplayValue(entry.action ?? null)
+            const details = entry.details !== undefined ? toDisplayValue(entry.details) : ''
 
-    if (limitedTimeline.length === 0) {
-        appendLines(lines, '- (Không có dữ liệu timeline)')
-        lines.push(' ')
-    } else {
-        const timelineRows = limitedTimeline.map(entry => {
-            if (isRecord(entry)) {
-                const at = toDisplayValue(entry.at ?? null)
-                const actor = describeUserFromPayload(entry.actor ?? null, entry.actor ?? null)
-                const action = toDisplayValue(entry.action ?? null)
-                const details = entry.details !== undefined ? toDisplayValue(entry.details) : ''
-
-                return [at, actor, action, details === 'N/A' ? '' : details]
-            }
-
-            return [toDisplayValue(entry), '', '', '']
-        })
-
-        appendMonospaceTable(
-            lines,
-            ['Thời gian', 'Tác nhân', 'Hành động', 'Chi tiết'],
-            timelineRows,
-            [24, 22, 20, 40]
-        )
-
-        if (timeline.length > limitedTimeline.length) {
-            appendLines(lines, `- ... (${timeline.length - limitedTimeline.length} mốc bổ sung đã được lược bỏ)`)
-            lines.push(' ')
+            return [at, actor, action, details === 'N/A' ? '' : details]
         }
-    }
 
-    appendLines(lines, '## Evidence Submissions')
+        return [toDisplayValue(entry), '', '', '']
+    })
+
+    const timelineTable: PdfTableContent = {
+        ...defaultTimelineTable,
+        rows: timelineRows,
+        note:
+            timeline.length > limitedTimeline.length
+                ? `${timeline.length - limitedTimeline.length} mốc bổ sung đã được lược bỏ`
+                : null
+    }
 
     const limitedEvidence = evidence.slice(0, 10)
 
-    if (limitedEvidence.length === 0) {
-        appendLines(lines, '- (Không có bằng chứng trong payload)')
-        lines.push(' ')
-    } else {
-        limitedEvidence.forEach((submission, submissionIndex) => {
-            if (isRecord(submission)) {
-                appendLines(lines, `### Submission ${submissionIndex + 1}`)
-                appendKeyValueTable(
-                    lines,
-                    [
-                        { label: 'Submission ID', value: submission.id ?? null },
-                        {
-                            label: 'Submitted By',
-                            value: describeUserFromPayload(submission.submittedBy ?? null, submission.submittedById ?? null)
-                        },
-                        { label: 'Statement', value: submission.statement ?? null },
-                        {
-                            label: 'No Additional Evidence',
-                            value: describeBooleanValue(submission.noAdditionalEvidence ?? null)
-                        },
-                        { label: 'Submitted At', value: submission.submittedAt ?? null }
-                    ],
-                    [30, 66],
-                    { includeEmpty: true }
-                )
+    const evidenceSections: PdfEvidenceSection[] = limitedEvidence.map((submission, submissionIndex) => {
+        const title = `Submission ${submissionIndex + 1}`
 
-                const items = Array.isArray(submission.items) ? submission.items : []
+        if (isRecord(submission)) {
+            const summary = toKeyValuePairs([
+                { label: 'Submission ID', value: submission.id ?? null },
+                {
+                    label: 'Submitted By',
+                    value: describeUserFromPayload(submission.submittedBy ?? null, submission.submittedById ?? null)
+                },
+                { label: 'Statement', value: submission.statement ?? null },
+                {
+                    label: 'No Additional Evidence',
+                    value: describeBooleanValue(submission.noAdditionalEvidence ?? null)
+                },
+                { label: 'Submitted At', value: submission.submittedAt ?? null }
+            ])
 
-                if (items.length > 0) {
-                    const limitedItems = items.slice(0, 15)
+            const items = Array.isArray(submission.items) ? submission.items : []
+            const limitedItems = items.slice(0, 15)
 
-                    const itemRows = limitedItems.map((item, itemIndex) => {
-                        if (isRecord(item)) {
-                            const label = item.label ?? item.id ?? `Item ${itemIndex + 1}`
-                            const sourceType = toDisplayValue(item.sourceType ?? null)
-                            const sourceId = item.sourceId ? ` (${toDisplayValue(item.sourceId)})` : ''
-                            const referenceSummary = summarizeEvidenceReference(item.reference ?? null)
-                            const assetSummary = summarizeEvidenceAsset(item.asset ?? null)
-                            const combinedReference = [referenceSummary, assetSummary].filter(Boolean).join(' | ')
+            const itemRows = limitedItems.map((item, itemIndex) => {
+                if (isRecord(item)) {
+                    const label = item.label ?? item.id ?? `Item ${itemIndex + 1}`
+                    const sourceType = toDisplayValue(item.sourceType ?? null)
+                    const sourceId = item.sourceId ? ` (${toDisplayValue(item.sourceId)})` : ''
+                    const referenceSummary = summarizeEvidenceReference(item.reference ?? null)
+                    const assetSummary = summarizeEvidenceAsset(item.asset ?? null)
+                    const combinedReference = [referenceSummary, assetSummary].filter(Boolean).join(' | ')
 
-                            return [
-                                `${itemIndex + 1}. ${toDisplayValue(label)}`,
-                                `${sourceType}${sourceId}`,
-                                combinedReference.length > 0 ? combinedReference : 'N/A',
-                                toDisplayValue(item.createdAt ?? null)
-                            ]
-                        }
-
-                        return [`${itemIndex + 1}`, toDisplayValue(item), 'N/A', 'N/A']
-                    })
-
-                    appendMonospaceTable(
-                        lines,
-                        ['Nhãn', 'Nguồn', 'Tham chiếu', 'Thời gian'],
-                        itemRows,
-                        [24, 26, 44, 18]
-                    )
-
-                    if (items.length > limitedItems.length) {
-                        appendLines(lines, `  ... (${items.length - limitedItems.length} mục bổ sung đã được lược bỏ)`)
-                        lines.push(' ')
-                    }
-                } else {
-                    appendLines(lines, '  Không có mục bằng chứng đính kèm')
-                    lines.push(' ')
+                    return [
+                        `${itemIndex + 1}. ${toDisplayValue(label)}`,
+                        `${sourceType}${sourceId}`,
+                        combinedReference.length > 0 ? combinedReference : 'N/A',
+                        toDisplayValue(item.createdAt ?? null)
+                    ]
                 }
-            } else {
-                appendLines(lines, `- Submission ${submissionIndex + 1}: ${toDisplayValue(submission)}`)
-                lines.push(' ')
+
+                return [`${itemIndex + 1}`, toDisplayValue(item), 'N/A', 'N/A']
+            })
+
+            const table: PdfTableContent | null = itemRows.length > 0
+                ? {
+                      columns: ['Nhãn', 'Nguồn', 'Tham chiếu', 'Thời gian'],
+                      rows: itemRows,
+                      columnRatios: [0.26, 0.24, 0.32, 0.18]
+                  }
+                : null
+
+            const notes: string[] = []
+
+            if (itemRows.length === 0) {
+                notes.push('Không có mục bằng chứng đính kèm')
             }
-        })
 
-        if (evidence.length > limitedEvidence.length) {
-            appendLines(lines, `- ... (${evidence.length - limitedEvidence.length} submission bổ sung đã được lược bỏ)`)
-            lines.push(' ')
+            if (items.length > limitedItems.length) {
+                notes.push(`${items.length - limitedItems.length} mục bổ sung đã được lược bỏ`)
+            }
+
+            return {
+                title,
+                summary,
+                table,
+                note: notes.length > 0 ? notes.join('. ') : null
+            }
         }
-    }
 
-    appendLines(lines, '## Payload Snapshot (JSON, giới hạn 200 dòng)')
+        return {
+            title,
+            summary: [],
+            table: null,
+            note: toDisplayValue(submission)
+        }
+    })
+
+    const evidenceNote =
+        evidence.length > limitedEvidence.length
+            ? `${evidence.length - limitedEvidence.length} submission bổ sung đã được lược bỏ`
+            : null
+
+    let payloadSnapshot: DossierPdfContent['payloadSnapshot'] = null
+    let payloadFallback: string | null = null
 
     try {
         const jsonString = JSON.stringify(payload, null, 2)
@@ -920,18 +801,34 @@ const buildDossierPdfLines = (dossier: AdminArbitrationDossier) => {
             const jsonLines = jsonString.split('\n')
             const limitedJson = jsonLines.slice(0, 200)
 
-            limitedJson.forEach(jsonLine => appendLines(lines, `  ${jsonLine}`))
-
-            if (jsonLines.length > limitedJson.length) {
-                appendLines(lines, `  ... (${jsonLines.length - limitedJson.length} dòng bổ sung đã được lược bỏ)`)
+            payloadSnapshot = {
+                lines: limitedJson,
+                note:
+                    jsonLines.length > limitedJson.length
+                        ? `${jsonLines.length - limitedJson.length} dòng bổ sung đã được lược bỏ`
+                        : null
             }
         }
     } catch (error) {
         void error
-        appendLines(lines, '  (Không thể stringify payload sang JSON)')
+        payloadFallback = 'Không thể stringify payload sang JSON'
     }
 
-    return lines
+    return {
+        ...content,
+        metadataOverview,
+        parties: partiesTable,
+        financialOverview: {
+            summary: financialSummary,
+            requested: requestedTable,
+            decided: decidedTable
+        },
+        timeline: timelineTable,
+        evidenceSections,
+        evidenceNote,
+        payloadSnapshot,
+        payloadFallback
+    }
 }
 
 const listArbitrators = async () => {
@@ -1433,8 +1330,8 @@ const getDisputeDossierPdf = async (disputeId: string, dossierId: string) => {
         throw new NotFoundException('Không tìm thấy dossier của tranh chấp', ErrorCode.ITEM_NOT_FOUND)
     }
 
-    const pdfLines = buildDossierPdfLines(dossierRecord)
-    const buffer = createSimplePdf(pdfLines)
+    const pdfContent = buildDossierPdfContent(dossierRecord)
+    const buffer = createDossierPdf(pdfContent)
 
     const sanitizedDisputeId = dossierRecord.disputeId.replace(/[^A-Za-z0-9_-]/g, '')
     const sanitizedBase = sanitizedDisputeId.length > 0 ? sanitizedDisputeId : 'dispute'
