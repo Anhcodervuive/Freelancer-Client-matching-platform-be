@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 
 import adminDisputeService from '~/services/admin-dispute.service'
+import { Role } from '~/generated/prisma'
 import {
     AdminDisputeListQuerySchema,
     AdminJoinDisputeSchema,
@@ -176,7 +177,10 @@ export const getArbitrationContext = async (req: Request, res: Response) => {
         throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
     }
 
-    const result = await adminDisputeService.getArbitrationContext(adminId, disputeId)
+    const result = await adminDisputeService.getArbitrationContext(
+        { role: Role.ADMIN, userId: adminId },
+        disputeId
+    )
 
     return res.json(result)
 }

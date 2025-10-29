@@ -23,6 +23,7 @@ import {
 } from '~/schema/dispute.schema'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
+import { ForbiddenException } from '~/exceptions/Forbidden'
 import { ErrorCode } from '~/exceptions/root'
 import createDossierPdf, {
     type DossierPdfContent,
@@ -359,6 +360,10 @@ type PreparedArbitrationCase = {
         evidence: unknown[]
     }
     timelineEntries: ArbitrationTimelineEntry[]
+}
+type ArbitrationContextViewer = {
+    role: 'ADMIN' | 'ARBITRATOR'
+    userId: string
 }
 
 const composeFullName = (profile?: { firstName: string | null; lastName: string | null } | null) => {
@@ -2080,7 +2085,7 @@ const composeEvidencePayload = (
 
 const buildArbitrationCaseData = async (
     disputeRecord: AdminDisputeDetailRecord,
-    adminId: string
+    officerUserId: string
 ): Promise<PreparedArbitrationCase> => {
     if (!disputeRecord.escrow || !disputeRecord.escrow.milestone || !disputeRecord.escrow.milestone.contract) {
         throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
@@ -2202,7 +2207,7 @@ const buildArbitrationCaseData = async (
             },
             {
                 role: 'ARBITRATION_OFFICER',
-                userId: adminId,
+                userId: officerUserId,
                 displayName: null,
                 feePaid: null
             }
@@ -2248,7 +2253,8 @@ const generateArbitrationDossier = async (
         throw new BadRequestException('Cần khóa hồ sơ trước khi tổng hợp tài liệu trọng tài', ErrorCode.PARAM_QUERY_ERROR)
     }
 
-    const preparedCase = await buildArbitrationCaseData(disputeRecord, adminId)
+    const officerUserId = disputeRecord.arbitratorId ?? adminId
+    const preparedCase = await buildArbitrationCaseData(disputeRecord, officerUserId)
 
     const dossierStatus = payload.finalize ? ArbitrationDossierStatus.FINALIZED : ArbitrationDossierStatus.LOCKED
     const notes = payload.notes?.trim() ?? null
@@ -2327,7 +2333,10 @@ const generateArbitrationDossier = async (
     return buildAdminDisputeDetailResponse(refreshed)
 }
 
-const getArbitrationContext = async (adminId: string, disputeId: string) => {
+const getArbitrationContext = async (
+    viewer: ArbitrationContextViewer,
+    disputeId: string
+) => {
     const disputeRecord = await prismaClient.dispute.findUnique({
         where: { id: disputeId },
         include: adminDisputeDetailInclude
@@ -2335,6 +2344,15 @@ const getArbitrationContext = async (adminId: string, disputeId: string) => {
 
     if (!disputeRecord) {
         throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    if (viewer.role === Role.ARBITRATOR) {
+        if (disputeRecord.arbitratorId !== viewer.userId) {
+            throw new ForbiddenException(
+                'Tranh chấp không được phân công cho trọng tài này',
+                ErrorCode.FORBIDDEN
+            )
+        }
     }
 
     if (!disputeRecord.lockedAt) {
@@ -2348,7 +2366,8 @@ const getArbitrationContext = async (adminId: string, disputeId: string) => {
         throw new BadRequestException('Tranh chấp chưa ở giai đoạn xem xét trọng tài', ErrorCode.PARAM_QUERY_ERROR)
     }
 
-    const preparedCase = await buildArbitrationCaseData(disputeRecord, adminId)
+    const officerUserId = disputeRecord.arbitratorId ?? viewer.userId
+    const preparedCase = await buildArbitrationCaseData(disputeRecord, officerUserId)
     const timeline = preparedCase.timelineEntries.map(entry => ({
         at: entry.at.toISOString(),
         actor: entry.actor,
