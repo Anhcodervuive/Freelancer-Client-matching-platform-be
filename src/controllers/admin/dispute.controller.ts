@@ -207,7 +207,7 @@ export const getArbitrationContext = async (req: Request, res: Response) => {
 }
 
 export const recordArbitrationDecision = async (req: Request, res: Response) => {
-    const adminId = ensureAdminUser(req)
+    const viewer = resolveArbitrationContextViewer(req)
     const { disputeId } = req.params
 
     if (!disputeId) {
@@ -215,7 +215,7 @@ export const recordArbitrationDecision = async (req: Request, res: Response) => 
     }
 
     const payload = AdminRecordArbitrationDecisionSchema.parse(req.body)
-    const result = await adminDisputeService.recordArbitrationDecision(adminId, disputeId, payload)
+    const result = await adminDisputeService.recordArbitrationDecision(viewer, disputeId, payload)
 
     return res.json(result)
 }

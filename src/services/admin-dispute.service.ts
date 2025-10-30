@@ -2478,7 +2478,7 @@ const getArbitrationContext = async (
 }
 
 const recordArbitrationDecision = async (
-    adminId: string,
+    viewer: ArbitrationContextViewer,
     disputeId: string,
     payload: AdminRecordArbitrationDecisionInput
 ) => {
@@ -2489,6 +2489,17 @@ const recordArbitrationDecision = async (
 
     if (!disputeRecord || !disputeRecord.escrow || !disputeRecord.escrow.milestone) {
         throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
+    }
+
+    if (viewer.role === Role.ARBITRATOR) {
+        if (disputeRecord.arbitratorId !== viewer.userId) {
+            throw new ForbiddenException(
+                'Tranh chấp không được phân công cho trọng tài này',
+                ErrorCode.FORBIDDEN
+            )
+        }
+    } else if (viewer.role !== Role.ADMIN) {
+        throw new ForbiddenException('Không có quyền ra phán quyết', ErrorCode.FORBIDDEN)
     }
 
     if (!disputeRecord.lockedAt) {
@@ -2571,7 +2582,7 @@ const recordArbitrationDecision = async (
                 status: resolvedStatus,
                 decidedRelease: centsToDecimal(releaseCents),
                 decidedRefund: centsToDecimal(refundCents),
-                decidedById: adminId,
+                decidedById: viewer.userId,
                 decidedAt,
                 decisionSummary: summary,
                 decisionReasoning: reasoning,
