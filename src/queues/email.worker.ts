@@ -1,6 +1,10 @@
 import { Worker } from 'bullmq'
 import { connection } from './redis'
-import { sendDisputeNegotiationEmail, sendVerifyEmail } from '~/providers/mail.provider'
+import {
+        sendArbitrationDecisionEmail,
+        sendDisputeNegotiationEmail,
+        sendVerifyEmail
+} from '~/providers/mail.provider'
 
 new Worker(
         'email',
@@ -14,6 +18,11 @@ new Worker(
                         case 'sendDisputeNegotiationEmail': {
                                 const { to, recipientName, payload } = job.data
                                 await sendDisputeNegotiationEmail(to, recipientName, payload)
+                                break
+                        }
+                        case 'sendArbitrationDecisionEmail': {
+                                const { to, payload } = job.data
+                                await sendArbitrationDecisionEmail(to, payload)
                                 break
                         }
                         default:

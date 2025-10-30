@@ -16,6 +16,20 @@ type DisputeNegotiationEmailPayload = {
         showDeadlineNotice: boolean
 }
 
+type ArbitrationDecisionEmailPayload = {
+        recipientName: string
+        role: 'CLIENT' | 'FREELANCER'
+        milestoneTitle: string
+        contractTitle: string
+        disputeUrl: string
+        releaseAmount: number
+        refundAmount: number
+        currency: string
+        summary: string
+        reasoning: string | null
+        awardType: 'RELEASE_ALL' | 'REFUND_ALL' | 'SPLIT'
+}
+
 const createTransporter = () => {
         return nodemailer.createTransport({
                 host: 'smtp.gmail.com',
@@ -121,4 +135,58 @@ export async function sendDisputeNegotiationEmail(
         })
 
         await sendMail({ to, subject: copy.subject, html })
+}
+
+const buildArbitrationDecisionOutcome = (
+        payload: ArbitrationDecisionEmailPayload,
+        formattedReleaseAmount: string,
+        formattedRefundAmount: string
+) => {
+        if (payload.role === 'FREELANCER') {
+                if (payload.releaseAmount > 0) {
+                        return `Bạn sẽ nhận ${formattedReleaseAmount} từ khoản escrow tranh chấp.`
+                }
+
+                if (payload.awardType === 'REFUND_ALL') {
+                        return 'Toàn bộ khoản tranh chấp sẽ được hoàn lại cho client.'
+                }
+
+                return 'Bạn sẽ không nhận thêm khoản thanh toán nào từ khoản escrow tranh chấp.'
+        }
+
+        if (payload.refundAmount > 0) {
+                return `Bạn sẽ được hoàn lại ${formattedRefundAmount} từ khoản escrow tranh chấp.`
+        }
+
+        if (payload.awardType === 'RELEASE_ALL') {
+                return 'Toàn bộ khoản tranh chấp sẽ được chuyển cho freelancer.'
+        }
+
+        return 'Bạn sẽ không nhận khoản hoàn nào từ khoản escrow tranh chấp.'
+}
+
+export async function sendArbitrationDecisionEmail(to: string, payload: ArbitrationDecisionEmailPayload) {
+        const formattedReleaseAmount = formatCurrency(payload.releaseAmount, payload.currency)
+        const formattedRefundAmount = formatCurrency(payload.refundAmount, payload.currency)
+        const recipientOutcome = buildArbitrationDecisionOutcome(
+                payload,
+                formattedReleaseAmount,
+                formattedRefundAmount
+        )
+
+        const subject = `Quyết định trọng tài cho tranh chấp "${payload.milestoneTitle}"`
+        const html = renderEmailTemplate('arbitration-decision.hbs', {
+                subject,
+                recipientName: payload.recipientName,
+                milestoneTitle: payload.milestoneTitle,
+                contractTitle: payload.contractTitle,
+                summary: payload.summary,
+                reasoning: payload.reasoning,
+                formattedReleaseAmount,
+                formattedRefundAmount,
+                recipientOutcome,
+                ctaLink: payload.disputeUrl
+        })
+
+        await sendMail({ to, subject, html })
 }

@@ -11,6 +11,7 @@ import {
 } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
+import { CLIENT } from '~/config/environment'
 import {
     AdminDisputeListQueryInput,
     AdminJoinDisputeInput,
@@ -31,6 +32,7 @@ import createDossierPdf, {
     type PdfKeyValuePair,
     type PdfTableContent
 } from '~/utils/pdf'
+import { emailQueue } from '~/queues/email.queue'
 
 const MEDIATION_RESPONSE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
 const MEDIATION_STATUSES: DisputeStatus[] = [DisputeStatus.OPEN, DisputeStatus.NEGOTIATION]
@@ -397,6 +399,86 @@ const composeUserSummaryWithEmail = (user?: AdminDisputeUser | null) => {
         name: composeFullName(user.profile),
         email: user.email
     }
+}
+
+const queueArbitrationDecisionEmails = async (
+    dispute: AdminDisputeDetailRecord,
+    awardType: AdminRecordArbitrationDecisionInput['awardType']
+) => {
+    const escrow = dispute.escrow
+    const milestone = escrow?.milestone as AdminDisputeMilestone | null
+    const contract = milestone?.contract as AdminDisputeContract | null
+
+    if (!escrow || !milestone || !contract) {
+        return
+    }
+
+    const participants = [
+        {
+            role: 'CLIENT' as const,
+            userId: contract.clientId,
+            profile: contract.client?.profile ?? null
+        },
+        {
+            role: 'FREELANCER' as const,
+            userId: contract.freelancerId,
+            profile: contract.freelancer?.profile ?? null
+        }
+    ].filter(participant => !!participant.userId)
+
+    const userRecords = await prismaClient.user.findMany({
+        where: { id: { in: participants.map(item => item.userId) } },
+        select: { id: true, email: true }
+    })
+
+    const emailMap = new Map(userRecords.map(record => [record.id, record.email]))
+
+    const recipients = participants
+        .map(participant => {
+            const email = emailMap.get(participant.userId)
+            if (!email) {
+                return null
+            }
+
+            return {
+                role: participant.role,
+                email,
+                name: composeFullName(participant.profile ?? null) ?? email
+            }
+        })
+        .filter((item): item is { role: 'CLIENT' | 'FREELANCER'; email: string; name: string } => item !== null)
+
+    if (recipients.length === 0) {
+        return
+    }
+
+    const disputeUrl = `${CLIENT.URL}/contracts/${contract.id}/milestones/${milestone.id}/disputes`
+    const releaseAmount = parseFloat(dispute.decidedRelease?.toString() ?? '0')
+    const refundAmount = parseFloat(dispute.decidedRefund?.toString() ?? '0')
+    const summary = dispute.decisionSummary ?? ''
+    const reasoning = dispute.decisionReasoning ?? null
+    const currency = escrow.currency
+
+    await Promise.all(
+        recipients.map(recipient =>
+            emailQueue.add('sendArbitrationDecisionEmail', {
+                to: recipient.email,
+                payload: {
+                    recipientName: recipient.name,
+                    role: recipient.role,
+                    milestoneTitle: milestone.title,
+                    contractTitle: contract.title,
+                    disputeUrl,
+                    releaseAmount,
+                    refundAmount,
+                    currency,
+                    summary,
+                    reasoning,
+                    awardType
+                }
+            })
+        )
+    )
 }
 
 const composeAssetSummary = (asset?: AssetSummaryLike | null) => {
@@ -2518,6 +2600,8 @@ const recordArbitrationDecision = async (
     if (!refreshed) {
         throw new NotFoundException('Không tìm thấy tranh chấp', ErrorCode.ITEM_NOT_FOUND)
     }
+
+    await queueArbitrationDecisionEmails(refreshed, payload.awardType)
 
     return buildAdminDisputeDetailResponse(refreshed)
 }

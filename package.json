@@ -4,7 +4,7 @@
 	"main": "index.js",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"dev": "npx nodemon",
+                "dev": "node scripts/dev.js",
 		"worker:email": "ts-node -r tsconfig-paths/register src/queues/email.worker.ts",
 		"worker:match-interaction": "ts-node -r tsconfig-paths/register src/queues/match-interaction.worker.ts"
 	},
@@ -25,7 +25,7 @@
 		"@types/node": "^24.2.1",
 		"@types/nodemailer": "^7.0.1",
 		"morgan": "^1.10.1",
-		"nodemon": "^3.1.10",
+                "nodemon": "^3.1.10",
 		"ts-node": "^10.9.2",
 		"tsconfig-paths": "^4.2.0",
 		"typescript": "^5.9.2"

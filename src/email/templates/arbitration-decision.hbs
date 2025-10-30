@@ -1,0 +1,30 @@
+{{#> base subject=subject}}
+  <h2 style="margin-top:0;">Quyết định trọng tài đã ban hành</h2>
+  <p>Xin chào <strong>{{recipientName}}</strong>,</p>
+  <p>Trọng tài đã hoàn tất xem xét tranh chấp liên quan đến milestone "{{milestoneTitle}}" trong hợp đồng "{{contractTitle}}".</p>
+
+  {{#if summary}}
+    <p style="margin-top:16px;"><strong>Tóm tắt quyết định:</strong> {{summary}}</p>
+  {{/if}}
+
+  {{#if reasoning}}
+    <p style="margin-top:12px;"><strong>Lý do:</strong> {{reasoning}}</p>
+  {{/if}}
+
+  <div style="margin-top:18px;padding:18px;border-radius:10px;background:#f3f4f6;">
+    <p style="margin:0 0 6px 0;"><strong>Trả cho freelancer:</strong> {{formattedReleaseAmount}}</p>
+    <p style="margin:0;"><strong>Hoàn lại cho client:</strong> {{formattedRefundAmount}}</p>
+  </div>
+
+  <p style="margin-top:18px;">{{recipientOutcome}}</p>
+
+  {{#if ctaLink}}
+    <div style="margin-top:24px;display:flex;justify-content:center;">
+      {{> button link=ctaLink text="Xem chi tiết tranh chấp"}}
+    </div>
+  {{/if}}
+
+  <p style="margin-top:24px;font-size:13px;color:#64748b;">
+    Quyết định trọng tài có hiệu lực ngay và sẽ được hệ thống tự động xử lý.
+  </p>
+{{/base}}
