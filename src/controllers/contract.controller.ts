@@ -18,7 +18,9 @@ import {
         RespondDisputeNegotiationSchema,
         RespondMilestoneCancellationSchema,
         SubmitMilestoneSchema,
-        UpdateDisputeNegotiationSchema
+        UpdateDisputeNegotiationSchema,
+        EndContractSchema,
+        SubmitContractFeedbackSchema
 } from '~/schema/contract.schema'
 import { SubmitFinalEvidenceSchema } from '~/schema/dispute.schema'
 import contractService from '~/services/contract.service'
@@ -83,6 +85,42 @@ export const getContractDetail = async (req: Request, res: Response) => {
         )
 
         return res.status(StatusCodes.OK).json(contract)
+}
+
+export const endContract = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để kết thúc hợp đồng', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId) {
+                throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = EndContractSchema.parse(req.body)
+        const contract = await contractService.endContract(userId, contractId, payload)
+
+        return res.status(StatusCodes.OK).json(contract)
+}
+
+export const submitContractFeedback = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để gửi đánh giá', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId) {
+                throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = SubmitContractFeedbackSchema.parse(req.body)
+        const result = await contractService.submitContractFeedback(userId, contractId, payload)
+
+        return res.status(StatusCodes.CREATED).json(result)
 }
 
 export const listContractMilestones = async (req: Request, res: Response) => {

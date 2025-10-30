@@ -5,16 +5,19 @@ import type { Express } from 'express'
 import Stripe from 'stripe'
 
 import {
-	ArbitrationEvidenceSourceType,
-	AssetKind,
-	AssetProvider,
-	AssetStatus,
-	DisputeNegotiationStatus,
-	DisputeStatus,
-	EscrowStatus,
-	MilestoneCancellationStatus,
-	MilestoneStatus,
-	MilestoneSubmissionStatus,
+        ArbitrationEvidenceSourceType,
+        AssetKind,
+        AssetProvider,
+        AssetStatus,
+        ContractClosureType,
+        ContractParticipantRole,
+        ContractStatus,
+        DisputeNegotiationStatus,
+        DisputeStatus,
+        EscrowStatus,
+        MilestoneCancellationStatus,
+        MilestoneStatus,
+        MilestoneSubmissionStatus,
 	NotificationCategory,
 	NotificationEvent,
 	NotificationResource,
@@ -39,14 +42,16 @@ import {
 	ConfirmArbitrationFeeInput,
 	ContractListFilterInput,
 	CreateContractMilestoneInput,
-	CreateDisputeNegotiationInput,
-	DeclineMilestoneSubmissionInput,
-	OpenMilestoneDisputeInput,
-	PayMilestoneInput,
-	RespondDisputeNegotiationInput,
-	RespondMilestoneCancellationInput,
-	SubmitMilestoneInput,
-	UpdateDisputeNegotiationInput
+        CreateDisputeNegotiationInput,
+        DeclineMilestoneSubmissionInput,
+        OpenMilestoneDisputeInput,
+        PayMilestoneInput,
+        RespondDisputeNegotiationInput,
+        RespondMilestoneCancellationInput,
+        SubmitMilestoneInput,
+        UpdateDisputeNegotiationInput,
+        EndContractInput,
+        SubmitContractFeedbackInput
 } from '~/schema/contract.schema'
 import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 import { InternalServerException } from '~/exceptions/internal-server'
@@ -81,16 +86,28 @@ const contractClientSelect = Prisma.validator<Prisma.ClientSelect>()({
 })
 
 const contractFreelancerSelect = Prisma.validator<Prisma.FreelancerSelect>()({
-	userId: true,
-	title: true,
-	profile: {
-		select: {
-			firstName: true,
-			lastName: true,
-			country: true,
-			city: true
-		}
-	}
+        userId: true,
+        title: true,
+        profile: {
+                select: {
+                        firstName: true,
+                        lastName: true,
+                        country: true,
+                        city: true
+                }
+        }
+})
+
+const contractClosedBySelect = Prisma.validator<Prisma.UserSelect>()({
+        id: true,
+        profile: {
+                select: {
+                        firstName: true,
+                        lastName: true,
+                        country: true,
+                        city: true
+                }
+        }
 })
 
 const disputeArbitratorSelect = Prisma.validator<Prisma.UserSelect>()({
@@ -105,15 +122,18 @@ const disputeArbitratorSelect = Prisma.validator<Prisma.UserSelect>()({
 })
 
 const contractSummaryInclude = Prisma.validator<Prisma.ContractInclude>()({
-	jobPost: {
-		select: contractJobSummarySelect
-	},
-	client: {
-		select: contractClientSelect
-	},
-	freelancer: {
-		select: contractFreelancerSelect
-	}
+        jobPost: {
+                select: contractJobSummarySelect
+        },
+        client: {
+                select: contractClientSelect
+        },
+        freelancer: {
+                select: contractFreelancerSelect
+        },
+        closedBy: {
+                select: contractClosedBySelect
+        }
 })
 
 const contractJobDetailInclude = Prisma.validator<Prisma.JobPostInclude>()({
@@ -156,11 +176,20 @@ const milestoneSubmissionAttachmentInclude = Prisma.validator<Prisma.MilestoneSu
                 select: {
                         id: true,
                         kind: true,
-			url: true,
-			mimeType: true,
-			bytes: true,
-			status: true
-		}
+                        url: true,
+                        mimeType: true,
+                        bytes: true,
+                        status: true
+                }
+        }
+})
+
+const contractFeedbackInclude = Prisma.validator<Prisma.ContractFeedbackInclude>()({
+        reviewer: {
+                select: contractClosedBySelect
+        },
+        reviewee: {
+                select: contractClosedBySelect
         }
 })
 
@@ -404,19 +433,22 @@ const disputeDetailInclude = Prisma.validator<Prisma.DisputeInclude>()({
 })
 
 const contractDetailInclude = Prisma.validator<Prisma.ContractInclude>()({
-	jobPost: {
-		include: contractJobDetailInclude
-	},
-	client: {
-		select: contractClientSelect
-	},
-	freelancer: {
-		select: contractFreelancerSelect
-	},
-	proposal: {
-		select: {
-			id: true,
-			status: true,
+        jobPost: {
+                include: contractJobDetailInclude
+        },
+        client: {
+                select: contractClientSelect
+        },
+        freelancer: {
+                select: contractFreelancerSelect
+        },
+        closedBy: {
+                select: contractClosedBySelect
+        },
+        proposal: {
+                select: {
+                        id: true,
+                        status: true,
 			submittedAt: true
 		}
 	},
@@ -426,16 +458,21 @@ const contractDetailInclude = Prisma.validator<Prisma.ContractInclude>()({
 			status: true,
 			sentAt: true
 		}
-	},
-	milestones: {
-		where: { isDeleted: false },
-		include: milestoneInclude,
-		orderBy: { updatedAt: 'desc' }
-	}
+        },
+        milestones: {
+                where: { isDeleted: false },
+                include: milestoneInclude,
+                orderBy: { updatedAt: 'desc' }
+        },
+        feedbacks: {
+                include: contractFeedbackInclude,
+                orderBy: { createdAt: 'asc' }
+        }
 })
 
 type ContractSummaryPayload = Prisma.ContractGetPayload<{ include: typeof contractSummaryInclude }>
 type ContractDetailPayload = Prisma.ContractGetPayload<{ include: typeof contractDetailInclude }>
+type ContractFeedbackPayload = Prisma.ContractFeedbackGetPayload<{ include: typeof contractFeedbackInclude }>
 type MilestonePayload = Prisma.MilestoneGetPayload<{ include: typeof milestoneInclude }>
 type MilestoneResourcePayload = Prisma.MilestoneResourceGetPayload<{ include: typeof milestoneResourceInclude }>
 type MilestoneSubmissionAttachmentPayload = Prisma.MilestoneSubmissionAttachmentGetPayload<{
@@ -645,22 +682,22 @@ const toMinorUnitAmount = (value: Prisma.Decimal | number | string, currency: st
 }
 
 const mapStripeRefundStatus = (status?: Stripe.Refund['status'] | null): RefundStatus => {
-	if (status === 'succeeded') {
-		return RefundStatus.SUCCEEDED
-	}
+        if (status === 'succeeded') {
+                return RefundStatus.SUCCEEDED
+        }
 
-	if (status === 'pending') {
-		return RefundStatus.PENDING
-	}
+        if (status === 'pending') {
+                return RefundStatus.PENDING
+        }
 
-	return RefundStatus.FAILED
+        return RefundStatus.FAILED
 }
 
 const loadMilestoneWithDetails = async (milestoneId: string) => {
-	const milestone = await prismaClient.milestone.findUnique({
-		where: { id: milestoneId },
-		include: milestoneInclude
-	})
+        const milestone = await prismaClient.milestone.findUnique({
+                where: { id: milestoneId },
+                include: milestoneInclude
+        })
 
 	if (!milestone) {
 		throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
@@ -670,6 +707,7 @@ const loadMilestoneWithDetails = async (milestoneId: string) => {
 }
 
 type ProfileSummary = ContractSummaryPayload['client']['profile'] | null
+type ContractUserSummary = Prisma.UserGetPayload<{ select: typeof contractClosedBySelect }>
 
 type SerializedProfile = {
 	firstName: string | null
@@ -702,21 +740,30 @@ const serializeProfile = (profile: ProfileSummary): SerializedProfile => {
 }
 
 const serializeClient = (contract: ContractSummaryPayload['client']) => {
-	if (!contract) return null
+        if (!contract) return null
 
-	return {
-		id: contract.userId,
-		companyName: contract.companyName ?? null,
-		profile: serializeProfile(contract.profile)
-	}
+        return {
+                id: contract.userId,
+                companyName: contract.companyName ?? null,
+                profile: serializeProfile(contract.profile)
+        }
 }
 
 const serializeFreelancer = (freelancer: ContractSummaryPayload['freelancer']) => {
-	return {
-		id: freelancer.userId,
-		title: freelancer.title ?? null,
-		profile: serializeProfile(freelancer.profile)
-	}
+        return {
+                id: freelancer.userId,
+                title: freelancer.title ?? null,
+                profile: serializeProfile(freelancer.profile)
+        }
+}
+
+const serializeContractUser = (user: ContractUserSummary | null | undefined) => {
+        if (!user) return null
+
+        return {
+                id: user.id,
+                profile: serializeProfile(user.profile)
+        }
 }
 
 const serializeJobPostSummary = (jobPost: ContractSummaryPayload['jobPost']) => {
@@ -852,46 +899,69 @@ const serializeJobPostDetail = (jobPost: ContractDetailPayload['jobPost']) => {
 }
 
 const serializeContractSummary = (contract: ContractSummaryPayload) => {
-	return {
-		id: contract.id,
-		title: contract.title,
-		currency: contract.currency,
-		status: contract.status,
-		clientId: contract.clientId,
-		freelancerId: contract.freelancerId,
-		jobPostId: contract.jobPostId,
-		proposalId: contract.proposalId,
-		offerId: contract.offerId,
-		jobPost: serializeJobPostSummary(contract.jobPost),
-		client: serializeClient(contract.client),
-		freelancer: serializeFreelancer(contract.freelancer),
-		createdAt: contract.createdAt,
-		updatedAt: contract.updatedAt
-	}
+        return {
+                id: contract.id,
+                title: contract.title,
+                currency: contract.currency,
+                status: contract.status,
+                clientId: contract.clientId,
+                freelancerId: contract.freelancerId,
+                jobPostId: contract.jobPostId,
+                proposalId: contract.proposalId,
+                offerId: contract.offerId,
+                jobPost: serializeJobPostSummary(contract.jobPost),
+                client: serializeClient(contract.client),
+                freelancer: serializeFreelancer(contract.freelancer),
+                closureType: contract.closureType ?? null,
+                closureReason: contract.closureReason ?? null,
+                endedAt: contract.endedAt ?? null,
+                closedById: contract.closedById ?? null,
+                closedBy: serializeContractUser(contract.closedBy),
+                createdAt: contract.createdAt,
+                updatedAt: contract.updatedAt
+        }
+}
+
+const serializeContractFeedback = (feedback: ContractFeedbackPayload) => {
+        return {
+                id: feedback.id,
+                contractId: feedback.contractId,
+                reviewerId: feedback.reviewerId,
+                revieweeId: feedback.revieweeId,
+                role: feedback.role,
+                rating: feedback.rating,
+                comment: feedback.comment ?? null,
+                wouldHireAgain: feedback.wouldHireAgain ?? null,
+                createdAt: feedback.createdAt,
+                updatedAt: feedback.updatedAt,
+                reviewer: serializeContractUser(feedback.reviewer),
+                reviewee: serializeContractUser(feedback.reviewee)
+        }
 }
 
 const serializeContractDetail = (contract: ContractDetailPayload) => {
-	const base = serializeContractSummary(contract)
+        const base = serializeContractSummary(contract)
 
-	return {
-		...base,
-		jobPost: serializeJobPostDetail(contract.jobPost),
-		proposal: contract.proposal
-			? {
-					id: contract.proposal.id,
-					status: contract.proposal.status,
-					submittedAt: contract.proposal.submittedAt
-			  }
-			: null,
-		offer: contract.offer
-			? {
-					id: contract.offer.id,
-					status: contract.offer.status,
-					sentAt: contract.offer.sentAt
-			  }
-			: null,
-		milestones: contract.milestones.map(milestone => serializeMilestone(milestone))
-	}
+        return {
+                ...base,
+                jobPost: serializeJobPostDetail(contract.jobPost),
+                proposal: contract.proposal
+                        ? {
+                                        id: contract.proposal.id,
+                                        status: contract.proposal.status,
+                                        submittedAt: contract.proposal.submittedAt
+                          }
+                        : null,
+                offer: contract.offer
+                        ? {
+                                        id: contract.offer.id,
+                                        status: contract.offer.status,
+                                        sentAt: contract.offer.sentAt
+                          }
+                        : null,
+                milestones: contract.milestones.map(milestone => serializeMilestone(milestone)),
+                feedbacks: contract.feedbacks.map(feedback => serializeContractFeedback(feedback))
+        }
 }
 
 const extractOriginalName = (metadata: Prisma.JsonValue | null | undefined): string | null => {
@@ -1627,22 +1697,180 @@ const listContracts = async (user: ContractAuthUser, filters: ContractListFilter
 }
 
 const getContractDetail = async (user: ContractAuthUser, contractId: string) => {
-	const where: Prisma.ContractWhereInput = { id: contractId }
+        const where: Prisma.ContractWhereInput = { id: contractId }
 
-	if (!isAdminUser(user)) {
-		where.OR = [{ clientId: user.id }, { freelancerId: user.id }]
-	}
+        if (!isAdminUser(user)) {
+                where.OR = [{ clientId: user.id }, { freelancerId: user.id }]
+        }
 
-	const contract = await prismaClient.contract.findFirst({
-		where,
-		include: contractDetailInclude
-	})
+        const contract = await prismaClient.contract.findFirst({
+                where,
+                include: contractDetailInclude
+        })
 
-	if (!contract) {
-		throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
-	}
+        if (!contract) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
 
-	return serializeContractDetail(contract)
+        return serializeContractDetail(contract)
+}
+
+const endContract = async (userId: string, contractId: string, payload: EndContractInput) => {
+        const contractRecord = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: {
+                        id: true,
+                        clientId: true,
+                        freelancerId: true,
+                        status: true
+                }
+        })
+
+        if (!contractRecord || (contractRecord.clientId !== userId && contractRecord.freelancerId !== userId)) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (
+                contractRecord.status === ContractStatus.COMPLETED ||
+                contractRecord.status === ContractStatus.CANCELLED
+        ) {
+                throw new BadRequestException('Hợp đồng đã được kết thúc', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const pendingMilestones = await prismaClient.milestone.count({
+                where: {
+                        contractId,
+                        isDeleted: false,
+                        status: {
+                                in: [MilestoneStatus.OPEN, MilestoneStatus.SUBMITTED, MilestoneStatus.APPROVED]
+                        }
+                }
+        })
+
+        if (pendingMilestones > 0) {
+                throw new BadRequestException(
+                        'Vẫn còn milestone chưa được hoàn tất hoặc giải quyết',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const activeDisputeStatuses: DisputeStatus[] = [
+                DisputeStatus.OPEN,
+                DisputeStatus.NEGOTIATION,
+                DisputeStatus.INTERNAL_MEDIATION,
+                DisputeStatus.AWAITING_ARBITRATION_FEES,
+                DisputeStatus.ARBITRATION_READY,
+                DisputeStatus.ARBITRATION
+        ]
+
+        const pendingDisputes = await prismaClient.dispute.count({
+                where: {
+                        escrow: {
+                                milestone: {
+                                        contractId
+                                }
+                        },
+                        status: { in: activeDisputeStatuses }
+                }
+        })
+
+        if (pendingDisputes > 0) {
+                throw new BadRequestException(
+                        'Hợp đồng đang có tranh chấp chưa được xử lý',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        const targetStatus =
+                payload.closureType === ContractClosureType.CANCELLED
+                        ? ContractStatus.CANCELLED
+                        : ContractStatus.COMPLETED
+
+        const reason = payload.reason?.trim() ?? ''
+
+        const updated = await prismaClient.contract.update({
+                where: { id: contractId },
+                data: {
+                        status: targetStatus,
+                        closureType: payload.closureType,
+                        closureReason: reason.length > 0 ? reason : null,
+                        endedAt: new Date(),
+                        closedById: userId
+                },
+                include: contractDetailInclude
+        })
+
+        return serializeContractDetail(updated)
+}
+
+const submitContractFeedback = async (
+        userId: string,
+        contractId: string,
+        payload: SubmitContractFeedbackInput
+) => {
+        const contractRecord = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: {
+                        id: true,
+                        clientId: true,
+                        freelancerId: true,
+                        status: true
+                }
+        })
+
+        if (!contractRecord || (contractRecord.clientId !== userId && contractRecord.freelancerId !== userId)) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (
+                contractRecord.status !== ContractStatus.COMPLETED &&
+                contractRecord.status !== ContractStatus.CANCELLED
+        ) {
+                throw new BadRequestException('Hợp đồng chưa ở trạng thái kết thúc', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const reviewerRole =
+                contractRecord.clientId === userId
+                        ? ContractParticipantRole.CLIENT
+                        : ContractParticipantRole.FREELANCER
+
+        const revieweeId = reviewerRole === ContractParticipantRole.CLIENT
+                ? contractRecord.freelancerId
+                : contractRecord.clientId
+
+        if (!revieweeId) {
+                throw new BadRequestException('Không xác định được người nhận đánh giá', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const existingFeedback = await prismaClient.contractFeedback.findFirst({
+                where: {
+                        contractId,
+                        reviewerId: userId
+                }
+        })
+
+        if (existingFeedback) {
+                throw new BadRequestException('Bạn đã gửi đánh giá cho hợp đồng này', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const comment = payload.comment?.trim() ?? ''
+        const created = await prismaClient.contractFeedback.create({
+                data: {
+                        contractId,
+                        reviewerId: userId,
+                        revieweeId,
+                        role: reviewerRole,
+                        rating: payload.rating,
+                        comment: comment.length > 0 ? comment : null,
+                        wouldHireAgain: payload.wouldHireAgain ?? null
+                },
+                include: contractFeedbackInclude
+        })
+
+        return {
+                contractId,
+                feedback: serializeContractFeedback(created)
+        }
 }
 
 const listContractMilestones = async (user: ContractAuthUser, contractId: string) => {
@@ -4518,12 +4746,13 @@ const declineMilestoneSubmission = async (
 }
 
 const contractService = {
-	listContracts,
-	getContractDetail,
-	listContractMilestones,
-	listMilestoneResources,
-	listContractDisputes,
-	getMilestoneDispute,
+        listContracts,
+        getContractDetail,
+        endContract,
+        listContractMilestones,
+        listMilestoneResources,
+        listContractDisputes,
+        getMilestoneDispute,
 	createContractMilestone,
 	uploadMilestoneResources,
 	deleteMilestoneResource,
@@ -4541,7 +4770,8 @@ const contractService = {
         payMilestone,
         submitMilestoneWork,
         approveMilestoneSubmission,
-	declineMilestoneSubmission
+        declineMilestoneSubmission,
+        submitContractFeedback
 }
 
 export default contractService

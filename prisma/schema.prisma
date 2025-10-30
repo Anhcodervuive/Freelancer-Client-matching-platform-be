@@ -21,6 +21,12 @@ enum Role {
   ARBITRATOR
 }
 
+enum ContractParticipantRole {
+  CLIENT
+  FREELANCER
+  SYSTEM
+}
+
 enum ArbitrationDossierStatus {
   DRAFT
   LOCKED
@@ -70,6 +76,9 @@ model User {
   disputesDecided              Dispute[]            @relation("DisputeDecidedBy")
   arbitrationEvidenceSubmissions ArbitrationEvidenceSubmission[] @relation("ArbitrationEvidenceSubmittedBy")
   paymentsAsPayer              Payment[]            @relation("PaymentPayer")
+  contractsClosed              Contract[]           @relation("ContractClosedBy")
+  contractFeedbackAuthored     ContractFeedback[]   @relation("ContractFeedbackReviewer")
+  contractFeedbackReceived     ContractFeedback[]   @relation("ContractFeedbackReviewee")
 
   @@index([email])
   @@map("user")
@@ -868,6 +877,12 @@ enum ContractStatus {
   CANCELLED
 }
 
+enum ContractClosureType {
+  COMPLETED
+  CANCELLED
+  AUTO_RELEASED
+}
+
 enum EscrowStatus {
   UNFUNDED
   FUNDED
@@ -914,6 +929,10 @@ model Contract {
   title        String
   currency     String // "usd", ...
   status       ContractStatus @default(ACTIVE)
+  closureType  ContractClosureType? @map("closure_type")
+  closureReason String?              @map("closure_reason") @db.MediumText
+  endedAt      DateTime?            @map("ended_at")
+  closedById   String?              @map("closed_by_id")
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
@@ -922,10 +941,34 @@ model Contract {
   jobPost     JobPost?     @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
   proposal    JobProposal? @relation("ContractProposal", fields: [proposalId], references: [id], onDelete: SetNull)
   offer       JobOffer?    @relation("OfferContract", fields: [offerId], references: [id], onDelete: SetNull)
+  closedBy    User?        @relation("ContractClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
   milestones  Milestone[]
   chatThreads ChatThread[]
+  feedbacks   ContractFeedback[]
 
   @@index([jobPostId])
+  @@index([closedById])
+}
+
+model ContractFeedback {
+  id             String                   @id @default(cuid())
+  contractId     String                   @map("contract_id")
+  reviewerId     String                   @map("reviewer_id")
+  revieweeId     String                   @map("reviewee_id")
+  role           ContractParticipantRole
+  rating         Int                      @db.UnsignedTinyInt
+  comment        String?                  @db.MediumText
+  wouldHireAgain Boolean?                 @default(true) @map("would_hire_again")
+  createdAt      DateTime                 @default(now()) @map("created_at")
+  updatedAt      DateTime                 @updatedAt @map("updated_at")
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  reviewer User     @relation("ContractFeedbackReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+  reviewee User     @relation("ContractFeedbackReviewee", fields: [revieweeId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, reviewerId])
+  @@index([revieweeId])
+  @@map("contract_feedback")
 }
 
 model Milestone {

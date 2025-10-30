@@ -12,6 +12,7 @@ import {
         confirmArbitrationFee,
         getMilestoneDispute,
         getContractDetail,
+        endContract,
         listMilestoneResources,
         listContractMilestones,
         listContractDisputes,
@@ -24,7 +25,8 @@ import {
         listFinalEvidenceSources,
         submitFinalEvidence,
         submitMilestoneWork,
-        uploadMilestoneResources
+        uploadMilestoneResources,
+        submitContractFeedback
 } from '~/controllers/contract.controller'
 import authenticateMiddleware from '~/middlewares/authentication'
 import { uploadAnyFiles } from '~/middlewares/multer'
@@ -34,6 +36,8 @@ const router = Router()
 
 router.get('/', authenticateMiddleware, errorHandler(listContracts))
 router.get('/:contractId', authenticateMiddleware, errorHandler(getContractDetail))
+router.post('/:contractId/end', authenticateMiddleware, errorHandler(endContract))
+router.post('/:contractId/feedback', authenticateMiddleware, errorHandler(submitContractFeedback))
 router.get('/:contractId/disputes', authenticateMiddleware, errorHandler(listContractDisputes))
 router.get('/:contractId/milestones', authenticateMiddleware, errorHandler(listContractMilestones))
 router.get(

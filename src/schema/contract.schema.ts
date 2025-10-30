@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { ContractStatus } from '~/generated/prisma'
+import { ContractClosureType, ContractStatus } from '~/generated/prisma'
 
 const coerceDate = (value: unknown) => {
 	if (value === undefined || value === null || value instanceof Date) return value
@@ -189,3 +189,31 @@ export const ConfirmArbitrationFeeSchema = z.object({
 })
 
 export type ConfirmArbitrationFeeInput = z.infer<typeof ConfirmArbitrationFeeSchema>
+
+const ContractClosureTypeParamSchema = z.preprocess(value => {
+        if (typeof value === 'string') {
+                return value.toUpperCase()
+        }
+
+        return value
+}, z.nativeEnum(ContractClosureType))
+
+const ManualContractClosureTypeSchema = ContractClosureTypeParamSchema.refine(
+        value => value !== ContractClosureType.AUTO_RELEASED,
+        { message: 'Loại kết thúc không hợp lệ' }
+)
+
+export const EndContractSchema = z.object({
+        closureType: ManualContractClosureTypeSchema,
+        reason: z.string().trim().max(2000, 'Lý do kết thúc tối đa 2000 ký tự').optional()
+})
+
+export type EndContractInput = z.infer<typeof EndContractSchema>
+
+export const SubmitContractFeedbackSchema = z.object({
+        rating: ReviewRatingSchema,
+        comment: z.string().trim().max(5000, 'Nhận xét tối đa 5000 ký tự').optional(),
+        wouldHireAgain: z.boolean().optional()
+})
+
+export type SubmitContractFeedbackInput = z.infer<typeof SubmitContractFeedbackSchema>
