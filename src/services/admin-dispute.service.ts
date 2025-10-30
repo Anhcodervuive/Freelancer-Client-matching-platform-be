@@ -7,11 +7,18 @@ import {
     DisputeStatus,
     Role,
     ArbitrationDossierStatus,
-    ArbitrationEvidenceSourceType
+    ArbitrationEvidenceSourceType,
+    EscrowStatus,
+    MilestoneStatus,
+    PaymentStatus,
+    PaymentType,
+    RefundStatus,
+    TransferStatus
 } from '~/generated/prisma'
+import Stripe from 'stripe'
 
 import { prismaClient } from '~/config/prisma-client'
-import { CLIENT } from '~/config/environment'
+import { CLIENT, STRIPE_CONFIG_INFO } from '~/config/environment'
 import {
     AdminDisputeListQueryInput,
     AdminJoinDisputeInput,
@@ -25,6 +32,7 @@ import {
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ForbiddenException } from '~/exceptions/Forbidden'
+import { InternalServerException } from '~/exceptions/internal-server'
 import { ErrorCode } from '~/exceptions/root'
 import createDossierPdf, {
     type DossierPdfContent,
@@ -43,6 +51,22 @@ const ARBITRATION_CONTEXT_VIEWABLE_STATUSES: DisputeStatus[] = [
     DisputeStatus.RESOLVED_REFUND_ALL,
     DisputeStatus.RESOLVED_SPLIT
 ]
+
+let stripeClient: Stripe | null = null
+
+const getStripeClient = () => {
+    const apiKey = STRIPE_CONFIG_INFO.API_KEY?.trim()
+
+    if (!apiKey) {
+        throw new InternalServerException('Stripe chưa được cấu hình', ErrorCode.INTERNAL_SERVER_ERROR)
+    }
+
+    if (!stripeClient) {
+        stripeClient = new Stripe(apiKey)
+    }
+
+    return stripeClient
+}
 
 const isMediationStatus = (status: DisputeStatus) =>
     status === DisputeStatus.OPEN || status === DisputeStatus.NEGOTIATION
@@ -259,6 +283,13 @@ const adminDisputeInclude = Prisma.validator<Prisma.DisputeInclude>()({
                                             firstName: true,
                                             lastName: true
                                         }
+                                    },
+                                    connectAccount: {
+                                        select: {
+                                            stripeAccountId: true,
+                                            payoutsEnabled: true,
+                                            chargesEnabled: true
+                                        }
                                     }
                                 }
                             }
@@ -335,6 +366,7 @@ type AdminDisputeDetailRecord = Prisma.DisputeGetPayload<{ include: typeof admin
 type AdminDisputeEscrow = NonNullable<AdminDisputeRecord['escrow']>
 type AdminDisputeMilestone = NonNullable<AdminDisputeEscrow['milestone']>
 type AdminDisputeContract = NonNullable<AdminDisputeMilestone['contract']>
+type PaymentWithRefund = Prisma.PaymentGetPayload<{ include: { refund: true } }>
 type AdminDisputeUser = Prisma.UserGetPayload<{ select: typeof adminDisputeUserSelect }>
 type AdminDisputeChatLog = Prisma.ChatAdminAccessLogGetPayload<{ select: typeof adminDisputeChatAccessLogSelect }>
 type AdminDisputeNegotiation = Prisma.DisputeNegotiationGetPayload<{ include: typeof adminDisputeNegotiationInclude }>
@@ -2594,13 +2626,133 @@ const recordArbitrationDecision = async (
         }
     }
 
+    const milestone = escrow.milestone as AdminDisputeMilestone
+    const contract = milestone.contract as AdminDisputeContract
+
+    const releaseDecimal = centsToDecimal(releaseCents)
+    const refundDecimal = centsToDecimal(refundCents)
+    const nextReleased = escrow.amountReleased.plus(releaseDecimal)
+    const nextRefunded = escrow.amountRefunded.plus(refundDecimal)
+    const zeroDecimal = new Prisma.Decimal(0)
+    const fundedAmount = escrow.amountFunded
+
+    let nextEscrowStatus: EscrowStatus = escrow.status
+
+    if (nextReleased.gte(fundedAmount) && nextRefunded.eq(zeroDecimal)) {
+        nextEscrowStatus = EscrowStatus.RELEASED
+    } else if (nextRefunded.gte(fundedAmount) && nextReleased.eq(zeroDecimal)) {
+        nextEscrowStatus = EscrowStatus.REFUNDED
+    } else if (nextReleased.gt(zeroDecimal) && nextRefunded.gt(zeroDecimal)) {
+        nextEscrowStatus = EscrowStatus.PARTIALLY_RELEASED
+    } else if (nextReleased.gt(zeroDecimal)) {
+        nextEscrowStatus = nextReleased.gte(fundedAmount)
+            ? EscrowStatus.RELEASED
+            : EscrowStatus.PARTIALLY_RELEASED
+    } else if (nextRefunded.gt(zeroDecimal)) {
+        nextEscrowStatus = nextRefunded.gte(fundedAmount)
+            ? EscrowStatus.REFUNDED
+            : EscrowStatus.PARTIALLY_REFUNDED
+    }
+
+    let stripeTransfer: Stripe.Response<Stripe.Transfer> | null = null
+    let destinationAccountId: string | null = null
+
+    if (releaseCents > 0) {
+        destinationAccountId = contract.freelancer?.connectAccount?.stripeAccountId ?? null
+
+        if (!destinationAccountId) {
+            throw new BadRequestException('Freelancer chưa liên kết Stripe Connect', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const stripe = getStripeClient()
+
+        try {
+            stripeTransfer = await stripe.transfers.create({
+                amount: releaseCents,
+                currency: escrow.currency.toLowerCase(),
+                destination: destinationAccountId,
+                transfer_group: `milestone_${milestone.id}`,
+                metadata: {
+                    contractId: contract.id,
+                    milestoneId: milestone.id,
+                    disputeId,
+                    type: 'arbitration_award_release'
+                }
+            })
+        } catch (error) {
+            if (error instanceof Stripe.errors.StripeError) {
+                throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
+            }
+
+            throw error
+        }
+    }
+
+    let refundSourcePayment: PaymentWithRefund | null = null
+    let stripeRefund: Stripe.Response<Stripe.Refund> | null = null
+
+    if (refundCents > 0) {
+        refundSourcePayment = await prismaClient.payment.findFirst({
+            where: {
+                escrowId: escrow.id,
+                status: PaymentStatus.SUCCEEDED,
+                type: PaymentType.ESCROW_MILESTONE
+            },
+            include: { refund: true },
+            orderBy: { createdAt: 'desc' }
+        })
+
+        if (!refundSourcePayment) {
+            throw new BadRequestException(
+                'Không tìm thấy giao dịch thanh toán để hoàn tiền',
+                ErrorCode.PARAM_QUERY_ERROR
+            )
+        }
+
+        const stripe = getStripeClient()
+
+        try {
+            stripeRefund = await stripe.refunds.create({
+                payment_intent: refundSourcePayment.paymentIntentId,
+                amount: refundCents,
+                reason: 'requested_by_customer',
+                metadata: {
+                    contractId: contract.id,
+                    milestoneId: milestone.id,
+                    disputeId,
+                    type: 'arbitration_award_refund'
+                }
+            })
+        } catch (error) {
+            if (error instanceof Stripe.errors.StripeError) {
+                throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
+            }
+
+            throw error
+        }
+
+        if (!stripeRefund) {
+            throw new InternalServerException(
+                'Không thể khởi tạo hoàn tiền phán quyết trọng tài',
+                ErrorCode.INTERNAL_SERVER_ERROR
+            )
+        }
+
+        if (stripeRefund.status !== 'succeeded') {
+            throw new BadRequestException(
+                'Hoàn tiền phán quyết trọng tài chưa hoàn tất, vui lòng thử lại sau',
+                ErrorCode.PARAM_QUERY_ERROR
+            )
+        }
+    }
+
     await prismaClient.$transaction(async tx => {
         await tx.dispute.update({
             where: { id: disputeId },
             data: {
                 status: resolvedStatus,
-                decidedRelease: centsToDecimal(releaseCents),
-                decidedRefund: centsToDecimal(refundCents),
+                decidedRelease: releaseDecimal,
+                decidedRefund: refundDecimal,
                 decidedById: viewer.userId,
                 decidedAt,
                 decisionSummary: summary,
@@ -2608,6 +2760,91 @@ const recordArbitrationDecision = async (
                 responseDeadline: null
             }
         })
+
+        if (releaseCents > 0) {
+            if (!stripeTransfer || !destinationAccountId) {
+                throw new InternalServerException(
+                    'Không thể tạo giao dịch chuyển tiền phán quyết trọng tài',
+                    ErrorCode.INTERNAL_SERVER_ERROR
+                )
+            }
+
+            await tx.transfer.create({
+                data: {
+                    escrowId: escrow.id,
+                    amount: releaseDecimal,
+                    currency: escrow.currency,
+                    status: TransferStatus.SUCCEEDED,
+                    transferId: stripeTransfer.id,
+                    destinationAccountId
+                }
+            })
+        }
+
+        if (refundCents > 0) {
+            if (!refundSourcePayment || !stripeRefund) {
+                throw new InternalServerException(
+                    'Không thể hoàn tiền phán quyết trọng tài',
+                    ErrorCode.INTERNAL_SERVER_ERROR
+                )
+            }
+
+            const existingRefundAmount = refundSourcePayment.refund?.amount ?? new Prisma.Decimal(0)
+            const totalRefundAmount = existingRefundAmount.plus(refundDecimal)
+
+            await tx.refund.upsert({
+                where: { paymentId: refundSourcePayment.id },
+                create: {
+                    escrowId: escrow.id,
+                    paymentId: refundSourcePayment.id,
+                    amount: totalRefundAmount,
+                    currency: escrow.currency,
+                    status: RefundStatus.SUCCEEDED,
+                    stripeRefundId: stripeRefund.id ?? null
+                },
+                update: {
+                    amount: totalRefundAmount,
+                    currency: escrow.currency,
+                    status: RefundStatus.SUCCEEDED,
+                    stripeRefundId: stripeRefund.id ?? refundSourcePayment.refund?.stripeRefundId ?? null
+                }
+            })
+
+            const paymentFullyRefunded = totalRefundAmount.gte(refundSourcePayment.amount)
+
+            await tx.payment.update({
+                where: { id: refundSourcePayment.id },
+                data: {
+                    status: paymentFullyRefunded ? PaymentStatus.REFUNDED : PaymentStatus.SUCCEEDED
+                }
+            })
+        }
+
+        await tx.escrow.update({
+            where: { id: escrow.id },
+            data: {
+                ...(releaseCents > 0 ? { amountReleased: nextReleased } : {}),
+                ...(refundCents > 0 ? { amountRefunded: nextRefunded } : {}),
+                status: nextEscrowStatus
+            }
+        })
+
+        const milestoneUpdateData: Prisma.MilestoneUpdateInput = {}
+
+        if (releaseCents > 0) {
+            milestoneUpdateData.status = MilestoneStatus.RELEASED
+            milestoneUpdateData.releasedAt = decidedAt
+        } else if (refundCents > 0) {
+            milestoneUpdateData.status = MilestoneStatus.CANCELED
+            milestoneUpdateData.releasedAt = null
+        }
+
+        if (Object.keys(milestoneUpdateData).length > 0) {
+            await tx.milestone.update({
+                where: { id: milestone.id },
+                data: milestoneUpdateData
+            })
+        }
 
         await tx.arbitrationDecisionAttachment.deleteMany({ where: { disputeId } })
 
