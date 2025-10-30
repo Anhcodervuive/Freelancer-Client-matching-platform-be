@@ -36,6 +36,13 @@ import { emailQueue } from '~/queues/email.queue'
 
 const MEDIATION_RESPONSE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
 const MEDIATION_STATUSES: DisputeStatus[] = [DisputeStatus.OPEN, DisputeStatus.NEGOTIATION]
+const ARBITRATION_CONTEXT_VIEWABLE_STATUSES: DisputeStatus[] = [
+    DisputeStatus.ARBITRATION_READY,
+    DisputeStatus.ARBITRATION,
+    DisputeStatus.RESOLVED_RELEASE_ALL,
+    DisputeStatus.RESOLVED_REFUND_ALL,
+    DisputeStatus.RESOLVED_SPLIT
+]
 
 const isMediationStatus = (status: DisputeStatus) =>
     status === DisputeStatus.OPEN || status === DisputeStatus.NEGOTIATION
@@ -2456,10 +2463,7 @@ const getArbitrationContext = async (
         throw new BadRequestException('Tranh chấp chưa được khóa hồ sơ trọng tài', ErrorCode.PARAM_QUERY_ERROR)
     }
 
-    if (
-        disputeRecord.status !== DisputeStatus.ARBITRATION &&
-        disputeRecord.status !== DisputeStatus.ARBITRATION_READY
-    ) {
+    if (!ARBITRATION_CONTEXT_VIEWABLE_STATUSES.includes(disputeRecord.status)) {
         throw new BadRequestException('Tranh chấp chưa ở giai đoạn xem xét trọng tài', ErrorCode.PARAM_QUERY_ERROR)
     }
 
