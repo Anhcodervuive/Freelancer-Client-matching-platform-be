@@ -1689,15 +1689,30 @@ const assignArbitrator = async (adminId: string, disputeId: string, payload: Adm
         )
     }
 
+    const shouldPromoteToArbitration = disputeRecord.status !== DisputeStatus.ARBITRATION
+
     if (disputeRecord.arbitratorId === arbitratorId) {
-        return buildAdminDisputeDetailResponse(disputeRecord)
+        if (!shouldPromoteToArbitration) {
+            return buildAdminDisputeDetailResponse(disputeRecord)
+        }
+
+        const refreshed = await prismaClient.dispute.update({
+            where: { id: disputeId },
+            data: {
+                status: DisputeStatus.ARBITRATION
+            },
+            include: adminDisputeDetailInclude
+        })
+
+        return buildAdminDisputeDetailResponse(refreshed)
     }
 
     const updated = await prismaClient.dispute.update({
         where: { id: disputeId },
         data: {
             arbitratorId,
-            arbitratorAssignedAt: new Date()
+            arbitratorAssignedAt: new Date(),
+            ...(shouldPromoteToArbitration ? { status: DisputeStatus.ARBITRATION } : {})
         },
         include: adminDisputeDetailInclude
     })
