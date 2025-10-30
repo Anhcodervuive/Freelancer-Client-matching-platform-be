@@ -43,7 +43,11 @@ import createDossierPdf, {
 import { emailQueue } from '~/queues/email.queue'
 
 const MEDIATION_RESPONSE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
-const MEDIATION_STATUSES: DisputeStatus[] = [DisputeStatus.OPEN, DisputeStatus.NEGOTIATION]
+const MEDIATION_STATUSES: DisputeStatus[] = [
+    DisputeStatus.OPEN,
+    DisputeStatus.NEGOTIATION,
+    DisputeStatus.INTERNAL_MEDIATION
+]
 const ARBITRATION_CONTEXT_VIEWABLE_STATUSES: DisputeStatus[] = [
     DisputeStatus.ARBITRATION_READY,
     DisputeStatus.ARBITRATION,
@@ -69,7 +73,9 @@ const getStripeClient = () => {
 }
 
 const isMediationStatus = (status: DisputeStatus) =>
-    status === DisputeStatus.OPEN || status === DisputeStatus.NEGOTIATION
+    status === DisputeStatus.OPEN ||
+    status === DisputeStatus.NEGOTIATION ||
+    status === DisputeStatus.INTERNAL_MEDIATION
 
 const adminDisputeUserSelect = Prisma.validator<Prisma.UserSelect>()({
     id: true,
@@ -1825,7 +1831,7 @@ const joinDispute = async (adminId: string, disputeId: string, payload: AdminJoi
         await tx.dispute.update({
             where: { id: disputeId },
             data: {
-                status: DisputeStatus.NEGOTIATION,
+                status: DisputeStatus.INTERNAL_MEDIATION,
                 responseDeadline: mediationDeadline
             }
         })

@@ -2556,8 +2556,8 @@ const openMilestoneDispute = async (
 		)
 	}
 
-	const now = new Date()
-	const responseDeadline = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000)
+        const now = new Date()
+        const responseDeadline = new Date(now.getTime() + FIVE_DAYS_IN_MS)
 	const disputeNote = payload.reason.trim()
 
 	const releaseValue = (proposedReleaseCents / 100).toFixed(2)
@@ -2591,13 +2591,15 @@ const openMilestoneDispute = async (
 			}
 		})
 
-		const disputeWithProposal = await tx.dispute.update({
-			where: { id: createdDispute.id },
-			data: {
-				latestProposalId: negotiation.id,
-				proposedRelease: new Prisma.Decimal(releaseValue),
-				proposedRefund: new Prisma.Decimal(refundValue)
-			},
+                const disputeWithProposal = await tx.dispute.update({
+                        where: { id: createdDispute.id },
+                        data: {
+                                latestProposalId: negotiation.id,
+                                proposedRelease: new Prisma.Decimal(releaseValue),
+                                proposedRefund: new Prisma.Decimal(refundValue),
+                                responseDeadline,
+                                status: DisputeStatus.NEGOTIATION
+                        },
 			include: {
 				latestProposal: true,
 				arbitrator: {
