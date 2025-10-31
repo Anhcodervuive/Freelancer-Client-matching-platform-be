@@ -60,11 +60,12 @@ import notificationService from '~/services/notification.service'
 import { emailQueue } from '~/queues/email.queue'
 import { SubmitFinalEvidenceInput } from '~/schema/dispute.schema'
 
-type ContractAuthUser = Pick<User, 'id' | 'role'>
+type ContractAuthUser = { id: string; role: Role | null }
 
 const isAdminUser = (user: ContractAuthUser) => user.role === Role.ADMIN
 
 const FEEDBACK_ACTION_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
+const FEEDBACK_VISIBILITY_DELAY_MS = 14 * 24 * 60 * 60 * 1000
 
 const contractJobSummarySelect = Prisma.validator<Prisma.JobPostSelect>()({
 	id: true,
@@ -942,8 +943,45 @@ const serializeContractFeedback = (feedback: ContractFeedbackPayload) => {
         }
 }
 
-const serializeContractDetail = (contract: ContractDetailPayload) => {
+const hasFeedbackVisibilityDelayElapsed = (completedAt: Date | null | undefined) => {
+        if (!completedAt) {
+                return true
+        }
+
+        return Date.now() - completedAt.getTime() >= FEEDBACK_VISIBILITY_DELAY_MS
+}
+
+const filterContractFeedbacksForViewer = (
+        feedbacks: readonly ContractFeedbackPayload[],
+        viewer: ContractAuthUser | null | undefined,
+        completedAt: Date | null | undefined
+) => {
+        if (!viewer) {
+                return feedbacks
+        }
+
+        if (isAdminUser(viewer)) {
+                return feedbacks
+        }
+
+        const canViewCounterpartyFeedback = hasFeedbackVisibilityDelayElapsed(completedAt)
+
+        return feedbacks.filter(feedback => {
+                if (feedback.reviewerId === viewer.id) {
+                        return true
+                }
+
+                return canViewCounterpartyFeedback
+        })
+}
+
+const serializeContractDetail = (
+        contract: ContractDetailPayload,
+        options: { viewer?: ContractAuthUser | null } = {}
+) => {
         const base = serializeContractSummary(contract)
+        const completedAt = contract.endedAt ?? contract.updatedAt ?? null
+        const feedbacks = filterContractFeedbacksForViewer(contract.feedbacks, options.viewer, completedAt)
 
         return {
                 ...base,
@@ -963,7 +1001,7 @@ const serializeContractDetail = (contract: ContractDetailPayload) => {
                           }
                         : null,
                 milestones: contract.milestones.map(milestone => serializeMilestone(milestone)),
-                feedbacks: contract.feedbacks.map(feedback => serializeContractFeedback(feedback))
+                feedbacks: feedbacks.map(feedback => serializeContractFeedback(feedback))
         }
 }
 
@@ -1715,7 +1753,7 @@ const getContractDetail = async (user: ContractAuthUser, contractId: string) => 
                 throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
         }
 
-        return serializeContractDetail(contract)
+        return serializeContractDetail(contract, { viewer: user })
 }
 
 const endContract = async (userId: string, contractId: string, payload: EndContractInput) => {
@@ -1803,7 +1841,16 @@ const endContract = async (userId: string, contractId: string, payload: EndContr
                 include: contractDetailInclude
         })
 
-        return serializeContractDetail(updated)
+        const viewerRole =
+                updated.client?.userId === userId
+                        ? Role.CLIENT
+                        : updated.freelancer?.userId === userId
+                                ? Role.FREELANCER
+                                : Role.ADMIN
+
+        return serializeContractDetail(updated, {
+                viewer: { id: userId, role: viewerRole }
+        })
 }
 
 const isWithinFeedbackWindow = (completedAt: Date | null | undefined) => {
@@ -1864,7 +1911,7 @@ const loadContractFeedbackContext = async (
                 )
         }
 
-        return { reviewerRole, revieweeId, completedAt }
+        return { reviewerRole, revieweeId, completedAt, contract: contractRecord }
 }
 
 const submitContractFeedback = async (
@@ -1908,18 +1955,49 @@ const submitContractFeedback = async (
         }
 }
 
-const listOwnContractFeedbacks = async (userId: string, contractId: string) => {
-        await loadContractFeedbackContext(contractId, userId)
+const listContractFeedbacks = async (user: ContractAuthUser, contractId: string) => {
+        const contractRecord = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: {
+                        id: true,
+                        clientId: true,
+                        freelancerId: true,
+                        status: true,
+                        endedAt: true,
+                        updatedAt: true
+                }
+        })
+
+        if (!contractRecord) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const isParticipant =
+                contractRecord.clientId === user.id || contractRecord.freelancerId === user.id
+
+        if (!isParticipant && !isAdminUser(user)) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (
+                contractRecord.status !== ContractStatus.COMPLETED &&
+                contractRecord.status !== ContractStatus.CANCELLED
+        ) {
+                throw new BadRequestException('Hợp đồng chưa ở trạng thái kết thúc', ErrorCode.PARAM_QUERY_ERROR)
+        }
 
         const feedbacks = await prismaClient.contractFeedback.findMany({
-                where: { contractId, reviewerId: userId },
+                where: { contractId },
                 include: contractFeedbackInclude,
-                orderBy: { createdAt: 'desc' }
+                orderBy: { createdAt: 'asc' }
         })
+
+        const completedAt = contractRecord.endedAt ?? contractRecord.updatedAt ?? null
+        const visibleFeedbacks = filterContractFeedbacksForViewer(feedbacks, user, completedAt)
 
         return {
                 contractId,
-                feedbacks: feedbacks.map(feedback => serializeContractFeedback(feedback))
+                feedbacks: visibleFeedbacks.map(feedback => serializeContractFeedback(feedback))
         }
 }
 
@@ -4891,7 +4969,7 @@ const contractService = {
         approveMilestoneSubmission,
         declineMilestoneSubmission,
         submitContractFeedback,
-        listOwnContractFeedbacks,
+        listContractFeedbacks,
         updateContractFeedback,
         deleteContractFeedback
 }

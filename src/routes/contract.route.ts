@@ -27,7 +27,7 @@ import {
         submitMilestoneWork,
         uploadMilestoneResources,
         submitContractFeedback,
-        listOwnContractFeedbacks,
+        listContractFeedbacks,
         updateContractFeedback,
         deleteContractFeedback
 } from '~/controllers/contract.controller'
@@ -40,7 +40,7 @@ const router = Router()
 router.get('/', authenticateMiddleware, errorHandler(listContracts))
 router.get('/:contractId', authenticateMiddleware, errorHandler(getContractDetail))
 router.post('/:contractId/end', authenticateMiddleware, errorHandler(endContract))
-router.get('/:contractId/feedback', authenticateMiddleware, errorHandler(listOwnContractFeedbacks))
+router.get('/:contractId/feedback', authenticateMiddleware, errorHandler(listContractFeedbacks))
 router.post('/:contractId/feedback', authenticateMiddleware, errorHandler(submitContractFeedback))
 router.patch('/:contractId/feedback', authenticateMiddleware, errorHandler(updateContractFeedback))
 router.delete('/:contractId/feedback', authenticateMiddleware, errorHandler(deleteContractFeedback))

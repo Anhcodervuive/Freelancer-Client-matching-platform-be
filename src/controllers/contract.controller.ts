@@ -124,8 +124,9 @@ export const submitContractFeedback = async (req: Request, res: Response) => {
         return res.status(StatusCodes.CREATED).json(result)
 }
 
-export const listOwnContractFeedbacks = async (req: Request, res: Response) => {
-        const userId = req.user?.id
+export const listContractFeedbacks = async (req: Request, res: Response) => {
+        const user = req.user
+        const userId = user?.id
         const { contractId } = req.params
 
         if (!userId) {
@@ -136,7 +137,10 @@ export const listOwnContractFeedbacks = async (req: Request, res: Response) => {
                 throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
         }
 
-        const result = await contractService.listOwnContractFeedbacks(userId, contractId)
+        const result = await contractService.listContractFeedbacks(
+                { id: userId, role: user?.role ?? null },
+                contractId
+        )
 
         return res.status(StatusCodes.OK).json(result)
 }
