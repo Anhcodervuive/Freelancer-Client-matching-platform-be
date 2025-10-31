@@ -217,3 +217,10 @@ export const SubmitContractFeedbackSchema = z.object({
 })
 
 export type SubmitContractFeedbackInput = z.infer<typeof SubmitContractFeedbackSchema>
+
+export const UpdateContractFeedbackSchema = SubmitContractFeedbackSchema.partial().refine(
+        payload => payload.rating !== undefined || payload.comment !== undefined || payload.wouldHireAgain !== undefined,
+        { message: 'Cần cung cấp ít nhất một trường để cập nhật đánh giá' }
+)
+
+export type UpdateContractFeedbackInput = z.infer<typeof UpdateContractFeedbackSchema>

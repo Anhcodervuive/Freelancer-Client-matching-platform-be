@@ -20,7 +20,8 @@ import {
         SubmitMilestoneSchema,
         UpdateDisputeNegotiationSchema,
         EndContractSchema,
-        SubmitContractFeedbackSchema
+        SubmitContractFeedbackSchema,
+        UpdateContractFeedbackSchema
 } from '~/schema/contract.schema'
 import { SubmitFinalEvidenceSchema } from '~/schema/dispute.schema'
 import contractService from '~/services/contract.service'
@@ -121,6 +122,58 @@ export const submitContractFeedback = async (req: Request, res: Response) => {
         const result = await contractService.submitContractFeedback(userId, contractId, payload)
 
         return res.status(StatusCodes.CREATED).json(result)
+}
+
+export const listOwnContractFeedbacks = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để xem đánh giá', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId) {
+                throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const result = await contractService.listOwnContractFeedbacks(userId, contractId)
+
+        return res.status(StatusCodes.OK).json(result)
+}
+
+export const updateContractFeedback = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để sửa đánh giá', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId) {
+                throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = UpdateContractFeedbackSchema.parse(req.body)
+        const result = await contractService.updateContractFeedback(userId, contractId, payload)
+
+        return res.status(StatusCodes.OK).json(result)
+}
+
+export const deleteContractFeedback = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+        const { contractId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để xóa đánh giá', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId) {
+                throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const result = await contractService.deleteContractFeedback(userId, contractId)
+
+        return res.status(StatusCodes.OK).json(result)
 }
 
 export const listContractMilestones = async (req: Request, res: Response) => {

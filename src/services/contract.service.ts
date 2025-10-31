@@ -51,7 +51,8 @@ import {
         SubmitMilestoneInput,
         UpdateDisputeNegotiationInput,
         EndContractInput,
-        SubmitContractFeedbackInput
+        SubmitContractFeedbackInput,
+        UpdateContractFeedbackInput
 } from '~/schema/contract.schema'
 import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 import { InternalServerException } from '~/exceptions/internal-server'
@@ -62,6 +63,8 @@ import { SubmitFinalEvidenceInput } from '~/schema/dispute.schema'
 type ContractAuthUser = Pick<User, 'id' | 'role'>
 
 const isAdminUser = (user: ContractAuthUser) => user.role === Role.ADMIN
+
+const FEEDBACK_ACTION_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
 
 const contractJobSummarySelect = Prisma.validator<Prisma.JobPostSelect>()({
 	id: true,
@@ -1803,10 +1806,18 @@ const endContract = async (userId: string, contractId: string, payload: EndContr
         return serializeContractDetail(updated)
 }
 
-const submitContractFeedback = async (
-        userId: string,
+const isWithinFeedbackWindow = (completedAt: Date | null | undefined) => {
+        if (!completedAt) {
+                return false
+        }
+
+        return Date.now() - completedAt.getTime() <= FEEDBACK_ACTION_WINDOW_MS
+}
+
+const loadContractFeedbackContext = async (
         contractId: string,
-        payload: SubmitContractFeedbackInput
+        userId: string,
+        options: { enforceWindow?: boolean; windowErrorMessage?: string } = {}
 ) => {
         const contractRecord = await prismaClient.contract.findUnique({
                 where: { id: contractId },
@@ -1814,7 +1825,9 @@ const submitContractFeedback = async (
                         id: true,
                         clientId: true,
                         freelancerId: true,
-                        status: true
+                        status: true,
+                        endedAt: true,
+                        updatedAt: true
                 }
         })
 
@@ -1841,6 +1854,28 @@ const submitContractFeedback = async (
         if (!revieweeId) {
                 throw new BadRequestException('Không xác định được người nhận đánh giá', ErrorCode.PARAM_QUERY_ERROR)
         }
+
+        const completedAt = contractRecord.endedAt ?? contractRecord.updatedAt ?? null
+
+        if (options.enforceWindow && !isWithinFeedbackWindow(completedAt)) {
+                throw new BadRequestException(
+                        options.windowErrorMessage ?? 'Đã quá hạn thao tác với đánh giá cho hợp đồng này',
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
+        }
+
+        return { reviewerRole, revieweeId, completedAt }
+}
+
+const submitContractFeedback = async (
+        userId: string,
+        contractId: string,
+        payload: SubmitContractFeedbackInput
+) => {
+        const { reviewerRole, revieweeId } = await loadContractFeedbackContext(contractId, userId, {
+                enforceWindow: true,
+                windowErrorMessage: 'Đã quá hạn gửi đánh giá cho hợp đồng này'
+        })
 
         const existingFeedback = await prismaClient.contractFeedback.findFirst({
                 where: {
@@ -1870,6 +1905,90 @@ const submitContractFeedback = async (
         return {
                 contractId,
                 feedback: serializeContractFeedback(created)
+        }
+}
+
+const listOwnContractFeedbacks = async (userId: string, contractId: string) => {
+        await loadContractFeedbackContext(contractId, userId)
+
+        const feedbacks = await prismaClient.contractFeedback.findMany({
+                where: { contractId, reviewerId: userId },
+                include: contractFeedbackInclude,
+                orderBy: { createdAt: 'desc' }
+        })
+
+        return {
+                contractId,
+                feedbacks: feedbacks.map(feedback => serializeContractFeedback(feedback))
+        }
+}
+
+const updateContractFeedback = async (
+        userId: string,
+        contractId: string,
+        payload: UpdateContractFeedbackInput
+) => {
+        await loadContractFeedbackContext(contractId, userId, {
+                enforceWindow: true,
+                windowErrorMessage: 'Đã quá hạn chỉnh sửa đánh giá cho hợp đồng này'
+        })
+
+        const existingFeedback = await prismaClient.contractFeedback.findFirst({
+                where: { contractId, reviewerId: userId },
+                select: { id: true }
+        })
+
+        if (!existingFeedback) {
+                throw new NotFoundException('Bạn chưa gửi đánh giá cho hợp đồng này', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const data: Prisma.ContractFeedbackUpdateInput = {}
+
+        if (payload.rating !== undefined) {
+                data.rating = payload.rating
+        }
+
+        if (payload.comment !== undefined) {
+                const comment = payload.comment?.trim() ?? ''
+                data.comment = comment.length > 0 ? comment : null
+        }
+
+        if (payload.wouldHireAgain !== undefined) {
+                data.wouldHireAgain = payload.wouldHireAgain
+        }
+
+        const updated = await prismaClient.contractFeedback.update({
+                where: { id: existingFeedback.id },
+                data,
+                include: contractFeedbackInclude
+        })
+
+        return {
+                contractId,
+                feedback: serializeContractFeedback(updated)
+        }
+}
+
+const deleteContractFeedback = async (userId: string, contractId: string) => {
+        await loadContractFeedbackContext(contractId, userId, {
+                enforceWindow: true,
+                windowErrorMessage: 'Đã quá hạn xóa đánh giá cho hợp đồng này'
+        })
+
+        const existingFeedback = await prismaClient.contractFeedback.findFirst({
+                where: { contractId, reviewerId: userId },
+                select: { id: true }
+        })
+
+        if (!existingFeedback) {
+                throw new NotFoundException('Bạn chưa gửi đánh giá cho hợp đồng này', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        await prismaClient.contractFeedback.delete({ where: { id: existingFeedback.id } })
+
+        return {
+                contractId,
+                feedbackId: existingFeedback.id
         }
 }
 
@@ -4771,7 +4890,10 @@ const contractService = {
         submitMilestoneWork,
         approveMilestoneSubmission,
         declineMilestoneSubmission,
-        submitContractFeedback
+        submitContractFeedback,
+        listOwnContractFeedbacks,
+        updateContractFeedback,
+        deleteContractFeedback
 }
 
 export default contractService
