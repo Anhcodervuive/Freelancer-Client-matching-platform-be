@@ -15,16 +15,7 @@ import {
 import { ForbiddenException } from '~/exceptions/Forbidden'
 import { ErrorCode } from '~/exceptions/root'
 import { BadRequestException } from '~/exceptions/bad-request'
-
-const ensureAdminUser = (req: Request) => {
-    const user = req.user
-
-    if (!user || user.role !== Role.ADMIN) {
-        throw new ForbiddenException('Chỉ admin mới được phép truy cập tính năng này', ErrorCode.FORBIDDEN)
-    }
-
-    return user.id
-}
+import { ensureAdminUser } from './utils'
 
 const resolveArbitrationContextViewer = (req: Request) => {
     const user = req.user
@@ -79,7 +70,7 @@ export const getAdminDispute = async (req: Request, res: Response) => {
 }
 
 export const joinDisputeAsAdmin = async (req: Request, res: Response) => {
-    const adminId = ensureAdminUser(req)
+    const adminId = ensureAdminUser(req).id
     const { disputeId } = req.params
 
     if (!disputeId) {
@@ -93,7 +84,7 @@ export const joinDisputeAsAdmin = async (req: Request, res: Response) => {
 }
 
 export const requestArbitrationFees = async (req: Request, res: Response) => {
-    const adminId = ensureAdminUser(req)
+    const adminId = ensureAdminUser(req).id
     const { disputeId } = req.params
 
     if (!disputeId) {
@@ -107,7 +98,7 @@ export const requestArbitrationFees = async (req: Request, res: Response) => {
 }
 
 export const lockDisputeForArbitration = async (req: Request, res: Response) => {
-    const adminId = ensureAdminUser(req)
+    const adminId = ensureAdminUser(req).id
     const { disputeId } = req.params
 
     if (!disputeId) {
@@ -121,7 +112,7 @@ export const lockDisputeForArbitration = async (req: Request, res: Response) => 
 }
 
 export const generateArbitrationDossier = async (req: Request, res: Response) => {
-    const adminId = ensureAdminUser(req)
+    const adminId = ensureAdminUser(req).id
     const { disputeId } = req.params
 
     if (!disputeId) {
@@ -177,7 +168,7 @@ export const downloadDisputeDossierPdf = async (req: Request, res: Response) => 
 }
 
 export const assignArbitratorToDispute = async (req: Request, res: Response) => {
-    const adminId = ensureAdminUser(req)
+    const adminId = ensureAdminUser(req).id
     const { disputeId } = req.params
 
     if (!disputeId) {

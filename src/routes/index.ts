@@ -27,6 +27,7 @@ import chatRoute from './chat.route'
 import uploadRoute from './upload.route'
 import contractRoute from './contract.route'
 import adminDisputeRoute from './admin-dispute.route'
+import adminUserRoute from './admin-user.route'
 import arbitratorDisputeRoute from './arbitrator-dispute.route'
 
 const rootRouter: Router = Router()
@@ -56,6 +57,7 @@ rootRouter.use('/chat', chatRoute)
 rootRouter.use('/upload', uploadRoute)
 rootRouter.use('/contracts', contractRoute)
 rootRouter.use('/admin/disputes', adminDisputeRoute)
+rootRouter.use('/admin/users', adminUserRoute)
 rootRouter.use('/arbitrator/disputes', arbitratorDisputeRoute)
 
 export default rootRouter

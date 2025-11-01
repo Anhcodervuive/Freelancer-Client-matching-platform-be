@@ -1,4 +1,5 @@
 import { prismaClient } from '~/config/prisma-client'
+import { Role } from '~/generated/prisma'
 import assetService from './asset.service'
 const getOrCreateMyProfile = async (userId: string) => {
 	const found = await prismaClient.profile.findUnique({
@@ -41,52 +42,72 @@ const updateMyProfile = async (userId: string, input: any) => {
 	return publicUser
 }
 
+const ensureUserProfile = async (userId: string) => {
+        await prismaClient.profile.upsert({
+                where: { userId },
+                create: { userId },
+                update: {}
+        })
+}
+
 const createFreelancerProfile = async (userId: string) => {
-	await prismaClient.user.update({
-		where: {
-			id: userId
-		},
-		data: {
-			role: 'FREELANCER'
-		}
-	})
-	return prismaClient.freelancer.create({
-		data: {
-			userId
-		}
-	})
+        await ensureUserProfile(userId)
+
+        await prismaClient.client.deleteMany({ where: { userId } })
+
+        await prismaClient.user.update({
+                where: {
+                        id: userId
+                },
+                data: {
+                        role: Role.FREELANCER
+                }
+        })
+
+        return prismaClient.freelancer.upsert({
+                where: { userId },
+                create: { userId },
+                update: {}
+        })
 }
 
 const createClientProfile = async (userId: string) => {
-	await prismaClient.user.update({
-		where: {
-			id: userId
-		},
-		data: {
-			role: 'CLIENT'
-		}
-	})
-	return prismaClient.client.create({
-		data: {
-			userId
-		}
-	})
+        await ensureUserProfile(userId)
+
+        await prismaClient.freelancer.deleteMany({ where: { userId } })
+
+        await prismaClient.user.update({
+                where: {
+                        id: userId
+                },
+                data: {
+                        role: Role.CLIENT
+                }
+        })
+
+        return prismaClient.client.upsert({
+                where: { userId },
+                create: { userId },
+                update: {}
+        })
 }
 
 const deleteFreelancerProfile = async (userId: string) => {
-	return prismaClient.freelancer.create({
-		data: {
-			userId
-		}
-	})
+        await prismaClient.freelancer.deleteMany({ where: { userId } })
+
+        await prismaClient.user.update({
+                where: { id: userId },
+                data: { role: null }
+        })
 }
 
 const deleteClientProfile = async (userId: string) => {
-	return prismaClient.client.create({
-		data: {
-			userId
-		}
-	})
+        await prismaClient.client.deleteMany({ where: { userId } })
+
+        await prismaClient.user.update({
+                where: { id: userId },
+                data: { role: null }
+        })
 }
 
 const replaceProfileAvatar = (userId: string, input: any) => {}
