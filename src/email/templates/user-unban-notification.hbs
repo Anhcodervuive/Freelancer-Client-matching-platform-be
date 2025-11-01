@@ -1,0 +1,16 @@
+{{#> base subject=subject}}
+  <h2 style="margin-top:0;">Tài khoản đã được mở khóa</h2>
+  <p>Xin chào <b>{{recipientName}}</b>,</p>
+  <p>Lệnh cấm đối với tài khoản của bạn đã được gỡ bỏ.</p>
+  <p><strong>Lý do cấm ban đầu:</strong> {{reason}}</p>
+  {{#if note}}
+    <p><strong>Ghi chú từ quản trị viên:</strong> {{note}}</p>
+  {{/if}}
+  {{#if reactivated}}
+    <p>Chúng tôi đã kích hoạt lại trạng thái hoạt động cho tài khoản của bạn. Bạn có thể đăng nhập và tiếp tục sử dụng nền tảng bình thường.</p>
+  {{else}}
+    <p>Tài khoản của bạn hiện vẫn chưa được kích hoạt trở lại. Vui lòng phản hồi email này hoặc liên hệ đội ngũ hỗ trợ nếu cần trợ giúp thêm.</p>
+  {{/if}}
+  <p>Nếu bạn có câu hỏi hoặc cần hỗ trợ, hãy liên hệ với đội ngũ chăm sóc khách hàng của chúng tôi.</p>
+  <p>Trân trọng,<br/>Đội ngũ vận hành nền tảng</p>
+{{/base}}

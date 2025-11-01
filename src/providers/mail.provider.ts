@@ -37,6 +37,13 @@ type UserBanEmailPayload = {
         expiresAt?: Date | null
 }
 
+type UserUnbanEmailPayload = {
+        recipientName: string
+        reason: string
+        note?: string | null
+        reactivated: boolean
+}
+
 const createTransporter = () => {
         return nodemailer.createTransport({
                 host: 'smtp.gmail.com',
@@ -217,6 +224,19 @@ export async function sendUserBanEmail(to: string, payload: UserBanEmailPayload)
                 reason: payload.reason,
                 note: payload.note,
                 expiresAt: payload.expiresAt ? formatDateTime(payload.expiresAt) : null
+        })
+
+        await sendMail({ to, subject, html })
+}
+
+export async function sendUserUnbanEmail(to: string, payload: UserUnbanEmailPayload) {
+        const subject = 'Tài khoản của bạn đã được mở khóa'
+        const html = renderEmailTemplate('user-unban-notification.hbs', {
+                subject,
+                recipientName: payload.recipientName,
+                reason: payload.reason,
+                note: payload.note,
+                reactivated: payload.reactivated
         })
 
         await sendMail({ to, subject, html })

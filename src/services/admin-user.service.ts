@@ -5,7 +5,7 @@ import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import assetService from './asset.service'
-import { sendUserBanEmail } from '~/providers/mail.provider'
+import { sendUserBanEmail, sendUserUnbanEmail } from '~/providers/mail.provider'
 import {
     BanAdminUserInput,
     UnbanAdminUserInput,
@@ -375,7 +375,7 @@ const unbanUser = async (requesterId: string, userId: string, payload: UnbanAdmi
         throw new BadRequestException('Không thể tự gỡ lệnh cấm của bạn', ErrorCode.USER_NOT_AUTHORITY)
     }
 
-    return prismaClient.$transaction(async tx => {
+    const { user, previousBan, wasReactivated } = await prismaClient.$transaction(async tx => {
         const existing = await tx.user.findUnique({ where: { id: userId } })
 
         if (!existing) {
@@ -388,6 +388,8 @@ const unbanUser = async (requesterId: string, userId: string, payload: UnbanAdmi
             throw new BadRequestException('Người dùng không có lệnh cấm đang hiệu lực', ErrorCode.USER_NOT_AUTHORITY)
         }
 
+        const shouldReactivate = Boolean(payload.reactivate && !existing.isActive)
+
         await (tx as any).userBan.update({
             where: { id: activeBan.id },
             data: {
@@ -396,7 +398,7 @@ const unbanUser = async (requesterId: string, userId: string, payload: UnbanAdmi
             }
         })
 
-        if (payload.reactivate && !existing.isActive) {
+        if (shouldReactivate) {
             await tx.user.update({
                 where: { id: userId },
                 data: { isActive: true }
@@ -412,8 +414,27 @@ const unbanUser = async (requesterId: string, userId: string, payload: UnbanAdmi
             throw new NotFoundException('Không tìm thấy người dùng', ErrorCode.ITEM_NOT_FOUND)
         }
 
-        return serializeAdminUser(updated)
+        const serialized = await serializeAdminUser(updated)
+
+        return {
+            user: serialized,
+            previousBan: activeBan,
+            wasReactivated: shouldReactivate
+        }
     })
+
+    if (previousBan) {
+        const recipientName = getProfileFullName(user.profile) ?? user.email
+
+        await sendUserUnbanEmail(user.email, {
+            recipientName,
+            reason: previousBan.reason,
+            note: previousBan.note,
+            reactivated: wasReactivated
+        })
+    }
+
+    return user
 }
 
 export default {
