@@ -5,6 +5,7 @@ import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import assetService from './asset.service'
+import { sendUserBanEmail } from '~/providers/mail.provider'
 import {
     BanAdminUserInput,
     UnbanAdminUserInput,
@@ -72,6 +73,19 @@ type ListUsersParams = {
     role?: Role
     isActive?: boolean
     search?: string
+}
+
+const getProfileFullName = (
+    profile?: {
+        firstName?: string | null
+        lastName?: string | null
+    } | null
+) => {
+    const firstName = profile?.firstName?.trim()
+    const lastName = profile?.lastName?.trim()
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim()
+
+    return fullName.length > 0 ? fullName : null
 }
 
 const serializeAdminUser = async (record: AdminUserRecord) => {
@@ -296,7 +310,7 @@ const banUser = async (requesterId: string, userId: string, payload: BanAdminUse
         throw new BadRequestException('Không thể tự cấm tài khoản của bạn', ErrorCode.USER_NOT_AUTHORITY)
     }
 
-    return prismaClient.$transaction(async tx => {
+    const user = await prismaClient.$transaction(async tx => {
         const existing = await tx.user.findUnique({ where: { id: userId } })
 
         if (!existing) {
@@ -341,6 +355,19 @@ const banUser = async (requesterId: string, userId: string, payload: BanAdminUse
 
         return serializeAdminUser(updated)
     })
+
+    if (user.activeBan) {
+        const recipientName = getProfileFullName(user.profile) ?? user.email
+
+        await sendUserBanEmail(user.email, {
+            recipientName,
+            reason: user.activeBan.reason,
+            note: user.activeBan.note,
+            expiresAt: user.activeBan.expiresAt
+        })
+    }
+
+    return user
 }
 
 const unbanUser = async (requesterId: string, userId: string, payload: UnbanAdminUserInput) => {

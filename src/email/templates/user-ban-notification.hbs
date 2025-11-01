@@ -1,0 +1,16 @@
+{{#> base subject=subject}}
+  <h2 style="margin-top:0;">Thông báo về tài khoản</h2>
+  <p>Xin chào <b>{{recipientName}}</b>,</p>
+  <p>Tài khoản của bạn đã bị tạm ngưng do vi phạm chính sách sử dụng hệ thống.</p>
+  <p><strong>Lý do:</strong> {{reason}}</p>
+  {{#if note}}
+    <p><strong>Chi tiết bổ sung:</strong> {{note}}</p>
+  {{/if}}
+  {{#if expiresAt}}
+    <p>Lệnh cấm sẽ hết hiệu lực vào <b>{{expiresAt}}</b>. Sau thời điểm này, bạn có thể thử đăng nhập lại hoặc liên hệ đội ngũ hỗ trợ để được xem xét.</p>
+  {{else}}
+    <p>Lệnh cấm hiện chưa có thời hạn kết thúc. Bạn có thể liên hệ đội ngũ hỗ trợ nếu cần làm rõ thêm.</p>
+  {{/if}}
+  <p>Nếu bạn tin rằng đây là nhầm lẫn, vui lòng phản hồi email này hoặc liên hệ bộ phận hỗ trợ để được trợ giúp.</p>
+  <p>Trân trọng,<br/>Đội ngũ vận hành nền tảng</p>
+{{/base}}

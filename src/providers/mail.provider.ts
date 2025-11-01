@@ -30,6 +30,13 @@ type ArbitrationDecisionEmailPayload = {
         awardType: 'RELEASE_ALL' | 'REFUND_ALL' | 'SPLIT'
 }
 
+type UserBanEmailPayload = {
+        recipientName: string
+        reason: string
+        note?: string | null
+        expiresAt?: Date | null
+}
+
 const createTransporter = () => {
         return nodemailer.createTransport({
                 host: 'smtp.gmail.com',
@@ -58,6 +65,17 @@ const formatCurrency = (amount: number, currency: string) => {
                 }).format(amount)
         } catch (error) {
                 return `${amount.toFixed(2)} ${normalizedCurrency}`
+        }
+}
+
+const formatDateTime = (date: Date) => {
+        try {
+                return new Intl.DateTimeFormat('vi-VN', {
+                        dateStyle: 'full',
+                        timeStyle: 'short'
+                }).format(date)
+        } catch (error) {
+                return date.toISOString()
         }
 }
 
@@ -186,6 +204,19 @@ export async function sendArbitrationDecisionEmail(to: string, payload: Arbitrat
                 formattedRefundAmount,
                 recipientOutcome,
                 ctaLink: payload.disputeUrl
+        })
+
+        await sendMail({ to, subject, html })
+}
+
+export async function sendUserBanEmail(to: string, payload: UserBanEmailPayload) {
+        const subject = 'Tài khoản của bạn đã bị cấm hoạt động'
+        const html = renderEmailTemplate('user-ban-notification.hbs', {
+                subject,
+                recipientName: payload.recipientName,
+                reason: payload.reason,
+                note: payload.note,
+                expiresAt: payload.expiresAt ? formatDateTime(payload.expiresAt) : null
         })
 
         await sendMail({ to, subject, html })
