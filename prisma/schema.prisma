@@ -79,6 +79,9 @@ model User {
   contractsClosed              Contract[]           @relation("ContractClosedBy")
   contractFeedbackAuthored     ContractFeedback[]   @relation("ContractFeedbackReviewer")
   contractFeedbackReceived     ContractFeedback[]   @relation("ContractFeedbackReviewee")
+  bans                         UserBan[]            @relation("UserBanUser")
+  bansAuthored                 UserBan[]            @relation("UserBanAdmin")
+  bansLifted                   UserBan[]            @relation("UserBanLiftedBy")
 
   @@index([email])
   @@map("user")
@@ -121,6 +124,27 @@ model EmailVerifyToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("email_verify_token")
+}
+
+model UserBan {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  adminId    String   @map("admin_id")
+  reason     String
+  note       String?  @db.Text
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  liftedAt   DateTime? @map("lifted_at")
+  liftedById String?  @map("lifted_by_id")
+
+  user     User  @relation("UserBanUser", fields: [userId], references: [id], onDelete: Cascade)
+  admin    User  @relation("UserBanAdmin", fields: [adminId], references: [id])
+  liftedBy User? @relation("UserBanLiftedBy", fields: [liftedById], references: [id])
+
+  @@index([userId])
+  @@index([adminId])
+  @@index([liftedById])
+  @@map("user_ban")
 }
 
 enum LanguageProficiency {

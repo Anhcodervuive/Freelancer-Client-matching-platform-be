@@ -29,6 +29,24 @@ const adminUserSelect = Prisma.validator<Prisma.UserSelect>()({
             client: { select: { userId: true } },
             freelancer: { select: { userId: true } }
         }
+    },
+    bans: {
+        where: { liftedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+            id: true,
+            reason: true,
+            note: true,
+            expiresAt: true,
+            createdAt: true,
+            admin: {
+                select: {
+                    id: true,
+                    email: true
+                }
+            }
+        }
     }
 })
 
@@ -49,6 +67,16 @@ const serializeAdminUser = (record: AdminUserRecord) => ({
     isActive: record.isActive,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    activeBan: record.bans[0]
+        ? {
+              id: record.bans[0].id,
+              reason: record.bans[0].reason,
+              note: record.bans[0].note,
+              expiresAt: record.bans[0].expiresAt,
+              createdAt: record.bans[0].createdAt,
+              admin: record.bans[0].admin
+          }
+        : null,
     profile: record.profile
         ? {
               firstName: record.profile.firstName,
@@ -119,9 +147,9 @@ const getUserById = async (userId: string) => {
     return serializeAdminUser(user)
 }
 
-type TransactionUserDelegate = Pick<typeof prismaClient, 'user'>
+type TransactionDelegate = Pick<typeof prismaClient, 'user' | 'userBan'>
 
-const ensureAnotherActiveAdminExists = async (tx: TransactionUserDelegate, userId: string) => {
+const ensureAnotherActiveAdminExists = async (tx: TransactionDelegate, userId: string) => {
     const remaining = await tx.user.count({
         where: {
             id: { not: userId },
@@ -134,6 +162,15 @@ const ensureAnotherActiveAdminExists = async (tx: TransactionUserDelegate, userI
         throw new BadRequestException('Không thể loại bỏ admin hoạt động cuối cùng', ErrorCode.USER_NOT_AUTHORITY)
     }
 }
+
+const getActiveBan = (tx: TransactionDelegate, userId: string) =>
+    tx.userBan.findFirst({
+        where: {
+            userId,
+            liftedAt: null
+        },
+        orderBy: { createdAt: 'desc' }
+    })
 
 const updateUserRole = async (requesterId: string, userId: string, payload: UpdateAdminUserRoleInput) => {
     if (requesterId === userId && payload.role !== Role.ADMIN) {
@@ -183,8 +220,8 @@ const updateUserStatus = async (
     userId: string,
     payload: UpdateAdminUserStatusInput
 ) => {
-    if (requesterId === userId && payload.isActive === false) {
-        throw new BadRequestException('Không thể vô hiệu hoá chính bạn', ErrorCode.USER_NOT_AUTHORITY)
+    if (requesterId === userId && payload.status !== 'activate') {
+        throw new BadRequestException('Không thể tự vô hiệu hoá hoặc cấm tài khoản của bạn', ErrorCode.USER_NOT_AUTHORITY)
     }
 
     return prismaClient.$transaction(async tx => {
@@ -194,15 +231,77 @@ const updateUserStatus = async (
             throw new NotFoundException('Không tìm thấy người dùng', ErrorCode.ITEM_NOT_FOUND)
         }
 
-        if (existing.role === Role.ADMIN && payload.isActive === false) {
+        if (existing.role === Role.ADMIN && payload.status !== 'activate') {
             await ensureAnotherActiveAdminExists(tx, userId)
         }
 
-        const updated = await tx.user.update({
+        const activeBan = await getActiveBan(tx, userId)
+
+        if (payload.status === 'activate') {
+            if (activeBan) {
+                await tx.userBan.update({
+                    where: { id: activeBan.id },
+                    data: {
+                        liftedAt: new Date(),
+                        liftedById: requesterId
+                    }
+                })
+            }
+
+            if (!existing.isActive) {
+                await tx.user.update({
+                    where: { id: userId },
+                    data: { isActive: true }
+                })
+            }
+        } else if (payload.status === 'deactivate') {
+            if (activeBan) {
+                await tx.userBan.update({
+                    where: { id: activeBan.id },
+                    data: {
+                        liftedAt: new Date(),
+                        liftedById: requesterId
+                    }
+                })
+            }
+
+            if (existing.isActive) {
+                await tx.user.update({
+                    where: { id: userId },
+                    data: { isActive: false }
+                })
+            }
+        } else if (payload.status === 'ban') {
+            if (activeBan) {
+                throw new BadRequestException('Người dùng đang bị cấm hoạt động', ErrorCode.USER_NOT_AUTHORITY)
+            }
+
+            if (existing.isActive) {
+                await tx.user.update({
+                    where: { id: userId },
+                    data: { isActive: false }
+                })
+            }
+
+            await tx.userBan.create({
+                data: {
+                    userId,
+                    adminId: requesterId,
+                    reason: payload.reason,
+                    note: payload.note ?? null,
+                    expiresAt: payload.expiresAt ?? null
+                }
+            })
+        }
+
+        const updated = await tx.user.findUnique({
             where: { id: userId },
-            data: { isActive: payload.isActive },
             select: adminUserSelect
         })
+
+        if (!updated) {
+            throw new NotFoundException('Không tìm thấy người dùng', ErrorCode.ITEM_NOT_FOUND)
+        }
 
         return serializeAdminUser(updated)
     })
