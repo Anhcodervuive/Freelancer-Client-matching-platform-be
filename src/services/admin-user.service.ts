@@ -4,6 +4,7 @@ import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
+import assetService from './asset.service'
 import {
     BanAdminUserInput,
     UnbanAdminUserInput,
@@ -73,8 +74,9 @@ type ListUsersParams = {
     search?: string
 }
 
-const serializeAdminUser = (record: AdminUserRecord) => {
+const serializeAdminUser = async (record: AdminUserRecord) => {
     const [activeBanRecord] = record.bans as ActiveBanRecord[]
+    const avatar = await assetService.getProfileAvatarUrl(record.id)
 
     return {
         id: record.id,
@@ -83,6 +85,7 @@ const serializeAdminUser = (record: AdminUserRecord) => {
         isActive: record.isActive,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
+        avatar,
         activeBan: activeBanRecord
             ? {
                   id: activeBanRecord.id,
@@ -145,8 +148,10 @@ const listUsers = async ({ page, limit, role, isActive, search }: ListUsersParam
         prismaClient.user.count({ where })
     ])
 
+    const data = await Promise.all(records.map(record => serializeAdminUser(record)))
+
     return {
-        data: records.map(serializeAdminUser),
+        data,
         total
     }
 }

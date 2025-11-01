@@ -25,6 +25,23 @@ const toPublicUser = (u: User & { profile?: any }) => {
         }
 }
 
+const findActiveBanForUser = async (userId: string) => {
+        const ban = await (prismaClient as any).userBan.findFirst({
+                where: { userId, liftedAt: null },
+                orderBy: { createdAt: 'desc' }
+        })
+
+        if (!ban) {
+                return null
+        }
+
+        if (ban.expiresAt && ban.expiresAt <= new Date()) {
+                return null
+        }
+
+        return ban
+}
+
 const signup = async (data: { email: string; password: string; firstName?: string; lastName?: string }) => {
         const { email, password, firstName, lastName } = data
 
@@ -36,6 +53,7 @@ const signup = async (data: { email: string; password: string; firstName?: strin
         const createdUser = await prismaClient.user.create({
                 data: {
                         email,
+                        isActive: false,
                         password: bcrypt.hashSync(password, 10),
                         profile: {
                                 create: {
@@ -77,14 +95,23 @@ const signin = async (reqBody: { email: string; password: string }) => {
 		throw new UnauthorizedException('Account is not verified', ErrorCode.ACCOUNT_NOT_VERIFIED)
 	}
 
-	if (!existedUser.password || !bcrypt.compareSync(password, existedUser.password)) {
-		throw new UnauthorizedException('Password is not correct!', ErrorCode.INCORRECT_PASSWORD)
-	}
+        if (!existedUser.password || !bcrypt.compareSync(password, existedUser.password)) {
+                throw new UnauthorizedException('Password is not correct!', ErrorCode.INCORRECT_PASSWORD)
+        }
 
-	const userInfo: UserInfoToEnCode = {
-		id: existedUser.id,
-		email: existedUser.email
-	}
+        if (!existedUser.isActive) {
+                throw new UnauthorizedException('Account is inactive', ErrorCode.ACCOUNT_INACTIVE)
+        }
+
+        const activeBan = await findActiveBanForUser(existedUser.id)
+        if (activeBan) {
+                throw new UnauthorizedException('Account is banned', ErrorCode.ACCOUNT_BANNED)
+        }
+
+        const userInfo: UserInfoToEnCode = {
+                id: existedUser.id,
+                email: existedUser.email
+        }
 
 	const accessToken = await JwtProvider.generateToken(
 		userInfo,
@@ -117,14 +144,23 @@ const signinGoogle = async (user: User) => {
         }
 
         if (!user.emailVerifiedAt) {
-		// Với Google, user mới tạo đã được set emailVerifiedAt (ở hàm findOrCreateUserFromGoogle)
-		throw new UnauthorizedException('Account not found', ErrorCode.USER_NOT_FOUND)
-	}
+                // Với Google, user mới tạo đã được set emailVerifiedAt (ở hàm findOrCreateUserFromGoogle)
+                throw new UnauthorizedException('Account not found', ErrorCode.USER_NOT_FOUND)
+        }
 
-	const userInfo: UserInfoToEnCode = {
-		id: user.id,
-		email: user.email
-	}
+        if (!user.isActive) {
+                throw new UnauthorizedException('Account is inactive', ErrorCode.ACCOUNT_INACTIVE)
+        }
+
+        const activeBan = await findActiveBanForUser(user.id)
+        if (activeBan) {
+                throw new UnauthorizedException('Account is banned', ErrorCode.ACCOUNT_BANNED)
+        }
+
+        const userInfo: UserInfoToEnCode = {
+                id: user.id,
+                email: user.email
+        }
 
 	const accessToken = await JwtProvider.generateToken(
 		userInfo,
@@ -190,7 +226,8 @@ const sendVerifyEmail = async (user: User) => {
 
 const verifyEmailToken = async (token: string) => {
         const tokenRecord = await prismaClient.emailVerifyToken.findUnique({
-                where: { token }
+                where: { token },
+                include: { user: true }
         })
 
         if (!tokenRecord) {
@@ -202,9 +239,18 @@ const verifyEmailToken = async (token: string) => {
                 throw new BadRequestException('Token is Expired', ErrorCode.UNPROCESSABLE_ENTITY)
         }
 
+        if (!tokenRecord.user) {
+                throw new BadRequestException('Invalid token', ErrorCode.UNPROCESSABLE_ENTITY)
+        }
+
+        const shouldActivate = !tokenRecord.user.emailVerifiedAt
+
         const existedUser = await prismaClient.user.update({
                 where: { id: tokenRecord.userId },
-                data: { emailVerifiedAt: new Date() },
+                data: {
+                        emailVerifiedAt: new Date(),
+                        ...(shouldActivate ? { isActive: true } : {})
+                },
                 include: { profile: true }
         })
 
@@ -275,6 +321,7 @@ export async function findOrCreateUserFromGoogle(googleProfile: GoogleProfile) {
                 data: {
                         email,
                         googleId,
+                        isActive: true,
                         emailVerifiedAt: new Date(), // Google coi như đã verified
                         profile: {
                                 create: {
