@@ -231,7 +231,10 @@ const updateUserStatus = async (
             throw new NotFoundException('Không tìm thấy người dùng', ErrorCode.ITEM_NOT_FOUND)
         }
 
-        if (existing.role === Role.ADMIN && payload.status !== 'activate') {
+        if (
+            existing.role === Role.ADMIN &&
+            (payload.status === 'deactivate' || payload.status === 'ban')
+        ) {
             await ensureAnotherActiveAdminExists(tx, userId)
         }
 
@@ -239,13 +242,10 @@ const updateUserStatus = async (
 
         if (payload.status === 'activate') {
             if (activeBan) {
-                await tx.userBan.update({
-                    where: { id: activeBan.id },
-                    data: {
-                        liftedAt: new Date(),
-                        liftedById: requesterId
-                    }
-                })
+                throw new BadRequestException(
+                    'Người dùng đang bị cấm, cần gỡ ban trước khi kích hoạt',
+                    ErrorCode.USER_NOT_AUTHORITY
+                )
             }
 
             if (!existing.isActive) {
@@ -255,16 +255,6 @@ const updateUserStatus = async (
                 })
             }
         } else if (payload.status === 'deactivate') {
-            if (activeBan) {
-                await tx.userBan.update({
-                    where: { id: activeBan.id },
-                    data: {
-                        liftedAt: new Date(),
-                        liftedById: requesterId
-                    }
-                })
-            }
-
             if (existing.isActive) {
                 await tx.user.update({
                     where: { id: userId },
@@ -292,6 +282,25 @@ const updateUserStatus = async (
                     expiresAt: payload.expiresAt ?? null
                 }
             })
+        } else if (payload.status === 'unban') {
+            if (!activeBan) {
+                throw new BadRequestException('Người dùng không có lệnh cấm đang hiệu lực', ErrorCode.USER_NOT_AUTHORITY)
+            }
+
+            await tx.userBan.update({
+                where: { id: activeBan.id },
+                data: {
+                    liftedAt: new Date(),
+                    liftedById: requesterId
+                }
+            })
+
+            if (payload.reactivate && !existing.isActive) {
+                await tx.user.update({
+                    where: { id: userId },
+                    data: { isActive: true }
+                })
+            }
         }
 
         const updated = await tx.user.findUnique({

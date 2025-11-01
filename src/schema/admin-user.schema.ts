@@ -21,6 +21,10 @@ export const UpdateAdminUserStatusSchema = z.discriminatedUnion('status', [
     z.object({
         status: z.literal('deactivate')
     }),
+    z.object({
+        status: z.literal('unban'),
+        reactivate: z.boolean().default(true)
+    }),
     z
         .object({
             status: z.literal('ban'),
