@@ -3,7 +3,9 @@ import { Request, Response } from 'express'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
 import {
+    BanAdminUserSchema,
     ListAdminUsersQuerySchema,
+    UnbanAdminUserSchema,
     UpdateAdminUserRoleSchema,
     UpdateAdminUserStatusSchema
 } from '~/schema/admin-user.schema'
@@ -98,6 +100,34 @@ export const updateAdminUserStatus = async (req: Request, res: Response) => {
 
     const payload = UpdateAdminUserStatusSchema.parse(req.body)
     const user = await adminUserService.updateUserStatus(admin.id, userId, payload)
+
+    return res.json({ data: user })
+}
+
+export const banAdminUser = async (req: Request, res: Response) => {
+    const admin = ensureAdminUser(req)
+    const { userId } = req.params
+
+    if (!userId) {
+        throw new BadRequestException('Thiếu userId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const payload = BanAdminUserSchema.parse(req.body)
+    const user = await adminUserService.banUser(admin.id, userId, payload)
+
+    return res.json({ data: user })
+}
+
+export const unbanAdminUser = async (req: Request, res: Response) => {
+    const admin = ensureAdminUser(req)
+    const { userId } = req.params
+
+    if (!userId) {
+        throw new BadRequestException('Thiếu userId', ErrorCode.PARAM_QUERY_ERROR)
+    }
+
+    const payload = UnbanAdminUserSchema.parse(req.body)
+    const user = await adminUserService.unbanUser(admin.id, userId, payload)
 
     return res.json({ data: user })
 }
