@@ -477,8 +477,10 @@ enum JobVisibility {
 enum JobStatus {
   DRAFT
   PUBLISHED
+  PUBLISHED_PENDING_REVIEW
   PAUSED
   CLOSED
+  REJECTED
 }
 
 enum JobLocationType {
@@ -541,6 +543,11 @@ model JobPost {
   formVersion        JobPostFormVersion     @default(VERSION_1) @map("form_version")
   publishedAt        DateTime?              @map("published_at")
   closedAt           DateTime?              @map("closed_at")
+  moderationScore    Float?                 @map("moderation_score")
+  moderationCategory String?                @map("moderation_category") @db.VarChar(128)
+  moderationSummary  String?                @map("moderation_summary") @db.VarChar(255)
+  moderationPayload  Json?                  @map("moderation_payload")
+  moderationCheckedAt DateTime?             @map("moderation_checked_at")
   proposalsCount     Int                    @default(0) @map("proposals_count")
   viewsCount         Int                    @default(0) @map("views_count")
   isDeleted          Boolean                @default(false) @map("is_deleted")

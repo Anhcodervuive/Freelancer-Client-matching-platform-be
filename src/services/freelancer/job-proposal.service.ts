@@ -67,7 +67,7 @@ const ensureJobAcceptsProposals = async (jobId: string) => {
                 throw new NotFoundException('Công việc không tồn tại', ErrorCode.ITEM_NOT_FOUND)
         }
 
-        if (job.status !== JobStatus.PUBLISHED) {
+        if (job.status !== JobStatus.PUBLISHED && job.status !== JobStatus.PUBLISHED_PENDING_REVIEW) {
                 throw new BadRequestException('Công việc chưa mở để nhận proposal', ErrorCode.PARAM_QUERY_ERROR)
         }
 

@@ -27,12 +27,21 @@ import { R2_CONFIG } from '~/config/environment'
 import { CreateJobPostInput, JobPostFilterInput, UpdateJobPostInput } from '~/schema/job-post.schema'
 import { destroyCloudinary } from '~/providers/cloudinaryProvider.provider'
 import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
+import jobPostModerationService from '~/services/moderation/job-post-moderation.service'
 
 type TransactionClient = Parameters<
 	Extract<Parameters<typeof prismaClient.$transaction>[0], (client: any) => unknown>
 >[0]
 
 const OWNER_TYPE = AssetOwnerType.JOB
+const PUBLIC_JOB_STATUS_LIST = [JobStatus.PUBLISHED, JobStatus.PUBLISHED_PENDING_REVIEW] as const
+const PUBLIC_JOB_STATUSES = new Set<JobStatus>(PUBLIC_JOB_STATUS_LIST)
+const AUTO_REVIEW_STATUSES = new Set<JobStatus>([
+        JobStatus.PUBLISHED,
+        JobStatus.PUBLISHED_PENDING_REVIEW,
+        JobStatus.PAUSED,
+        JobStatus.REJECTED
+])
 
 const jobPostDetailInclude = {
 	specialty: {
@@ -719,12 +728,16 @@ const serializeJobPost = (job: JobPostWithRelations) => {
 		preferredLocations: job.preferredLocations ?? [],
 		customTerms: (job.customTerms ?? null) as Record<string, unknown> | null,
 		visibility: job.visibility,
-		status: job.status,
-		publishedAt: job.publishedAt ?? null,
-		closedAt: job.closedAt ?? null,
-		proposalsCount: job.proposalsCount,
-		viewsCount: job.viewsCount,
-		createdAt: job.createdAt,
+                status: job.status,
+                publishedAt: job.publishedAt ?? null,
+                closedAt: job.closedAt ?? null,
+                moderationScore: job.moderationScore ?? null,
+                moderationCategory: job.moderationCategory ?? null,
+                moderationSummary: job.moderationSummary ?? null,
+                moderationCheckedAt: job.moderationCheckedAt ?? null,
+                proposalsCount: job.proposalsCount,
+                viewsCount: job.viewsCount,
+                createdAt: job.createdAt,
 		updatedAt: job.updatedAt,
 		languages: job.languages.map(language => ({
 			languageCode: language.languageCode,
@@ -770,12 +783,16 @@ const serializeJobPostSummary = (job: JobPostSummaryPayload) => {
 		experienceLevel: job.experienceLevel,
 		locationType: job.locationType,
 		visibility: job.visibility,
-		status: job.status,
-		publishedAt: job.publishedAt ?? null,
-		closedAt: job.closedAt ?? null,
-		proposalsCount: job.proposalsCount,
-		viewsCount: job.viewsCount,
-		createdAt: job.createdAt,
+                status: job.status,
+                publishedAt: job.publishedAt ?? null,
+                closedAt: job.closedAt ?? null,
+                moderationScore: job.moderationScore ?? null,
+                moderationCategory: job.moderationCategory ?? null,
+                moderationSummary: job.moderationSummary ?? null,
+                moderationCheckedAt: job.moderationCheckedAt ?? null,
+                proposalsCount: job.proposalsCount,
+                viewsCount: job.viewsCount,
+                createdAt: job.createdAt,
 		updatedAt: job.updatedAt,
 		languages: job.languages.map(language => ({
 			languageCode: language.languageCode,
@@ -792,8 +809,7 @@ const createJobPost = async (
 	options?: { attachmentFiles?: readonly Express.Multer.File[] }
 ) => {
 	await ensureClientProfile(clientUserId)
-	await ensureSpecialtyExists(input.specialtyId)
-	console.log('attachment:', options?.attachmentFiles)
+        await ensureSpecialtyExists(input.specialtyId)
 
 	const normalizedSkills = normalizeSkills(input.skills)
 
@@ -802,13 +818,14 @@ const createJobPost = async (
 
 	const languages = normalizeLanguages(input.languages)
 
-	const status = input.status ?? JobStatus.DRAFT
-	const now = new Date()
+        const status = JobStatus.PUBLISHED_PENDING_REVIEW
+        const now = new Date()
 
-	const assetsToCleanup: AssetCleanupTarget[] = []
+        const assetsToCleanup: AssetCleanupTarget[] = []
+        let createdJobId: string | null = null
 
-	try {
-		const job = await prismaClient.$transaction(async tx => {
+        try {
+                await prismaClient.$transaction(async tx => {
 			const createData: Prisma.JobPostUncheckedCreateInput = {
 				clientId: clientUserId,
 				specialtyId: input.specialtyId,
@@ -816,26 +833,30 @@ const createJobPost = async (
 				description: input.description,
 				paymentMode: input.paymentMode,
 				formVersion: input.formVersion ?? JobPostFormVersion.VERSION_1,
-				experienceLevel: input.experienceLevel,
-				visibility: input.visibility ?? JobVisibility.PUBLIC,
-				status,
-				...(input.duration ? { duration: input.duration } : {}),
-				...(input.locationType ? { locationType: input.locationType } : {}),
-				...(input.budgetAmount !== undefined
-					? { budgetAmount: input.budgetAmount === null ? null : input.budgetAmount }
-					: {}),
+                                experienceLevel: input.experienceLevel,
+                                visibility: input.visibility ?? JobVisibility.PUBLIC,
+                                status,
+                                ...(input.duration ? { duration: input.duration } : {}),
+                                ...(input.locationType ? { locationType: input.locationType } : {}),
+                                ...(input.budgetAmount !== undefined
+                                        ? { budgetAmount: input.budgetAmount === null ? null : input.budgetAmount }
+                                        : {}),
 				...(input.budgetCurrency !== undefined ? { budgetCurrency: input.budgetCurrency } : {}),
 				...(input.preferredLocations !== undefined
 					? { preferredLocations: input.preferredLocations as Prisma.InputJsonValue }
 					: {}),
-				...(input.customTerms !== undefined ? { customTerms: input.customTerms as Prisma.InputJsonValue } : {}),
-				...(status === JobStatus.PUBLISHED ? { publishedAt: now } : {}),
-				...(status === JobStatus.CLOSED ? { closedAt: now } : {})
-			}
+                                ...(input.customTerms !== undefined
+                                        ? { customTerms: input.customTerms as Prisma.InputJsonValue }
+                                        : {}),
+                                publishedAt: now,
+                                closedAt: null
+                        }
 
-			const created = await tx.jobPost.create({
-				data: createData
-			})
+                        const created = await tx.jobPost.create({
+                                data: createData
+                        })
+
+                        createdJobId = created.id
 
 			await syncJobLanguages(tx, created.id, languages)
 			await syncJobSkills(tx, created.id, normalizedSkills)
@@ -860,21 +881,30 @@ const createJobPost = async (
 				attachmentsToPersist = [...attachmentsToPersist, ...newAssetIds]
 			}
 
-			if (attachmentsToPersist.length > 0) {
-				console.log(attachmentsToPersist)
-				await syncJobAttachments(tx, created.id, attachmentsToPersist, clientUserId, assetsToCleanup)
-			}
+                        if (attachmentsToPersist.length > 0) {
+                                await syncJobAttachments(tx, created.id, attachmentsToPersist, clientUserId, assetsToCleanup)
+                        }
 
-			return created
-		})
+                })
 
-		await cleanupRemovedAssetObjects(assetsToCleanup)
+                await cleanupRemovedAssetObjects(assetsToCleanup)
 
-		return getJobPostById(job.id, clientUserId)
-	} catch (error) {
-		await cleanupUploadedAttachments(uploadedAttachments)
-		throw error
-	}
+                if (!createdJobId) {
+                        throw new Error('Không thể xác định job post vừa tạo')
+                }
+
+                const jobPost = await getJobPostById(createdJobId, clientUserId)
+
+                await jobPostModerationService.requestModeration({
+                        jobPostId: createdJobId,
+                        trigger: 'CREATE'
+                })
+
+                return jobPost
+        } catch (error) {
+                await cleanupUploadedAttachments(uploadedAttachments)
+                throw error
+        }
 }
 
 const updateJobPost = async (
@@ -906,9 +936,29 @@ const updateJobPost = async (
 
 	const uploadedAttachments = await uploadAttachmentFiles(clientUserId, options?.attachmentFiles)
 
-	const languages = input.languages ? normalizeLanguages(input.languages) : undefined
+        const languages = input.languages ? normalizeLanguages(input.languages) : undefined
 
-	const data: Prisma.JobPostUncheckedUpdateInput = {}
+        const requestedStatus = input.status
+        const publishRequested =
+                requestedStatus === JobStatus.PUBLISHED || requestedStatus === JobStatus.PUBLISHED_PENDING_REVIEW
+        const contentChanged =
+                input.title !== undefined ||
+                input.description !== undefined ||
+                input.skills !== undefined ||
+                input.languages !== undefined ||
+                input.screeningQuestions !== undefined ||
+                input.attachments !== undefined ||
+                input.customTerms !== undefined
+
+        let shouldQueueModeration =
+                (publishRequested || contentChanged) &&
+                (publishRequested || AUTO_REVIEW_STATUSES.has(job.status))
+
+        if (requestedStatus && !publishRequested) {
+                shouldQueueModeration = false
+        }
+
+        const data: Prisma.JobPostUncheckedUpdateInput = {}
 
 	if (input.specialtyId) data.specialtyId = input.specialtyId
 	if (input.title) data.title = input.title
@@ -942,19 +992,35 @@ const updateJobPost = async (
 
 	if (input.visibility) data.visibility = input.visibility
 
-	if (input.status) {
-		data.status = input.status
-		if (input.status === JobStatus.PUBLISHED && job.status !== JobStatus.PUBLISHED) {
-			data.publishedAt = new Date()
-			data.closedAt = null
-		} else if (input.status === JobStatus.CLOSED) {
-			data.closedAt = new Date()
-		} else if (job.status === JobStatus.CLOSED) {
-			data.closedAt = null
-		}
-	}
+        if (requestedStatus) {
+                data.status = requestedStatus
 
-	const assetsToCleanup: AssetCleanupTarget[] = []
+                if (requestedStatus === JobStatus.CLOSED) {
+                        data.closedAt = new Date()
+                } else if (requestedStatus === JobStatus.PUBLISHED || requestedStatus === JobStatus.PUBLISHED_PENDING_REVIEW) {
+                        data.publishedAt = new Date()
+                        data.closedAt = null
+                } else {
+                        data.closedAt = null
+                }
+        }
+
+        if (shouldQueueModeration) {
+                data.status = JobStatus.PUBLISHED_PENDING_REVIEW
+                const publishedAtUpdate =
+                        data.publishedAt !== undefined && data.publishedAt !== null
+                                ? (data.publishedAt as Date | string)
+                                : job.publishedAt ?? new Date()
+                data.publishedAt = publishedAtUpdate
+                data.closedAt = null
+                data.moderationScore = null
+                data.moderationCategory = null
+                data.moderationSummary = null
+                data.moderationCheckedAt = null
+                data.moderationPayload = Prisma.JsonNull
+        }
+
+        const assetsToCleanup: AssetCleanupTarget[] = []
 
 	try {
 		await prismaClient.$transaction(async tx => {
@@ -1004,9 +1070,18 @@ const updateJobPost = async (
 		throw error
 	}
 
-	await cleanupRemovedAssetObjects(assetsToCleanup)
+        await cleanupRemovedAssetObjects(assetsToCleanup)
 
-	return getJobPostById(jobId, clientUserId)
+        const jobPost = await getJobPostById(jobId, clientUserId)
+
+        if (shouldQueueModeration) {
+                await jobPostModerationService.requestModeration({
+                        jobPostId: jobId,
+                        trigger: 'UPDATE'
+                })
+        }
+
+        return jobPost
 }
 
 const getJobPostById = async (jobId: string, viewerId?: string) => {
@@ -1022,11 +1097,11 @@ const getJobPostById = async (jobId: string, viewerId?: string) => {
 	const isOwner = viewerId !== undefined && job.clientId === viewerId
 	const isPublic = job.visibility === JobVisibility.PUBLIC
 
-	if (!isOwner) {
-		if (job.status !== JobStatus.PUBLISHED || !isPublic) {
-			throw new UnauthorizedException('Bạn không có quyền xem job post này', ErrorCode.USER_NOT_AUTHORITY)
-		}
-	}
+        if (!isOwner) {
+                if (!PUBLIC_JOB_STATUSES.has(job.status) || !isPublic) {
+                        throw new UnauthorizedException('Bạn không có quyền xem job post này', ErrorCode.USER_NOT_AUTHORITY)
+                }
+        }
 
 	return serializeJobPost(job)
 }
@@ -1061,23 +1136,23 @@ const listJobPosts = async (filters: JobPostFilterInput, viewerId?: string) => {
 	let statuses =
 		filters.statuses && filters.statuses.length > 0 ? (uniquePreserveOrder(filters.statuses) as JobStatus[]) : undefined
 
-	if (!isOwnerScope) {
-		if (!statuses || statuses.length === 0) {
-			statuses = [JobStatus.PUBLISHED]
-		} else {
-			const restricted = statuses.some(status => status !== JobStatus.PUBLISHED)
-			if (restricted) {
-				throw new UnauthorizedException('Không thể xem job post ở trạng thái này', ErrorCode.USER_NOT_AUTHORITY)
-			}
-		}
-	}
+        if (!isOwnerScope) {
+                if (!statuses || statuses.length === 0) {
+                        statuses = [...PUBLIC_JOB_STATUS_LIST]
+                } else {
+                        const restricted = statuses.some(status => !PUBLIC_JOB_STATUSES.has(status))
+                        if (restricted) {
+                                throw new UnauthorizedException('Không thể xem job post ở trạng thái này', ErrorCode.USER_NOT_AUTHORITY)
+                        }
+                }
+        }
 
-	if (clientId && (!viewerId || clientId !== viewerId) && statuses) {
-		const restricted = statuses.some(status => status !== JobStatus.PUBLISHED)
-		if (restricted) {
-			throw new UnauthorizedException('Không thể xem job post ở trạng thái này', ErrorCode.USER_NOT_AUTHORITY)
-		}
-	}
+        if (clientId && (!viewerId || clientId !== viewerId) && statuses) {
+                const restricted = statuses.some(status => !PUBLIC_JOB_STATUSES.has(status))
+                if (restricted) {
+                        throw new UnauthorizedException('Không thể xem job post ở trạng thái này', ErrorCode.USER_NOT_AUTHORITY)
+                }
+        }
 
 	const languageCodes = filters.languageCodes
 		? uniquePreserveOrder(filters.languageCodes.map(code => code.toUpperCase()))

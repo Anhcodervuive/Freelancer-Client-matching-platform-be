@@ -15,6 +15,9 @@ import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { FreelancerJobPostFilterInput } from '~/schema/job-post.schema'
 import matchInteractionService from '~/services/match-interaction.service'
 
+const PUBLIC_JOB_STATUS_LIST = [JobStatus.PUBLISHED, JobStatus.PUBLISHED_PENDING_REVIEW] as const
+const PUBLIC_JOB_STATUSES = new Set<JobStatus>(PUBLIC_JOB_STATUS_LIST)
+
 const publicJobDetailInclude = Prisma.validator<Prisma.JobPostInclude>()({
 	specialty: {
 		include: {
@@ -293,15 +296,15 @@ const recordJobActivities = async (entries: readonly ActivityEntry[]) => {
 }
 
 const ensurePublicJobExists = async (jobId: string) => {
-	const job = await prismaClient.jobPost.findFirst({
-		where: {
-			id: jobId,
-			status: JobStatus.PUBLISHED,
-			visibility: JobVisibility.PUBLIC,
-			isDeleted: false
-		},
-		select: { id: true }
-	})
+        const job = await prismaClient.jobPost.findFirst({
+                where: {
+                        id: jobId,
+                        status: { in: [...PUBLIC_JOB_STATUS_LIST] },
+                        visibility: JobVisibility.PUBLIC,
+                        isDeleted: false
+                },
+                select: { id: true }
+        })
 
 	if (!job) {
 		throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
@@ -309,11 +312,11 @@ const ensurePublicJobExists = async (jobId: string) => {
 }
 
 const buildPublicJobWhere = (filters: FreelancerJobPostFilterInput, viewerId?: string): Prisma.JobPostWhereInput => {
-	const where: Prisma.JobPostWhereInput = {
-		status: JobStatus.PUBLISHED,
-		visibility: JobVisibility.PUBLIC,
-		isDeleted: false
-	}
+        const where: Prisma.JobPostWhereInput = {
+                status: { in: [...PUBLIC_JOB_STATUS_LIST] },
+                visibility: JobVisibility.PUBLIC,
+                isDeleted: false
+        }
 
 	if (filters.search) {
 		where.OR = [{ title: { contains: filters.search } }, { description: { contains: filters.search } }]
@@ -406,9 +409,9 @@ const listJobPosts = async (filters: FreelancerJobPostFilterInput, viewerId?: st
 		throw new BadRequestException('createdFrom phải nhỏ hơn hoặc bằng createdTo', ErrorCode.PARAM_QUERY_ERROR)
 	}
 
-	if (filters.statuses && filters.statuses.some(status => status !== JobStatus.PUBLISHED)) {
-		throw new BadRequestException('Chỉ có thể xem job post đã được public', ErrorCode.PARAM_QUERY_ERROR)
-	}
+        if (filters.statuses && filters.statuses.some(status => !PUBLIC_JOB_STATUSES.has(status))) {
+                throw new BadRequestException('Chỉ có thể xem job post đã được public', ErrorCode.PARAM_QUERY_ERROR)
+        }
 
 	const normalizedFilters: FreelancerJobPostFilterInput = {
 		...filters,
@@ -474,13 +477,13 @@ const listJobPosts = async (filters: FreelancerJobPostFilterInput, viewerId?: st
 }
 
 const getJobPostDetail = async (jobId: string, viewerId?: string) => {
-	const job = await prismaClient.jobPost.findFirst({
-		where: {
-			id: jobId,
-			status: JobStatus.PUBLISHED,
-			visibility: JobVisibility.PUBLIC,
-			isDeleted: false
-		},
+        const job = await prismaClient.jobPost.findFirst({
+                where: {
+                        id: jobId,
+                        status: { in: [...PUBLIC_JOB_STATUS_LIST] },
+                        visibility: JobVisibility.PUBLIC,
+                        isDeleted: false
+                },
 		include: publicJobDetailInclude
 	})
 

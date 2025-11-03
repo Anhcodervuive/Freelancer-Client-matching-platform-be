@@ -2,6 +2,25 @@ import dotenv from 'dotenv'
 
 dotenv.config({ path: '.env', quiet: true })
 
+const parseNumber = (value: string | undefined, fallback: number) => {
+        if (value === undefined) return fallback
+        const parsed = Number(value)
+        return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const clamp = (value: number, min: number, max: number) => {
+        if (Number.isNaN(value)) return min
+        return Math.min(max, Math.max(min, value))
+}
+
+const parseBoolean = (value: string | undefined, fallback: boolean) => {
+        if (value === undefined) return fallback
+        const normalized = value.trim().toLowerCase()
+        if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true
+        if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false
+        return fallback
+}
+
 export const PORT = process.env.PORT || 3000
 export const JWT = {
 	SECRET: process.env?.JWT_SECRET ?? 'secret'
@@ -67,7 +86,26 @@ export const STRIPE_CONFIG_INFO = {
 }
 
 export const REDIS_CONFIG = {
-	HOST: process.env.REDIS_HOST ?? 'localhost',
-	PORT: Number(process.env.REDIS_PORT ?? '6379'),
-	PASSWORD: process.env.REDIS_PASSWORD
+        HOST: process.env.REDIS_HOST ?? 'localhost',
+        PORT: Number(process.env.REDIS_PORT ?? '6379'),
+        PASSWORD: process.env.REDIS_PASSWORD
+}
+
+export const OPENAI = {
+        API_KEY: process.env.OPENAI_API_KEY ?? '',
+        ORGANIZATION: process.env.OPENAI_ORGANIZATION,
+        PROJECT: process.env.OPENAI_PROJECT
+}
+
+const rawPauseThreshold = clamp(parseNumber(process.env.JOB_MODERATION_PAUSE_THRESHOLD, 0.4), 0, 1)
+const rawRejectThreshold = clamp(parseNumber(process.env.JOB_MODERATION_REJECT_THRESHOLD, 0.7), 0, 1)
+
+export const JOB_MODERATION = {
+        ENABLED: parseBoolean(process.env.JOB_MODERATION_ENABLED, true),
+        MODEL: process.env.JOB_MODERATION_MODEL ?? 'omni-moderation-latest',
+        PAUSE_THRESHOLD: Math.min(rawPauseThreshold, rawRejectThreshold),
+        REJECT_THRESHOLD: Math.max(rawPauseThreshold, rawRejectThreshold),
+        RETRY_ATTEMPTS: Math.max(1, Math.round(parseNumber(process.env.JOB_MODERATION_RETRY_ATTEMPTS, 3))),
+        RETRY_DELAY_MS: Math.max(500, Math.round(parseNumber(process.env.JOB_MODERATION_RETRY_DELAY_MS, 3000))),
+        MAX_INPUT_CHARS: Math.max(500, Math.round(parseNumber(process.env.JOB_MODERATION_MAX_INPUT_CHARS, 6000)))
 }
