@@ -3,7 +3,8 @@ const { spawn } = require('node:child_process')
 const processes = [
         { name: 'server', command: 'npx nodemon' },
         { name: 'email-worker', command: 'npm run worker:email' },
-        { name: 'match-worker', command: 'npm run worker:match-interaction' }
+        { name: 'match-worker', command: 'npm run worker:match-interaction' },
+        { name: 'job-moderation-worker', command: 'npm run worker:job-moderation' }
 ]
 
 const managed = []
