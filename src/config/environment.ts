@@ -21,6 +21,11 @@ const parseBoolean = (value: string | undefined, fallback: boolean) => {
         return fallback
 }
 
+const optionalEnv = (value: string | undefined) => {
+        const trimmed = value?.trim()
+        return trimmed ? trimmed : undefined
+}
+
 export const PORT = process.env.PORT || 3000
 export const JWT = {
 	SECRET: process.env?.JWT_SECRET ?? 'secret'
@@ -92,9 +97,9 @@ export const REDIS_CONFIG = {
 }
 
 export const OPENAI = {
-        API_KEY: process.env.OPENAI_API_KEY ?? '',
-        ORGANIZATION: process.env.OPENAI_ORGANIZATION,
-        PROJECT: process.env.OPENAI_PROJECT
+        API_KEY: optionalEnv(process.env.OPENAI_API_KEY) ?? '',
+        ORGANIZATION: optionalEnv(process.env.OPENAI_ORGANIZATION),
+        PROJECT: optionalEnv(process.env.OPENAI_PROJECT)
 }
 
 const rawPauseThreshold = clamp(parseNumber(process.env.JOB_MODERATION_PAUSE_THRESHOLD, 0.4), 0, 1)

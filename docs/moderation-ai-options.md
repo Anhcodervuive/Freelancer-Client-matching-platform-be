@@ -111,6 +111,12 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
    - Tổng hợp thống kê tỷ lệ reject/pauses theo tuần, phân tích false positive để điều chỉnh ngưỡng.
    - Thu thập job đã được reviewer xác nhận đúng/sai để làm dữ liệu huấn luyện nếu muốn fine-tune mô hình riêng trong tương lai.
 
+### Biến môi trường cần cấu hình
+- `OPENAI_API_KEY` (**bắt buộc**): khóa truy cập dùng để gọi API. Nếu để trống hoặc không hợp lệ, worker sẽ chuyển job sang trạng thái tạm dừng để chờ kiểm tra thủ công.
+- `OPENAI_ORGANIZATION` (**tùy chọn**): chỉ cần thiết nếu tài khoản OpenAI của bạn phân quyền theo organization. Có thể bỏ trống khi bạn chỉ có một API key cá nhân.
+- `OPENAI_PROJECT` (**tùy chọn**): dùng cho các workspace mới của OpenAI. Nếu API key của bạn không đính kèm project, có thể để trống, worker sẽ tự động bỏ qua header này.
+- `JOB_MODERATION_MODEL`, `JOB_MODERATION_PAUSE_THRESHOLD`, `JOB_MODERATION_REJECT_THRESHOLD`...: tinh chỉnh model và ngưỡng nội bộ. Nếu không khai báo, hệ thống dùng mặc định `omni-moderation-latest` với các ngưỡng gợi ý trong tài liệu.
+
 ## 6. Gợi ý vận hành
 - Thiết lập **retry/backoff** cho queue khi API ngoài bị lỗi.
 - Dùng **rate limiting/caching** với các job bị chỉnh sửa nhiều lần để tối ưu chi phí.
