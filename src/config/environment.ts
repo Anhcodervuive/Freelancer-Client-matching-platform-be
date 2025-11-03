@@ -146,7 +146,8 @@ const parseStringList = (
 }
 
 const normalisePerspectiveAttributeEnvValue = (attribute: string) => {
-        const normalised = attribute.trim().toUpperCase().replace(/\s+/g, '_')
+        const stripped = stripWrappingQuotes(attribute) ?? attribute
+        const normalised = stripped.trim().toUpperCase().replace(/\s+/g, '_')
 
         switch (normalised) {
                 case 'SEXUAL_EXPLICIT':
