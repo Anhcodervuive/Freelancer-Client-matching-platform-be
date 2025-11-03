@@ -26,6 +26,21 @@ const optionalEnv = (value: string | undefined) => {
         return trimmed ? trimmed : undefined
 }
 
+const parseStringList = (value: string | undefined, fallback: string[]): string[] => {
+        if (!value) return fallback
+        const items = value
+                .split(',')
+                .map(item => item.trim())
+                .filter(item => item.length > 0)
+        return items.length > 0 ? items : fallback
+}
+
+const parseModerationProvider = (value: string | undefined): 'openai' | 'perspective' => {
+        const normalized = value?.trim().toLowerCase()
+        if (normalized === 'perspective') return 'perspective'
+        return 'openai'
+}
+
 export const PORT = process.env.PORT || 3000
 export const JWT = {
 	SECRET: process.env?.JWT_SECRET ?? 'secret'
@@ -102,11 +117,24 @@ export const OPENAI = {
         PROJECT: optionalEnv(process.env.OPENAI_PROJECT)
 }
 
+export const PERSPECTIVE = {
+        API_KEY: optionalEnv(process.env.PERSPECTIVE_API_KEY),
+        ENDPOINT:
+                optionalEnv(process.env.PERSPECTIVE_ENDPOINT) ??
+                'https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze',
+        LANGUAGES: parseStringList(process.env.PERSPECTIVE_LANGUAGES, ['vi', 'en']),
+        ATTRIBUTES: parseStringList(
+                process.env.PERSPECTIVE_ATTRIBUTES,
+                ['TOXICITY', 'SEVERE_TOXICITY', 'SEXUAL_EXPLICIT', 'INSULT', 'THREAT', 'PROFANITY']
+        )
+}
+
 const rawPauseThreshold = clamp(parseNumber(process.env.JOB_MODERATION_PAUSE_THRESHOLD, 0.4), 0, 1)
 const rawRejectThreshold = clamp(parseNumber(process.env.JOB_MODERATION_REJECT_THRESHOLD, 0.7), 0, 1)
 
 export const JOB_MODERATION = {
         ENABLED: parseBoolean(process.env.JOB_MODERATION_ENABLED, true),
+        PROVIDER: parseModerationProvider(process.env.JOB_MODERATION_PROVIDER),
         MODEL: process.env.JOB_MODERATION_MODEL ?? 'omni-moderation-latest',
         PAUSE_THRESHOLD: Math.min(rawPauseThreshold, rawRejectThreshold),
         REJECT_THRESHOLD: Math.max(rawPauseThreshold, rawRejectThreshold),

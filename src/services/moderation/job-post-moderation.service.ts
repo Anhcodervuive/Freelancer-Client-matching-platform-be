@@ -1,11 +1,12 @@
 import { JobStatus, Prisma } from '~/generated/prisma'
 import { prismaClient } from '~/config/prisma-client'
-import { JOB_MODERATION, OPENAI } from '~/config/environment'
+import { JOB_MODERATION, OPENAI, PERSPECTIVE } from '~/config/environment'
 import { jobModerationQueue } from '~/queues/job-moderation.queue'
 import type { JobModerationQueuePayload, JobModerationTrigger } from '~/schema/job-moderation.schema'
 import { logModeration, logModerationError } from './job-moderation.logger'
 
 const MODERATION_ENDPOINT = 'https://api.openai.com/v1/moderations'
+const PERSPECTIVE_ENDPOINT = PERSPECTIVE.ENDPOINT
 
 const formatCategoryLabel = (category: string | null | undefined) => {
         if (!category) return 'an toàn'
@@ -40,6 +41,18 @@ type OpenAIModerationResponse = {
         id?: string
         model?: string
         results?: OpenAIModerationResult[]
+}
+
+type PerspectiveAttributeScore = {
+        summaryScore?: {
+                value?: number
+                type?: string
+        }
+}
+
+type PerspectiveModerationResponse = {
+        attributeScores?: Record<string, PerspectiveAttributeScore>
+        languages?: string[]
 }
 
 type ModerationDecision = {
@@ -251,6 +264,15 @@ const parseRetryAfter = (header: string | null): number | null => {
         return null
 }
 
+const buildPerspectiveRequestedAttributes = () => {
+        const attributes = PERSPECTIVE.ATTRIBUTES
+        const requested: Record<string, Record<string, never>> = {}
+        for (const attribute of attributes) {
+                requested[attribute] = {}
+        }
+        return requested
+}
+
 const callOpenAIModeration = async (payload: string): Promise<OpenAIModerationResponse> => {
         const headers: Record<string, string> = {
                 Authorization: `Bearer ${OPENAI.API_KEY}`,
@@ -330,6 +352,98 @@ const callOpenAIModeration = async (payload: string): Promise<OpenAIModerationRe
         }
 }
 
+const callPerspectiveModeration = async (payload: string): Promise<PerspectiveModerationResponse> => {
+        const url = new URL(PERSPECTIVE_ENDPOINT)
+        if (PERSPECTIVE.API_KEY) {
+                url.searchParams.set('key', PERSPECTIVE.API_KEY)
+        }
+
+        try {
+                const response = await fetch(url.toString(), {
+                        method: 'POST',
+                        headers: {
+                                'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                                comment: { text: payload },
+                                languages: PERSPECTIVE.LANGUAGES,
+                                requestedAttributes: buildPerspectiveRequestedAttributes()
+                        })
+                })
+
+                if (!response.ok) {
+                        const errorText = await response.text()
+                        let parsedBody: unknown = errorText
+
+                        if (errorText) {
+                                try {
+                                        parsedBody = JSON.parse(errorText)
+                                } catch {
+                                        parsedBody = errorText
+                                }
+                        }
+
+                        const status = response.status
+                        const retryAfter = parseRetryAfter(response.headers.get('retry-after'))
+                        const retryable = RETRYABLE_STATUS.has(status)
+                        const message = `Perspective moderation error ${status}: ${errorText || 'Unknown error'}`
+
+                        throw new ModerationApiError(message, {
+                                status,
+                                retryable,
+                                responseBody: parsedBody,
+                                retryAfter
+                        })
+                }
+
+                return (await response.json()) as PerspectiveModerationResponse
+        } catch (error) {
+                        if (isModerationApiError(error)) {
+                                throw error
+                        }
+
+                        const message =
+                                error instanceof Error
+                                        ? `Không thể kết nối tới Perspective API: ${error.message}`
+                                        : 'Không thể kết nối tới Perspective API do lỗi không xác định.'
+
+                        throw new ModerationApiError(message, {
+                                retryable: true,
+                                responseBody:
+                                        error instanceof Error
+                                                ? { name: error.name, message: error.message }
+                                                : String(error)
+                        })
+        }
+}
+
+const normalisePerspectiveResult = (
+        response: PerspectiveModerationResponse
+): OpenAIModerationResult | null => {
+        const attributeScores = response.attributeScores ?? {}
+        const categoryScores: Record<string, number> = {}
+
+        for (const [attribute, score] of Object.entries(attributeScores)) {
+                const rawScore = score?.summaryScore?.value
+                if (typeof rawScore === 'number' && Number.isFinite(rawScore)) {
+                        categoryScores[attribute.toLowerCase()] = rawScore
+                }
+        }
+
+        const hasScores = Object.keys(categoryScores).length > 0
+        if (!hasScores) {
+                return null
+        }
+
+        const flagged = Object.values(categoryScores).some(value => value >= JOB_MODERATION.PAUSE_THRESHOLD)
+
+        return {
+                flagged,
+                categories: {},
+                category_scores: categoryScores
+        }
+}
+
 export const moderateJobPost = async (
         { jobPostId }: JobModerationQueuePayload,
         context?: ModerationAttemptContext
@@ -360,9 +474,32 @@ export const moderateJobPost = async (
                 return
         }
 
-        if (!OPENAI.API_KEY) {
+        const provider = JOB_MODERATION.PROVIDER
+        const providerLabel = provider === 'perspective' ? 'Google Perspective API' : 'OpenAI Moderation'
+
+        logModeration('Sử dụng nhà cung cấp moderation', { jobPostId, provider })
+
+        if (provider === 'openai' && !OPENAI.API_KEY) {
                 logModeration('Thiếu OPENAI_API_KEY, không thể gọi moderation', { jobPostId })
-                await applyDecision(job, buildFailureDecision(job, 'Thiếu OPENAI_API_KEY, job bị tạm dừng để kiểm tra thủ công.'))
+                await applyDecision(
+                        job,
+                        buildFailureDecision(
+                                job,
+                                'Thiếu OPENAI_API_KEY, job bị tạm dừng để kiểm tra thủ công.'
+                        )
+                )
+                return
+        }
+
+        if (provider === 'perspective' && !PERSPECTIVE.API_KEY) {
+                logModeration('Thiếu PERSPECTIVE_API_KEY, không thể gọi moderation', { jobPostId })
+                await applyDecision(
+                        job,
+                        buildFailureDecision(
+                                job,
+                                'Thiếu PERSPECTIVE_API_KEY, job bị tạm dừng để kiểm tra thủ công.'
+                        )
+                )
                 return
         }
 
@@ -386,28 +523,61 @@ export const moderateJobPost = async (
         }
 
         try {
-                logModeration('Gọi OpenAI moderation', { jobPostId, model: JOB_MODERATION.MODEL })
-                const response = await callOpenAIModeration(moderationInput)
-                const result = response.results?.[0]
+                let normalisedResult: OpenAIModerationResult | null = null
+                let rawResponse: unknown = null
 
-                if (!result) {
-                        logModeration('Phản hồi moderation không hợp lệ', { jobPostId, response })
-                        await applyDecision(job, buildFailureDecision(job, 'Không nhận được dữ liệu moderation hợp lệ.'))
-                        return
+                if (provider === 'perspective') {
+                        logModeration('Gọi Google Perspective moderation', {
+                                jobPostId,
+                                attributes: PERSPECTIVE.ATTRIBUTES,
+                                languages: PERSPECTIVE.LANGUAGES
+                        })
+                        const response = await callPerspectiveModeration(moderationInput)
+                        rawResponse = response
+                        normalisedResult = normalisePerspectiveResult(response)
+
+                        if (!normalisedResult) {
+                                logModeration('Phản hồi Perspective không có điểm số', { jobPostId, response })
+                                await applyDecision(
+                                        job,
+                                        buildFailureDecision(
+                                                job,
+                                                'Perspective API không trả về điểm số. Job cần kiểm duyệt thủ công.'
+                                        )
+                                )
+                                return
+                        }
+                } else {
+                        logModeration('Gọi OpenAI moderation', { jobPostId, model: JOB_MODERATION.MODEL })
+                        const response = await callOpenAIModeration(moderationInput)
+                        rawResponse = response
+                        normalisedResult = response.results?.[0] ?? null
+
+                        if (!normalisedResult) {
+                                logModeration('Phản hồi moderation không hợp lệ', { jobPostId, response })
+                                await applyDecision(job, buildFailureDecision(job, 'Không nhận được dữ liệu moderation hợp lệ.'))
+                                return
+                        }
                 }
 
                 logModeration('Nhận kết quả moderation', {
                         jobPostId,
-                        flagged: result.flagged,
-                        category_scores: result.category_scores
+                        provider,
+                        flagged: normalisedResult.flagged,
+                        category_scores: normalisedResult.category_scores
                 })
 
-                const decision = determineDecision(result)
+                const decision = determineDecision(normalisedResult)
+                decision.raw = {
+                        provider,
+                        response: rawResponse,
+                        result: normalisedResult
+                }
                 logModeration('Quyết định moderation', { jobPostId, decision })
                 await applyDecision(job, decision)
         } catch (error) {
                 if (isModerationApiError(error) && error.retryable && hasRemainingAttempts(attemptContext)) {
-                        logModeration('Lỗi tạm thời khi gọi OpenAI moderation, sẽ retry', {
+                        logModeration('Lỗi tạm thời khi gọi dịch vụ moderation, sẽ retry', {
                                 jobPostId,
                                 status: error.status ?? null,
                                 attempt: attemptContext.attemptsMade + 1,
@@ -419,12 +589,13 @@ export const moderateJobPost = async (
 
                 const fallbackSummary = isModerationApiError(error)
                         ? error.status === 429
-                                ? 'OpenAI Moderation đang giới hạn tốc độ, job được tạm dừng để chờ kiểm tra thủ công.'
-                                : `Gọi OpenAI moderation thất bại (mã ${error.status ?? 'không xác định'}). Job cần kiểm duyệt thủ công.`
-                        : 'Gọi OpenAI moderation thất bại, job được tạm dừng để kiểm tra thủ công.'
+                                ? `${providerLabel} đang giới hạn tốc độ, job được tạm dừng để chờ kiểm tra thủ công.`
+                                : `Gọi ${providerLabel} thất bại (mã ${error.status ?? 'không xác định'}). Job cần kiểm duyệt thủ công.`
+                        : `Gọi ${providerLabel} thất bại, job được tạm dừng để kiểm tra thủ công.`
 
-                logModerationError('Lỗi gọi OpenAI moderation', {
+                logModerationError('Lỗi gọi dịch vụ moderation', {
                         jobPostId,
+                        provider,
                         attempt: attemptContext.attemptsMade + 1,
                         attemptsTotal: attemptContext.attemptsTotal,
                         error

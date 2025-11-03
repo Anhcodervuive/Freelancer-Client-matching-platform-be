@@ -128,6 +128,34 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
    - Tổng hợp thống kê tỷ lệ reject/pauses theo tuần, phân tích false positive để điều chỉnh ngưỡng.
    - Thu thập job đã được reviewer xác nhận đúng/sai để làm dữ liệu huấn luyện nếu muốn fine-tune mô hình riêng trong tương lai.
 
+### Quy trình chi tiết với Google Perspective API
+1. **User tạo/cập nhật job** tương tự luồng OpenAI: job được lưu với trạng thái `PUBLISHED_PENDING_REVIEW` và đẩy vào queue.
+2. **Worker gọi Perspective**
+   - Worker gửi `POST` tới endpoint `comments:analyze` kèm body:
+     ```json
+     {
+       "comment": { "text": "<nội dung job>" },
+       "languages": ["vi", "en"],
+       "requestedAttributes": {
+         "TOXICITY": {},
+         "SEVERE_TOXICITY": {},
+         "SEXUAL_EXPLICIT": {},
+         "INSULT": {},
+         "THREAT": {},
+         "PROFANITY": {}
+       }
+     }
+     ```
+   - Bạn có thể tinh chỉnh danh sách `requestedAttributes` và `languages` bằng biến môi trường (xem bên dưới) để phù hợp dataset của mình.
+3. **Chuẩn hóa điểm**
+   - Perspective trả về `attributeScores.<ATTRIBUTE>.summaryScore.value` (0-1). Worker map các điểm này vào `category_scores`, lấy điểm cao nhất và so sánh với ngưỡng nội bộ (`JOB_MODERATION_PAUSE_THRESHOLD`, `JOB_MODERATION_REJECT_THRESHOLD`).
+   - Nếu API không trả về điểm nào (ví dụ nội dung rỗng hoặc attribute không hợp lệ), worker sẽ chuyển job sang `PAUSED` để reviewer kiểm tra.
+4. **Ghi log & quyết định**
+   - Log sẽ hiển thị provider `perspective`, danh sách attributes và điểm cao nhất để bạn giám sát dễ dàng.
+   - Quy tắc cập nhật trạng thái job (`PUBLISHED/PAUSED/REJECTED`) giống OpenAI nên không cần đổi UI/backend.
+5. **Fallback**
+   - Lỗi tạm thời (429, 5xx) sẽ được retry theo cấu hình queue. Hết số lần retry thì job chuyển sang `PAUSED`.
+
 ### Biến môi trường cần cấu hình
 - `OPENAI_API_KEY` (**bắt buộc**): khóa truy cập dùng để gọi API. Nếu để trống hoặc không hợp lệ, worker sẽ chuyển job sang trạng thái tạm dừng để chờ kiểm tra thủ công.
 - `OPENAI_ORGANIZATION` (**tùy chọn**): chỉ cần thiết nếu tài khoản OpenAI của bạn phân quyền theo organization. Có thể bỏ trống khi bạn chỉ có một API key cá nhân.
@@ -135,6 +163,11 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
 - `JOB_MODERATION_MODEL`, `JOB_MODERATION_PAUSE_THRESHOLD`, `JOB_MODERATION_REJECT_THRESHOLD`...: tinh chỉnh model và ngưỡng nội bộ. Nếu không khai báo, hệ thống dùng mặc định `omni-moderation-latest` với các ngưỡng gợi ý trong tài liệu.
 - `JOB_MODERATION_LOG_VERBOSE` (**tùy chọn**, mặc định `true`): bật/tắt log chi tiết tiến trình moderation trên console. Nếu muốn giảm log khi chạy production, đặt giá trị `false`.
 - `JOB_MODERATION_WORKER_CONCURRENCY` (**tùy chọn**, mặc định `1`): số job moderation xử lý song song. Để tránh bắn quá nhiều request cùng lúc (dễ dẫn tới lỗi 429), hãy giữ giá trị nhỏ và chỉ tăng khi đã có hạn mức cao hơn từ OpenAI.
+- `JOB_MODERATION_PROVIDER` (**tùy chọn**, mặc định `openai`): chọn nhà cung cấp moderation. Đặt `perspective` để dùng Google Perspective API.
+- `PERSPECTIVE_API_KEY` (**bắt buộc khi dùng Perspective**): API key tạo từ Google Cloud. Nếu thiếu, worker sẽ chuyển job sang `PAUSED`.
+- `PERSPECTIVE_ENDPOINT` (**tùy chọn**): endpoint custom cho Perspective (mặc định `https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze`).
+- `PERSPECTIVE_LANGUAGES` (**tùy chọn**): danh sách ngôn ngữ (phân tách bằng dấu phẩy) gửi kèm request. Mặc định `vi,en`.
+- `PERSPECTIVE_ATTRIBUTES` (**tùy chọn**): danh sách attribute cần chấm điểm (phân tách bằng dấu phẩy). Mặc định `TOXICITY,SEVERE_TOXICITY,SEXUAL_EXPLICIT,INSULT,THREAT,PROFANITY`.
 
 ## 6. Gợi ý vận hành
 - Thiết lập **retry/backoff** cho queue khi API ngoài bị lỗi.
