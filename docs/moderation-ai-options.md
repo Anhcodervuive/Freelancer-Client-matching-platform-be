@@ -125,3 +125,14 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
 - Dùng **rate limiting/caching** với các job bị chỉnh sửa nhiều lần để tối ưu chi phí.
 - Đặt **alert** khi tỉ lệ reject tăng bất thường hoặc khi worker backlog lớn.
 - Luôn duy trì kênh phản hồi từ đội kiểm duyệt để điều chỉnh ngưỡng và chính sách kịp thời.
+
+### FAQ: Vì sao đổi sang API key khác vẫn gặp lỗi 429?
+Ngay cả khi bạn tạo API key mới ở tài khoản khác, lỗi `429 Too Many Requests` vẫn có thể xuất hiện nếu rơi vào một trong các tình huống dưới đây:
+
+1. **Tài khoản mới chưa kích hoạt thanh toán**: Những tài khoản chưa thêm phương thức thanh toán hoặc chưa nạp credit thường bị giới hạn ở quota cực thấp (thậm chí ~0). Bạn cần hoàn tất bước billing để OpenAI mở hạn mức chuẩn.
+2. **Tài khoản thuộc cùng tổ chức**: Nếu cả hai API key đều nằm trong cùng một organization/workspace, chúng vẫn dùng chung quota. Khi tổ chức đã đạt giới hạn, key mới cũng bị 429.
+3. **Giới hạn vùng địa lý hoặc kiểm soát rủi ro**: Một số quốc gia/khu vực bị áp hạn mức thấp hơn, hoặc tài khoản mới cần qua bước review thủ công. Trong thời gian đó, mọi request ngoài dashboard có thể bị từ chối.
+4. **Quota tháng đã cạn**: OpenAI giới hạn tổng chi tiêu mỗi tháng. Nếu trước đây bạn đã dùng hết hạn mức, key mới sẽ kế thừa trạng thái “hết quota” đến kỳ thanh toán tiếp theo.
+5. **Burst quá nhanh ngay sau khi khởi tạo**: Worker có thể bắn nhiều request trong vài giây khiến hệ thống bảo vệ coi đó là spam. Hãy giảm `JOB_MODERATION_WORKER_CONCURRENCY`, bật retry/backoff và thêm độ trễ ngẫu nhiên.
+
+Để xác định nguyên nhân cụ thể, hãy kiểm tra dashboard `Usage` và `Billing` của tài khoản mới. Nếu mọi thiết lập đã ổn nhưng vẫn gặp 429 dài hạn, bạn cần liên hệ hỗ trợ OpenAI kèm thời điểm, request ID và mô tả luồng gọi API để họ kiểm tra.
