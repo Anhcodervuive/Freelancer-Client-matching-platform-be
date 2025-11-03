@@ -3,14 +3,36 @@ import { Worker } from 'bullmq'
 import { connection } from './redis'
 import { JobModerationQueuePayloadSchema } from '~/schema/job-moderation.schema'
 import { moderateJobPost } from '~/services/moderation/job-post-moderation.service'
+import { logModeration, logModerationError } from '~/services/moderation/job-moderation.logger'
 
-new Worker(
+const worker = new Worker(
         'job-moderation',
         async job => {
                 const payload = JobModerationQueuePayloadSchema.parse(job.data ?? {})
+                logModeration('Worker bắt đầu xử lý job moderation', {
+                        bullJobId: job.id,
+                        jobPostId: payload.jobPostId,
+                        trigger: payload.trigger
+                })
                 await moderateJobPost(payload)
+                logModeration('Worker đã hoàn tất xử lý job moderation', {
+                        bullJobId: job.id,
+                        jobPostId: payload.jobPostId
+                })
         },
         { connection }
 )
+
+worker.on('failed', (job, error) => {
+        logModerationError('Worker job moderation thất bại', {
+                bullJobId: job?.id,
+                jobPostId: job?.data?.jobPostId,
+                error: error?.message ?? error
+        })
+})
+
+worker.on('error', error => {
+        logModerationError('Worker gặp lỗi không mong muốn', { error })
+})
 
 console.log('Job moderation worker started...')

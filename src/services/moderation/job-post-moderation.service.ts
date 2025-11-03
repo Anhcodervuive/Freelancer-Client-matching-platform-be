@@ -3,6 +3,7 @@ import { prismaClient } from '~/config/prisma-client'
 import { JOB_MODERATION, OPENAI } from '~/config/environment'
 import { jobModerationQueue } from '~/queues/job-moderation.queue'
 import type { JobModerationQueuePayload, JobModerationTrigger } from '~/schema/job-moderation.schema'
+import { logModeration, logModerationError } from './job-moderation.logger'
 
 const MODERATION_ENDPOINT = 'https://api.openai.com/v1/moderations'
 
@@ -47,11 +48,6 @@ type ModerationDecision = {
         category: string | null
         summary: string | null
         raw?: unknown
-}
-
-const logModeration = (...messages: unknown[]) => {
-        if (!JOB_MODERATION.LOG_VERBOSE) return
-        console.log('[JobModeration]', ...messages)
 }
 
 const composeModerationInput = (job: JobPostModerationPayload) => {
@@ -286,7 +282,7 @@ export const moderateJobPost = async ({ jobPostId }: JobModerationQueuePayload) 
         } catch (error) {
                 const message =
                         error instanceof Error ? error.message : 'Gọi OpenAI moderation thất bại không rõ lý do.'
-                console.error('[JobModeration]', 'Lỗi gọi OpenAI moderation', { jobPostId, error })
+                logModerationError('Lỗi gọi OpenAI moderation', { jobPostId, error })
                 await applyDecision(job, buildFailureDecision(job, message))
         }
 }
@@ -308,11 +304,16 @@ export const requestJobPostModeration = async (
 
         try {
                 logModeration('Thêm job vào queue moderation', data)
-                await jobModerationQueue.add('moderate-job-post', data, {
+                const job = await jobModerationQueue.add('moderate-job-post', data, {
                         jobId: `${data.jobPostId}:${Date.now()}`
                 })
+                logModeration('Đã enqueue job moderation thành công', {
+                        bullJobId: job.id,
+                        jobPostId: data.jobPostId,
+                        trigger: data.trigger
+                })
         } catch (error) {
-                console.error('Không thể enqueue job moderation', error)
+                logModerationError('Không thể enqueue job moderation', { error })
                 logModeration('Enqueue thất bại, fallback sang xử lý đồng bộ', data)
                 await moderateJobPost(data)
         }
