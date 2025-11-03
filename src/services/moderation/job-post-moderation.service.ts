@@ -647,9 +647,16 @@ export const moderateJobPost = async (
         }
 
         const provider = JOB_MODERATION.PROVIDER
-        const providerLabel = provider === 'perspective' ? 'Google Perspective API' : 'OpenAI Moderation'
+        const configuredProvider = JOB_MODERATION.CONFIGURED_PROVIDER
 
-        logModeration('Sử dụng nhà cung cấp moderation', { jobPostId, provider })
+        logModeration('Sử dụng nhà cung cấp moderation', {
+                jobPostId,
+                provider,
+                configuredProvider,
+                autoSelected: provider !== configuredProvider
+        })
+
+        const providerLabel = provider === 'perspective' ? 'Google Perspective API' : 'OpenAI Moderation'
 
         if (provider === 'openai' && !OPENAI.API_KEY) {
                 logModeration('Thiếu OPENAI_API_KEY, không thể gọi moderation', { jobPostId })

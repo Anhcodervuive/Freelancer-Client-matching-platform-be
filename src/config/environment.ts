@@ -22,15 +22,35 @@ const parseBoolean = (value: string | undefined, fallback: boolean) => {
         return fallback
 }
 
+const stripWrappingQuotes = (value: string | undefined) => {
+        if (!value) return value
+        const trimmed = value.trim()
+        if (trimmed.length < 2) return trimmed
+        const firstChar = trimmed[0]
+        const lastChar = trimmed[trimmed.length - 1]
+        if ((firstChar === '"' && lastChar === '"') || (firstChar === "'" && lastChar === "'")) {
+                return trimmed.slice(1, -1)
+        }
+        return trimmed
+}
+
 const optionalEnv = (value: string | undefined) => {
-        const trimmed = value?.trim()
+        const trimmed = stripWrappingQuotes(value)
         return trimmed ? trimmed : undefined
 }
 
-const readOptionalFile = (filePath: string | undefined) => {
+const normaliseFilePath = (filePath: string | undefined) => {
         if (!filePath) return undefined
+        const stripped = stripWrappingQuotes(filePath)
+        if (!stripped) return undefined
+        return stripped.startsWith('@') ? stripped.slice(1) : stripped
+}
+
+const readOptionalFile = (filePath: string | undefined) => {
+        const normalised = normaliseFilePath(filePath)
+        if (!normalised) return undefined
         try {
-                return fs.readFileSync(filePath, 'utf8')
+                return fs.readFileSync(normalised, 'utf8')
         } catch {
                 return undefined
         }
@@ -58,32 +78,43 @@ const isServiceAccountCredentials = (value: unknown): value is ServiceAccountCre
         return typeof record.client_email === 'string' && typeof record.private_key === 'string'
 }
 
-const parseServiceAccount = (): ServiceAccountCredentials | undefined => {
-        const rawInline = optionalEnv(process.env.PERSPECTIVE_SERVICE_ACCOUNT_JSON)
-        const rawFileContent = readOptionalFile(optionalEnv(process.env.PERSPECTIVE_SERVICE_ACCOUNT_FILE))
+const parseServiceAccountCandidate = (candidate: string | undefined) => {
+        if (!candidate) return undefined
 
-        const candidates = [rawInline, rawFileContent].filter(
-                (value): value is string => typeof value === 'string' && value.length > 0
-        )
+        const stripped = stripWrappingQuotes(candidate)
+        if (!stripped) return undefined
 
-        for (const candidate of candidates) {
-                const direct = tryParseJson<ServiceAccountCredentials>(candidate)
-                if (direct && isServiceAccountCredentials(direct)) {
-                        return direct
-                }
-
-                try {
-                        const decoded = Buffer.from(candidate, 'base64').toString('utf8')
-                        const parsed = tryParseJson<ServiceAccountCredentials>(decoded)
-                        if (parsed && isServiceAccountCredentials(parsed)) {
-                                return parsed
-                        }
-                } catch {
-                        // ignore base64 parse errors
+        const fileContent = readOptionalFile(stripped)
+        if (fileContent) {
+                const parsed = tryParseJson<ServiceAccountCredentials>(fileContent)
+                if (parsed && isServiceAccountCredentials(parsed)) {
+                        return parsed
                 }
         }
 
+        const direct = tryParseJson<ServiceAccountCredentials>(stripped)
+        if (direct && isServiceAccountCredentials(direct)) {
+                return direct
+        }
+
+        try {
+                const decoded = Buffer.from(stripped, 'base64').toString('utf8')
+                const parsed = tryParseJson<ServiceAccountCredentials>(decoded)
+                if (parsed && isServiceAccountCredentials(parsed)) {
+                        return parsed
+                }
+        } catch {
+                // ignore base64 parse errors
+        }
+
         return undefined
+}
+
+const parseServiceAccount = (): ServiceAccountCredentials | undefined => {
+        const rawInline = process.env.PERSPECTIVE_SERVICE_ACCOUNT_JSON
+        const rawFile = process.env.PERSPECTIVE_SERVICE_ACCOUNT_FILE
+
+        return parseServiceAccountCandidate(rawInline) ?? parseServiceAccountCandidate(rawFile)
 }
 
 const parseStringList = (value: string | undefined, fallback: string[]): string[] => {
@@ -190,12 +221,23 @@ export const PERSPECTIVE = {
         SERVICE_ACCOUNT: parseServiceAccount()
 }
 
+const configuredModerationProviderRaw = process.env.JOB_MODERATION_PROVIDER
+const hasExplicitModerationProvider = optionalEnv(configuredModerationProviderRaw) !== undefined
+const configuredModerationProvider = parseModerationProvider(configuredModerationProviderRaw)
+
+const resolvedModerationProvider = hasExplicitModerationProvider
+        ? configuredModerationProvider
+        : !OPENAI.API_KEY && (PERSPECTIVE.API_KEY || PERSPECTIVE.SERVICE_ACCOUNT)
+          ? 'perspective'
+          : configuredModerationProvider
+
 const rawPauseThreshold = clamp(parseNumber(process.env.JOB_MODERATION_PAUSE_THRESHOLD, 0.4), 0, 1)
 const rawRejectThreshold = clamp(parseNumber(process.env.JOB_MODERATION_REJECT_THRESHOLD, 0.7), 0, 1)
 
 export const JOB_MODERATION = {
         ENABLED: parseBoolean(process.env.JOB_MODERATION_ENABLED, true),
-        PROVIDER: parseModerationProvider(process.env.JOB_MODERATION_PROVIDER),
+        CONFIGURED_PROVIDER: configuredModerationProvider,
+        PROVIDER: resolvedModerationProvider,
         MODEL: process.env.JOB_MODERATION_MODEL ?? 'omni-moderation-latest',
         PAUSE_THRESHOLD: Math.min(rawPauseThreshold, rawRejectThreshold),
         REJECT_THRESHOLD: Math.max(rawPauseThreshold, rawRejectThreshold),
