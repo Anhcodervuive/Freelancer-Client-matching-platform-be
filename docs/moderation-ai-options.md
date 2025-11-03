@@ -5,6 +5,23 @@ Tài liệu này tổng hợp các hướng triển khai kiểm duyệt nội du
 ## 1. Dịch vụ kiểm duyệt được quản lý (Managed Moderation API)
 Các dịch vụ này phù hợp khi cần khởi động nhanh, không có dữ liệu gán nhãn và muốn giảm tải vận hành mô hình.
 
+### 1.1. Các lựa chọn miễn phí hoặc nhiều free-tier
+- **Google Perspective API (Free tier rộng rãi)**
+  - **Giới hạn miễn phí:** 1 triệu request/ngày (theo quota mặc định), phù hợp để prototyping hoặc vận hành ở quy mô nhỏ mà không phát sinh phí.
+  - **Lưu ý:** Cần đăng ký API key qua Google Cloud nhưng không bắt buộc nhập thông tin thanh toán ngay.
+- **Moderation API của Hugging Face Inference (Free tier cộng đồng)**
+  - **Giới hạn miễn phí:** 30 request/phút với mô hình community (ví dụ `facebook/roberta-hate-speech-dynabench`).
+  - **Lưu ý:** Hạn mức dùng chung nên có thể bị rate limit giờ cao điểm; có thể tự deploy bằng `text-classification` pipeline trên Spaces nếu muốn chủ động hơn.
+- **Open-source models + hạ tầng tự host (chi phí hạ tầng là của bạn)**
+  - **Ví dụ mô hình:** `unitary/toxic-bert`, `facebook/roberta-hate-speech-dynabench`, `ProtectAI/deberta-v3-base-prompt-injection`.
+  - **Ưu điểm:** Mô hình hoàn toàn miễn phí, có thể chạy trên máy cá nhân hoặc server nội bộ; không phụ thuộc quota nhà cung cấp.
+  - **Nhược điểm:** Phải tự chuẩn bị tài nguyên (CPU/GPU), tối ưu hiệu năng và bảo trì.
+- **LAION Open Assistant Guard / LLaMA Guard (mở nguồn)**
+  - **Giới hạn miễn phí:** Không có phí bản quyền; có thể triển khai trên server của bạn.
+  - **Lưu ý:** Mô hình tương đối nặng, cần ít nhất GPU tầm trung nếu muốn latency thấp; nên bật batching và caching để tiết kiệm tài nguyên.
+
+> 💡 **Mẹo:** Ngay cả với các lựa chọn free-tier, bạn vẫn nên cấu hình cơ chế fallback (ví dụ chuyển job sang review thủ công khi request thất bại) và log rõ nguyên nhân lỗi để tránh “mất job” khi vượt quota.
+
 - **OpenAI Moderation (`omni-moderation-latest`)**
   - **Cách dùng:** Gửi `POST` đến endpoint `/v1/moderations` kèm `input` là nội dung job (title + description). Nhận về điểm số cho từng danh mục (sexual, hate, self-harm, violence...).
   - **Ưu điểm:** Chính sách cập nhật thường xuyên, hỗ trợ nhiều ngôn ngữ, latency thấp.
