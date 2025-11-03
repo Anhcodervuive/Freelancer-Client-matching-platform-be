@@ -133,18 +133,18 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
 2. **Worker gọi Perspective**
    - Worker gửi `POST` tới endpoint `comments:analyze` kèm body:
      ```json
-     {
-       "comment": { "text": "<nội dung job>" },
-       "languages": ["vi", "en"],
-       "requestedAttributes": {
-         "TOXICITY": {},
-         "SEVERE_TOXICITY": {},
-         "SEXUAL_EXPLICIT": {},
-         "INSULT": {},
-         "THREAT": {},
-         "PROFANITY": {}
-       }
-     }
+    {
+      "comment": { "text": "<nội dung job>" },
+      "languages": ["en"],
+      "requestedAttributes": {
+        "TOXICITY": {},
+        "SEVERE_TOXICITY": {},
+        "SEXUALLY_EXPLICIT": {},
+        "INSULT": {},
+        "THREAT": {},
+        "PROFANITY": {}
+      }
+    }
      ```
    - Bạn có thể tinh chỉnh danh sách `requestedAttributes` và `languages` bằng biến môi trường (xem bên dưới) để phù hợp dataset của mình.
    - Nếu có `PERSPECTIVE_API_KEY`, worker sẽ thêm query `?key=<API_KEY>`. Nếu API key bị chặn bởi chính sách tổ chức, bạn có thể cấu hình service account; worker sẽ tự động ký JWT và xin access token OAuth2 trước khi gửi request.
@@ -170,8 +170,8 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
 - `PERSPECTIVE_SERVICE_ACCOUNT_FILE` (**tùy chọn**): đường dẫn tới file JSON service account trên máy chủ. Được ưu tiên khi bạn không muốn đặt JSON vào biến môi trường.
 - _Lưu ý_: cần cung cấp **ít nhất một** trong hai hình thức xác thực (API key hoặc service account). Nếu cả hai cùng tồn tại, worker ưu tiên API key.
 - `PERSPECTIVE_ENDPOINT` (**tùy chọn**): endpoint custom cho Perspective (mặc định `https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze`).
-- `PERSPECTIVE_LANGUAGES` (**tùy chọn**): danh sách ngôn ngữ (phân tách bằng dấu phẩy) gửi kèm request. Mặc định `vi,en`.
-- `PERSPECTIVE_ATTRIBUTES` (**tùy chọn**): danh sách attribute cần chấm điểm (phân tách bằng dấu phẩy). Mặc định `TOXICITY,SEVERE_TOXICITY,SEXUAL_EXPLICIT,INSULT,THREAT,PROFANITY`.
+- `PERSPECTIVE_LANGUAGES` (**tùy chọn**): danh sách ngôn ngữ (phân tách bằng dấu phẩy) gửi kèm request. Mặc định `en`. Bạn có thể thêm mã ngôn ngữ khác, nhưng hãy lưu ý một số attribute của Perspective (ví dụ `THREAT`, `INSULT`, `PROFANITY`) chưa hỗ trợ tiếng Việt và sẽ bị bỏ qua.
+- `PERSPECTIVE_ATTRIBUTES` (**tùy chọn**): danh sách attribute cần chấm điểm (phân tách bằng dấu phẩy). Mặc định `TOXICITY,SEVERE_TOXICITY,SEXUALLY_EXPLICIT,INSULT,THREAT,PROFANITY`.
 
 #### Cách đưa service account JSON vào biến môi trường
 

@@ -117,13 +117,21 @@ const parseServiceAccount = (): ServiceAccountCredentials | undefined => {
         return parseServiceAccountCandidate(rawInline) ?? parseServiceAccountCandidate(rawFile)
 }
 
-const parseStringList = (value: string | undefined, fallback: string[]): string[] => {
-        if (!value) return fallback
-        const items = value
-                .split(',')
-                .map(item => item.trim())
-                .filter(item => item.length > 0)
-        return items.length > 0 ? items : fallback
+const parseStringList = (
+        value: string | undefined,
+        fallback: string[],
+        transform?: (item: string) => string
+): string[] => {
+        const parse = (input: string) =>
+                input
+                        .split(',')
+                        .map(item => item.trim())
+                        .filter(item => item.length > 0)
+
+        const parsedItems = value ? parse(value) : []
+        const items = parsedItems.length > 0 ? parsedItems : [...fallback]
+
+        return transform ? items.map(transform) : items
 }
 
 const parseModerationProvider = (value: string | undefined): 'openai' | 'perspective' => {
@@ -213,10 +221,11 @@ export const PERSPECTIVE = {
         ENDPOINT:
                 optionalEnv(process.env.PERSPECTIVE_ENDPOINT) ??
                 'https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze',
-        LANGUAGES: parseStringList(process.env.PERSPECTIVE_LANGUAGES, ['vi', 'en']),
+        LANGUAGES: parseStringList(process.env.PERSPECTIVE_LANGUAGES, ['en']),
         ATTRIBUTES: parseStringList(
                 process.env.PERSPECTIVE_ATTRIBUTES,
-                ['TOXICITY', 'SEVERE_TOXICITY', 'SEXUAL_EXPLICIT', 'INSULT', 'THREAT', 'PROFANITY']
+                ['TOXICITY', 'SEVERE_TOXICITY', 'SEXUALLY_EXPLICIT', 'INSULT', 'THREAT', 'PROFANITY'],
+                attribute => attribute.trim().toUpperCase()
         ),
         SERVICE_ACCOUNT: parseServiceAccount()
 }
