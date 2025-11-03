@@ -49,6 +49,11 @@ type ModerationDecision = {
         raw?: unknown
 }
 
+const logModeration = (...messages: unknown[]) => {
+        if (!JOB_MODERATION.LOG_VERBOSE) return
+        console.log('[JobModeration]', ...messages)
+}
+
 const composeModerationInput = (job: JobPostModerationPayload) => {
         const sections: string[] = []
         sections.push(`Tiêu đề:\n${job.title}`)
@@ -152,9 +157,15 @@ const applyDecision = async (job: JobPostModerationPayload, decision: Moderation
                 where: { id: job.id },
                 data: updateData
         })
+
+        logModeration(
+                `Đã cập nhật job ${job.id} với trạng thái ${decision.status}, ` +
+                        `điểm=${decision.score ?? 'null'}, category=${decision.category ?? 'null'}`
+        )
 }
 
 const fetchJobForModeration = async (jobPostId: string) => {
+        logModeration('Đang tải job để kiểm duyệt', { jobPostId })
         return prismaClient.jobPost.findUnique({
                 where: { id: jobPostId },
                 include: {
@@ -208,9 +219,15 @@ const callOpenAIModeration = async (payload: string): Promise<OpenAIModerationRe
 
 export const moderateJobPost = async ({ jobPostId }: JobModerationQueuePayload) => {
         const job = await fetchJobForModeration(jobPostId)
-        if (!job) return
+        if (!job) {
+                logModeration('Không tìm thấy job để kiểm duyệt', { jobPostId })
+                return
+        }
+
+        logModeration('Bắt đầu kiểm duyệt job', { jobPostId, status: job.status })
 
         if (!JOB_MODERATION.ENABLED) {
+                logModeration('Moderation đang tắt, tự động duyệt job', { jobPostId })
                 await applyDecision(job, {
                         status: JobStatus.PUBLISHED,
                         score: null,
@@ -222,13 +239,20 @@ export const moderateJobPost = async ({ jobPostId }: JobModerationQueuePayload) 
         }
 
         if (!OPENAI.API_KEY) {
+                logModeration('Thiếu OPENAI_API_KEY, không thể gọi moderation', { jobPostId })
                 await applyDecision(job, buildFailureDecision(job, 'Thiếu OPENAI_API_KEY, job bị tạm dừng để kiểm tra thủ công.'))
                 return
         }
 
         const moderationInput = composeModerationInput(job)
 
+        logModeration('Payload moderation được tạo', {
+                jobPostId,
+                length: moderationInput.length
+        })
+
         if (!moderationInput.trim()) {
+                logModeration('Nội dung trống, tự động duyệt job', { jobPostId })
                 await applyDecision(job, {
                         status: JobStatus.PUBLISHED,
                         score: 0,
@@ -240,19 +264,29 @@ export const moderateJobPost = async ({ jobPostId }: JobModerationQueuePayload) 
         }
 
         try {
+                logModeration('Gọi OpenAI moderation', { jobPostId, model: JOB_MODERATION.MODEL })
                 const response = await callOpenAIModeration(moderationInput)
                 const result = response.results?.[0]
 
                 if (!result) {
+                        logModeration('Phản hồi moderation không hợp lệ', { jobPostId, response })
                         await applyDecision(job, buildFailureDecision(job, 'Không nhận được dữ liệu moderation hợp lệ.'))
                         return
                 }
 
+                logModeration('Nhận kết quả moderation', {
+                        jobPostId,
+                        flagged: result.flagged,
+                        category_scores: result.category_scores
+                })
+
                 const decision = determineDecision(result)
+                logModeration('Quyết định moderation', { jobPostId, decision })
                 await applyDecision(job, decision)
         } catch (error) {
                 const message =
                         error instanceof Error ? error.message : 'Gọi OpenAI moderation thất bại không rõ lý do.'
+                console.error('[JobModeration]', 'Lỗi gọi OpenAI moderation', { jobPostId, error })
                 await applyDecision(job, buildFailureDecision(job, message))
         }
 }
@@ -267,16 +301,19 @@ export const requestJobPostModeration = async (
         }
 
         if (!JOB_MODERATION.ENABLED) {
+                logModeration('Moderation queue bị bỏ qua vì đang tắt, chạy trực tiếp', data)
                 await moderateJobPost(data)
                 return
         }
 
         try {
+                logModeration('Thêm job vào queue moderation', data)
                 await jobModerationQueue.add('moderate-job-post', data, {
                         jobId: `${data.jobPostId}:${Date.now()}`
                 })
         } catch (error) {
                 console.error('Không thể enqueue job moderation', error)
+                logModeration('Enqueue thất bại, fallback sang xử lý đồng bộ', data)
                 await moderateJobPost(data)
         }
 }

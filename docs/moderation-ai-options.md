@@ -116,6 +116,7 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
 - `OPENAI_ORGANIZATION` (**tùy chọn**): chỉ cần thiết nếu tài khoản OpenAI của bạn phân quyền theo organization. Có thể bỏ trống khi bạn chỉ có một API key cá nhân.
 - `OPENAI_PROJECT` (**tùy chọn**): dùng cho các workspace mới của OpenAI. Nếu API key của bạn không đính kèm project, có thể để trống, worker sẽ tự động bỏ qua header này.
 - `JOB_MODERATION_MODEL`, `JOB_MODERATION_PAUSE_THRESHOLD`, `JOB_MODERATION_REJECT_THRESHOLD`...: tinh chỉnh model và ngưỡng nội bộ. Nếu không khai báo, hệ thống dùng mặc định `omni-moderation-latest` với các ngưỡng gợi ý trong tài liệu.
+- `JOB_MODERATION_LOG_VERBOSE` (**tùy chọn**, mặc định `true`): bật/tắt log chi tiết tiến trình moderation trên console. Nếu muốn giảm log khi chạy production, đặt giá trị `false`.
 
 ## 6. Gợi ý vận hành
 - Thiết lập **retry/backoff** cho queue khi API ngoài bị lỗi.
