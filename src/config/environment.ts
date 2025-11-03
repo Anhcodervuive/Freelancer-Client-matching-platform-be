@@ -131,7 +131,31 @@ const parseStringList = (
         const parsedItems = value ? parse(value) : []
         const items = parsedItems.length > 0 ? parsedItems : [...fallback]
 
-        return transform ? items.map(transform) : items
+        if (!transform) {
+                return items
+        }
+
+        const transformed = items.map(transform)
+        const seen = new Set<string>()
+
+        return transformed.filter(item => {
+                if (seen.has(item)) return false
+                seen.add(item)
+                return true
+        })
+}
+
+const normalisePerspectiveAttributeEnvValue = (attribute: string) => {
+        const normalised = attribute.trim().toUpperCase().replace(/\s+/g, '_')
+
+        switch (normalised) {
+                case 'SEXUAL_EXPLICIT':
+                        return 'SEXUALLY_EXPLICIT'
+                case 'SEXUAL_CONTENT':
+                        return 'SEXUAL_CONTENT'
+                default:
+                        return normalised
+        }
 }
 
 const parseModerationProvider = (value: string | undefined): 'openai' | 'perspective' => {
@@ -225,7 +249,7 @@ export const PERSPECTIVE = {
         ATTRIBUTES: parseStringList(
                 process.env.PERSPECTIVE_ATTRIBUTES,
                 ['TOXICITY', 'SEVERE_TOXICITY', 'SEXUALLY_EXPLICIT', 'INSULT', 'THREAT', 'PROFANITY'],
-                attribute => attribute.trim().toUpperCase()
+                normalisePerspectiveAttributeEnvValue
         ),
         SERVICE_ACCOUNT: parseServiceAccount()
 }
