@@ -426,13 +426,48 @@ const parseRetryAfter = (header: string | null): number | null => {
         return null
 }
 
-const buildPerspectiveRequestedAttributes = () => {
-        const attributes = PERSPECTIVE.ATTRIBUTES
+const buildPerspectiveRequestedAttributes = (attributes: readonly string[]) => {
         const requested: Record<string, Record<string, never>> = {}
         for (const attribute of attributes) {
                 requested[attribute] = {}
         }
         return requested
+}
+
+const normalisePerspectiveAttributeName = (attribute: string) => attribute.trim().toUpperCase()
+
+const extractPerspectiveLanguageAttributeError = (responseBody: unknown) => {
+        if (!responseBody || typeof responseBody !== 'object') return null
+
+        const error = (responseBody as { error?: unknown }).error
+        if (!error || typeof error !== 'object') return null
+
+        const details = (error as { details?: unknown }).details
+        if (!Array.isArray(details)) return null
+
+        for (const detail of details) {
+                if (!detail || typeof detail !== 'object') continue
+
+                const errorType = (detail as { errorType?: unknown }).errorType
+                if (errorType !== 'LANGUAGE_NOT_SUPPORTED_BY_ATTRIBUTE') continue
+
+                const payload = (detail as { languageNotSupportedByAttributeError?: unknown })
+                        .languageNotSupportedByAttributeError
+                if (!payload || typeof payload !== 'object') continue
+
+                const attribute = (payload as { attribute?: unknown }).attribute
+                const languagesRaw = (payload as { requestedLanguages?: unknown }).requestedLanguages
+
+                const languages = Array.isArray(languagesRaw)
+                        ? languagesRaw.filter((lang): lang is string => typeof lang === 'string' && lang.length > 0)
+                        : []
+
+                if (typeof attribute === 'string' && attribute.trim()) {
+                        return { attribute: normalisePerspectiveAttributeName(attribute), languages }
+                }
+        }
+
+        return null
 }
 
 const callOpenAIModeration = async (payload: string): Promise<OpenAIModerationResponse> => {
@@ -518,28 +553,31 @@ const callPerspectiveModeration = async (
         payload: string,
         jobPostId: number | string | undefined
 ): Promise<PerspectiveModerationResponse> => {
-        const url = new URL(PERSPECTIVE_ENDPOINT)
-        if (PERSPECTIVE.API_KEY) {
-                url.searchParams.set('key', PERSPECTIVE.API_KEY)
-        }
+        const originalAttributes = [...PERSPECTIVE.ATTRIBUTES]
+        let activeAttributes = [...originalAttributes]
 
-        const headers: Record<string, string> = {
-                'Content-Type': 'application/json'
-        }
+        const performRequest = async (attributes: string[]) => {
+                const url = new URL(PERSPECTIVE_ENDPOINT)
+                if (PERSPECTIVE.API_KEY) {
+                        url.searchParams.set('key', PERSPECTIVE.API_KEY)
+                }
 
-        if (!PERSPECTIVE.API_KEY && PERSPECTIVE.SERVICE_ACCOUNT) {
-                const accessToken = await getPerspectiveAccessToken(jobPostId)
-                headers.Authorization = `Bearer ${accessToken}`
-        }
+                const headers: Record<string, string> = {
+                        'Content-Type': 'application/json'
+                }
 
-        try {
+                if (!PERSPECTIVE.API_KEY && PERSPECTIVE.SERVICE_ACCOUNT) {
+                        const accessToken = await getPerspectiveAccessToken(jobPostId)
+                        headers.Authorization = `Bearer ${accessToken}`
+                }
+
                 const response = await fetch(url.toString(), {
                         method: 'POST',
                         headers,
                         body: JSON.stringify({
                                 comment: { text: payload },
                                 languages: PERSPECTIVE.LANGUAGES,
-                                requestedAttributes: buildPerspectiveRequestedAttributes()
+                                requestedAttributes: buildPerspectiveRequestedAttributes(attributes)
                         })
                 })
 
@@ -569,24 +607,78 @@ const callPerspectiveModeration = async (
                 }
 
                 return (await response.json()) as PerspectiveModerationResponse
-        } catch (error) {
-                        if (isModerationApiError(error)) {
-                                throw error
+        }
+
+        while (activeAttributes.length > 0) {
+                try {
+                        return await performRequest(activeAttributes)
+                } catch (error) {
+                        if (!isModerationApiError(error)) {
+                                const message =
+                                        error instanceof Error
+                                                ? `Không thể kết nối tới Perspective API: ${error.message}`
+                                                : 'Không thể kết nối tới Perspective API do lỗi không xác định.'
+
+                                throw new ModerationApiError(message, {
+                                        retryable: true,
+                                        responseBody:
+                                                error instanceof Error
+                                                        ? { name: error.name, message: error.message }
+                                                        : String(error)
+                                })
                         }
 
-                        const message =
-                                error instanceof Error
-                                        ? `Không thể kết nối tới Perspective API: ${error.message}`
-                                        : 'Không thể kết nối tới Perspective API do lỗi không xác định.'
+                        const languageError =
+                                error.status === 400
+                                        ? extractPerspectiveLanguageAttributeError(error.responseBody)
+                                        : null
 
-                        throw new ModerationApiError(message, {
-                                retryable: true,
-                                responseBody:
-                                        error instanceof Error
-                                                ? { name: error.name, message: error.message }
-                                                : String(error)
-                        })
+                        if (languageError) {
+                                const rejectedAttribute = activeAttributes.find(
+                                        attribute =>
+                                                normalisePerspectiveAttributeName(attribute) ===
+                                                languageError.attribute
+                                )
+
+                                if (rejectedAttribute) {
+                                        activeAttributes = activeAttributes.filter(
+                                                attribute =>
+                                                        normalisePerspectiveAttributeName(attribute) !==
+                                                        languageError.attribute
+                                        )
+
+                                        logModeration('Perspective loại bỏ thuộc tính không hỗ trợ ngôn ngữ', {
+                                                jobPostId,
+                                                attribute: rejectedAttribute,
+                                                languages: languageError.languages,
+                                                remainingAttributes: activeAttributes
+                                        })
+
+                                        continue
+                                }
+                        }
+
+                        throw error
+                }
         }
+
+        logModeration('Perspective không còn thuộc tính tương thích với ngôn ngữ yêu cầu', {
+                jobPostId,
+                languages: PERSPECTIVE.LANGUAGES,
+                attemptedAttributes: originalAttributes
+        })
+
+        throw new ModerationApiError(
+                'Không có thuộc tính Google Perspective nào tương thích với các ngôn ngữ đã chọn.',
+                {
+                        retryable: false,
+                        responseBody: {
+                                reason: 'no-compatible-attributes',
+                                languages: PERSPECTIVE.LANGUAGES,
+                                attemptedAttributes: originalAttributes
+                        }
+                }
+        )
 }
 
 const normalisePerspectiveResult = (
