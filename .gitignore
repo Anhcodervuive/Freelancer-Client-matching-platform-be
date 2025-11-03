@@ -6,4 +6,6 @@ node_modules
 
 /src/generated/prisma
 
+/assets/lvtn-470111-1970340a978c.json
+
 .vscode
