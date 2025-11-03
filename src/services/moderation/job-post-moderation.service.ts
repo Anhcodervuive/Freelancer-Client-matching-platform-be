@@ -453,6 +453,50 @@ const buildPerspectiveRequestedAttributes = (attributes: readonly string[]) => {
         return requested
 }
 
+const extractPerspectiveUnknownAttributeError = (responseBody: unknown) => {
+        if (!responseBody || typeof responseBody !== 'object') return null
+
+        const error = (responseBody as { error?: unknown }).error
+        if (!error || typeof error !== 'object') return null
+
+        const details = (error as { details?: unknown }).details
+        if (Array.isArray(details)) {
+                for (const detail of details) {
+                        if (!detail || typeof detail !== 'object') continue
+
+                        const unknownAttribute = (detail as { unknownAttribute?: unknown }).unknownAttribute
+                        if (typeof unknownAttribute === 'string' && unknownAttribute.trim()) {
+                                const canonical = canonicalisePerspectiveAttributeName(unknownAttribute)
+                                if (canonical) {
+                                        return {
+                                                attribute: canonical,
+                                                rawAttribute: unknownAttribute
+                                        }
+                                }
+                        }
+                }
+        }
+
+        const message = (error as { message?: unknown }).message
+        if (typeof message === 'string') {
+                const match = message.match(/Unknown requested attribute:\s*([^\s.]+)/i)
+                if (match) {
+                        const rawAttribute = match[1]
+                        if (rawAttribute) {
+                                const canonical = canonicalisePerspectiveAttributeName(rawAttribute)
+                                if (canonical) {
+                                        return {
+                                                attribute: canonical,
+                                                rawAttribute
+                                        }
+                                }
+                        }
+                }
+        }
+
+        return null
+}
+
 const extractPerspectiveLanguageAttributeError = (responseBody: unknown) => {
         if (!responseBody || typeof responseBody !== 'object') return null
 
@@ -670,6 +714,37 @@ const callPerspectiveModeration = async (
                                                 jobPostId,
                                                 attribute: rejectedAttribute,
                                                 languages: languageError.languages,
+                                                remainingAttributes: activeAttributes
+                                        })
+
+                                        continue
+                                }
+                        }
+
+                        const unknownAttributeError =
+                                error.status === 400
+                                        ? extractPerspectiveUnknownAttributeError(error.responseBody)
+                                        : null
+
+                        if (unknownAttributeError) {
+                                const rejectedAttribute = activeAttributes.find(
+                                        attribute =>
+                                                canonicalisePerspectiveAttributeName(attribute) ===
+                                                unknownAttributeError.attribute
+                                )
+
+                                if (rejectedAttribute) {
+                                        activeAttributes = activeAttributes.filter(
+                                                attribute =>
+                                                        canonicalisePerspectiveAttributeName(attribute) !==
+                                                        unknownAttributeError.attribute
+                                        )
+
+                                        logModeration('Perspective loại bỏ thuộc tính không hợp lệ', {
+                                                jobPostId,
+                                                attribute: rejectedAttribute,
+                                                canonicalAttribute: unknownAttributeError.attribute,
+                                                rawAttribute: unknownAttributeError.rawAttribute,
                                                 remainingAttributes: activeAttributes
                                         })
 
