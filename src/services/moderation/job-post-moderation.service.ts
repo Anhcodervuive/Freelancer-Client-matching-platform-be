@@ -426,15 +426,32 @@ const parseRetryAfter = (header: string | null): number | null => {
         return null
 }
 
+const canonicalisePerspectiveAttributeName = (attribute: string) => {
+        const trimmed = attribute.trim()
+        if (!trimmed) return ''
+
+        const upper = trimmed.toUpperCase().replace(/\s+/g, '_')
+
+        switch (upper) {
+                case 'SEXUAL_EXPLICIT':
+                        return 'SEXUALLY_EXPLICIT'
+                default:
+                        return upper
+        }
+}
+
 const buildPerspectiveRequestedAttributes = (attributes: readonly string[]) => {
         const requested: Record<string, Record<string, never>> = {}
         for (const attribute of attributes) {
-                requested[attribute] = {}
+                const canonical = canonicalisePerspectiveAttributeName(attribute)
+                if (!canonical) {
+                        logModeration('Bỏ qua attribute Perspective không hợp lệ', { attribute })
+                        continue
+                }
+                requested[canonical] = {}
         }
         return requested
 }
-
-const normalisePerspectiveAttributeName = (attribute: string) => attribute.trim().toUpperCase()
 
 const extractPerspectiveLanguageAttributeError = (responseBody: unknown) => {
         if (!responseBody || typeof responseBody !== 'object') return null
@@ -463,7 +480,7 @@ const extractPerspectiveLanguageAttributeError = (responseBody: unknown) => {
                         : []
 
                 if (typeof attribute === 'string' && attribute.trim()) {
-                        return { attribute: normalisePerspectiveAttributeName(attribute), languages }
+                        return { attribute: canonicalisePerspectiveAttributeName(attribute), languages }
                 }
         }
 
@@ -553,7 +570,9 @@ const callPerspectiveModeration = async (
         payload: string,
         jobPostId: number | string | undefined
 ): Promise<PerspectiveModerationResponse> => {
-        const originalAttributes = [...PERSPECTIVE.ATTRIBUTES]
+        const originalAttributes = PERSPECTIVE.ATTRIBUTES.map(canonicalisePerspectiveAttributeName).filter(
+                (attribute): attribute is string => attribute.length > 0
+        )
         let activeAttributes = [...originalAttributes]
 
         const performRequest = async (attributes: string[]) => {
@@ -636,14 +655,14 @@ const callPerspectiveModeration = async (
                         if (languageError) {
                                 const rejectedAttribute = activeAttributes.find(
                                         attribute =>
-                                                normalisePerspectiveAttributeName(attribute) ===
+                                                canonicalisePerspectiveAttributeName(attribute) ===
                                                 languageError.attribute
                                 )
 
                                 if (rejectedAttribute) {
                                         activeAttributes = activeAttributes.filter(
                                                 attribute =>
-                                                        normalisePerspectiveAttributeName(attribute) !==
+                                                        canonicalisePerspectiveAttributeName(attribute) !==
                                                         languageError.attribute
                                         )
 
@@ -810,9 +829,13 @@ export const moderateJobPost = async (
                 let rawResponse: unknown = null
 
                 if (provider === 'perspective') {
+                        const perspectiveAttributesForLog = PERSPECTIVE.ATTRIBUTES.map(
+                                canonicalisePerspectiveAttributeName
+                        ).filter((attribute): attribute is string => attribute.length > 0)
+
                         logModeration('Gọi Google Perspective moderation', {
                                 jobPostId,
-                                attributes: PERSPECTIVE.ATTRIBUTES,
+                                attributes: perspectiveAttributesForLog,
                                 languages: PERSPECTIVE.LANGUAGES
                         })
                         const response = await callPerspectiveModeration(moderationInput, jobPostId)
