@@ -147,6 +147,7 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
      }
      ```
    - Bạn có thể tinh chỉnh danh sách `requestedAttributes` và `languages` bằng biến môi trường (xem bên dưới) để phù hợp dataset của mình.
+   - Nếu có `PERSPECTIVE_API_KEY`, worker sẽ thêm query `?key=<API_KEY>`. Nếu API key bị chặn bởi chính sách tổ chức, bạn có thể cấu hình service account; worker sẽ tự động ký JWT và xin access token OAuth2 trước khi gửi request.
 3. **Chuẩn hóa điểm**
    - Perspective trả về `attributeScores.<ATTRIBUTE>.summaryScore.value` (0-1). Worker map các điểm này vào `category_scores`, lấy điểm cao nhất và so sánh với ngưỡng nội bộ (`JOB_MODERATION_PAUSE_THRESHOLD`, `JOB_MODERATION_REJECT_THRESHOLD`).
    - Nếu API không trả về điểm nào (ví dụ nội dung rỗng hoặc attribute không hợp lệ), worker sẽ chuyển job sang `PAUSED` để reviewer kiểm tra.
@@ -164,7 +165,10 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
 - `JOB_MODERATION_LOG_VERBOSE` (**tùy chọn**, mặc định `true`): bật/tắt log chi tiết tiến trình moderation trên console. Nếu muốn giảm log khi chạy production, đặt giá trị `false`.
 - `JOB_MODERATION_WORKER_CONCURRENCY` (**tùy chọn**, mặc định `1`): số job moderation xử lý song song. Để tránh bắn quá nhiều request cùng lúc (dễ dẫn tới lỗi 429), hãy giữ giá trị nhỏ và chỉ tăng khi đã có hạn mức cao hơn từ OpenAI.
 - `JOB_MODERATION_PROVIDER` (**tùy chọn**, mặc định `openai`): chọn nhà cung cấp moderation. Đặt `perspective` để dùng Google Perspective API.
-- `PERSPECTIVE_API_KEY` (**bắt buộc khi dùng Perspective**): API key tạo từ Google Cloud. Nếu thiếu, worker sẽ chuyển job sang `PAUSED`.
+- `PERSPECTIVE_API_KEY` (**tùy chọn**): API key tạo từ Google Cloud. Nếu cung cấp, worker sẽ dùng trực tiếp khi gọi API.
+- `PERSPECTIVE_SERVICE_ACCOUNT_JSON` (**tùy chọn**): nội dung JSON của service account (có thể dán trực tiếp hoặc base64). Khi API key bị chặn, hãy dùng biến này để worker tự xin access token OAuth2.
+- `PERSPECTIVE_SERVICE_ACCOUNT_FILE` (**tùy chọn**): đường dẫn tới file JSON service account trên máy chủ. Được ưu tiên khi bạn không muốn đặt JSON vào biến môi trường.
+- _Lưu ý_: cần cung cấp **ít nhất một** trong hai hình thức xác thực (API key hoặc service account). Nếu cả hai cùng tồn tại, worker ưu tiên API key.
 - `PERSPECTIVE_ENDPOINT` (**tùy chọn**): endpoint custom cho Perspective (mặc định `https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze`).
 - `PERSPECTIVE_LANGUAGES` (**tùy chọn**): danh sách ngôn ngữ (phân tách bằng dấu phẩy) gửi kèm request. Mặc định `vi,en`.
 - `PERSPECTIVE_ATTRIBUTES` (**tùy chọn**): danh sách attribute cần chấm điểm (phân tách bằng dấu phẩy). Mặc định `TOXICITY,SEVERE_TOXICITY,SEXUAL_EXPLICIT,INSULT,THREAT,PROFANITY`.

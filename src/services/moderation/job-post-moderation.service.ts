@@ -1,3 +1,5 @@
+import crypto from 'crypto'
+
 import { JobStatus, Prisma } from '~/generated/prisma'
 import { prismaClient } from '~/config/prisma-client'
 import { JOB_MODERATION, OPENAI, PERSPECTIVE } from '~/config/environment'
@@ -7,6 +9,22 @@ import { logModeration, logModerationError } from './job-moderation.logger'
 
 const MODERATION_ENDPOINT = 'https://api.openai.com/v1/moderations'
 const PERSPECTIVE_ENDPOINT = PERSPECTIVE.ENDPOINT
+const PERSPECTIVE_OAUTH_SCOPES = [
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/cloud-language'
+]
+const PERSPECTIVE_TOKEN_URI =
+        (PERSPECTIVE.SERVICE_ACCOUNT?.token_uri as string | undefined) ?? 'https://oauth2.googleapis.com/token'
+
+type PerspectiveTokenCache = {
+        token: string | null
+        expiresAt: number
+}
+
+const perspectiveTokenCache: PerspectiveTokenCache = {
+        token: null,
+        expiresAt: 0
+}
 
 const formatCategoryLabel = (category: string | null | undefined) => {
         if (!category) return 'an toàn'
@@ -22,6 +40,150 @@ const truncateInput = (value: string, maxLength: number) => {
         if (value.length <= maxLength) return value
         if (maxLength <= 3) return value.slice(0, maxLength)
         return `${value.slice(0, maxLength - 3)}...`
+}
+
+const base64UrlEncode = (value: Buffer | string) => {
+        const buffer = typeof value === 'string' ? Buffer.from(value) : value
+        return buffer
+                .toString('base64')
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=+$/g, '')
+}
+
+const normalisePrivateKey = (key: string) => (key.includes('\\n') ? key.replace(/\\n/g, '\n') : key)
+
+type PerspectiveServiceAccount = NonNullable<typeof PERSPECTIVE.SERVICE_ACCOUNT>
+
+const createServiceAccountAssertion = (serviceAccount: PerspectiveServiceAccount, scopes: string[]) => {
+        const header = { alg: 'RS256', typ: 'JWT' }
+        const issuedAt = Math.floor(Date.now() / 1000)
+        const expiresAt = issuedAt + 3600
+        const audience = (serviceAccount.token_uri as string | undefined) ?? PERSPECTIVE_TOKEN_URI
+
+        const payload = {
+                iss: serviceAccount.client_email,
+                scope: scopes.join(' '),
+                aud: audience,
+                iat: issuedAt,
+                exp: expiresAt
+        }
+
+        const encodedHeader = base64UrlEncode(JSON.stringify(header))
+        const encodedPayload = base64UrlEncode(JSON.stringify(payload))
+        const unsignedToken = `${encodedHeader}.${encodedPayload}`
+
+        const signer = crypto.createSign('RSA-SHA256')
+        signer.update(unsignedToken)
+        signer.end()
+
+        const signature = signer.sign(normalisePrivateKey(serviceAccount.private_key))
+        const encodedSignature = base64UrlEncode(signature)
+
+        return { assertion: `${unsignedToken}.${encodedSignature}`, expiresAt }
+}
+
+const getPerspectiveAccessToken = async (jobPostId: number | string | undefined) => {
+        const serviceAccount = PERSPECTIVE.SERVICE_ACCOUNT
+        if (!serviceAccount) {
+                throw new ModerationApiError('Thiếu service account Perspective', { retryable: false })
+        }
+
+        const now = Math.floor(Date.now() / 1000)
+        if (perspectiveTokenCache.token && perspectiveTokenCache.expiresAt - 60 > now) {
+                logModeration('Perspective sử dụng access token cache', { jobPostId })
+                return perspectiveTokenCache.token
+        }
+
+        logModeration('Perspective yêu cầu access token mới', {
+                jobPostId,
+                tokenUri: PERSPECTIVE_TOKEN_URI,
+                scopes: PERSPECTIVE_OAUTH_SCOPES
+        })
+
+        const { assertion, expiresAt } = createServiceAccountAssertion(serviceAccount, PERSPECTIVE_OAUTH_SCOPES)
+
+        try {
+                const response = await fetch(PERSPECTIVE_TOKEN_URI, {
+                        method: 'POST',
+                        headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: new URLSearchParams({
+                                grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                                assertion
+                        }).toString()
+                })
+
+                if (!response.ok) {
+                        const errorText = await response.text()
+                        let parsedBody: unknown = errorText
+
+                        if (errorText) {
+                                try {
+                                        parsedBody = JSON.parse(errorText)
+                                } catch {
+                                        parsedBody = errorText
+                                }
+                        }
+
+                        const status = response.status
+                        const retryAfter = parseRetryAfter(response.headers.get('retry-after'))
+                        const retryable = RETRYABLE_STATUS.has(status)
+                        const message = `Perspective token error ${status}: ${errorText || 'Unknown error'}`
+
+                        throw new ModerationApiError(message, {
+                                status,
+                                retryable,
+                                responseBody: parsedBody,
+                                retryAfter
+                        })
+                }
+
+                const data = (await response.json()) as {
+                        access_token?: string
+                        expires_in?: number
+                }
+
+                const accessToken = typeof data.access_token === 'string' ? data.access_token : null
+                if (!accessToken) {
+                        throw new ModerationApiError('Không lấy được access token từ Perspective', {
+                                retryable: true,
+                                responseBody: data
+                        })
+                }
+
+                const tokenTtl = typeof data.expires_in === 'number' && Number.isFinite(data.expires_in)
+                        ? data.expires_in
+                        : expiresAt - now
+
+                perspectiveTokenCache.token = accessToken
+                perspectiveTokenCache.expiresAt = now + Math.max(60, tokenTtl)
+
+                logModeration('Perspective nhận access token thành công', {
+                        jobPostId,
+                        expiresIn: tokenTtl
+                })
+
+                return accessToken
+        } catch (error) {
+                if (isModerationApiError(error)) {
+                        throw error
+                }
+
+                const message =
+                        error instanceof Error
+                                ? `Không thể lấy access token Perspective: ${error.message}`
+                                : 'Không thể lấy access token Perspective do lỗi không xác định.'
+
+                throw new ModerationApiError(message, {
+                        retryable: true,
+                        responseBody:
+                                error instanceof Error
+                                        ? { name: error.name, message: error.message }
+                                        : String(error)
+                })
+        }
 }
 
 type JobPostModerationPayload = Prisma.JobPostGetPayload<{
@@ -352,18 +514,28 @@ const callOpenAIModeration = async (payload: string): Promise<OpenAIModerationRe
         }
 }
 
-const callPerspectiveModeration = async (payload: string): Promise<PerspectiveModerationResponse> => {
+const callPerspectiveModeration = async (
+        payload: string,
+        jobPostId: number | string | undefined
+): Promise<PerspectiveModerationResponse> => {
         const url = new URL(PERSPECTIVE_ENDPOINT)
         if (PERSPECTIVE.API_KEY) {
                 url.searchParams.set('key', PERSPECTIVE.API_KEY)
         }
 
+        const headers: Record<string, string> = {
+                'Content-Type': 'application/json'
+        }
+
+        if (!PERSPECTIVE.API_KEY && PERSPECTIVE.SERVICE_ACCOUNT) {
+                const accessToken = await getPerspectiveAccessToken(jobPostId)
+                headers.Authorization = `Bearer ${accessToken}`
+        }
+
         try {
                 const response = await fetch(url.toString(), {
                         method: 'POST',
-                        headers: {
-                                'Content-Type': 'application/json'
-                        },
+                        headers,
                         body: JSON.stringify({
                                 comment: { text: payload },
                                 languages: PERSPECTIVE.LANGUAGES,
@@ -491,16 +663,28 @@ export const moderateJobPost = async (
                 return
         }
 
-        if (provider === 'perspective' && !PERSPECTIVE.API_KEY) {
-                logModeration('Thiếu PERSPECTIVE_API_KEY, không thể gọi moderation', { jobPostId })
-                await applyDecision(
-                        job,
-                        buildFailureDecision(
+        if (provider === 'perspective') {
+                const hasApiKey = Boolean(PERSPECTIVE.API_KEY)
+                const hasServiceAccount = Boolean(PERSPECTIVE.SERVICE_ACCOUNT)
+
+                logModeration('Perspective phương thức xác thực', {
+                        jobPostId,
+                        method: hasApiKey ? 'api-key' : hasServiceAccount ? 'service-account' : 'none'
+                })
+
+                if (!hasApiKey && !hasServiceAccount) {
+                        logModeration('Thiếu thông tin xác thực Perspective, không thể gọi moderation', {
+                                jobPostId
+                        })
+                        await applyDecision(
                                 job,
-                                'Thiếu PERSPECTIVE_API_KEY, job bị tạm dừng để kiểm tra thủ công.'
+                                buildFailureDecision(
+                                        job,
+                                        'Thiếu thông tin xác thực Google Perspective (API key hoặc service account). Job bị tạm dừng để kiểm tra thủ công.'
+                                )
                         )
-                )
-                return
+                        return
+                }
         }
 
         const moderationInput = composeModerationInput(job)
@@ -532,7 +716,7 @@ export const moderateJobPost = async (
                                 attributes: PERSPECTIVE.ATTRIBUTES,
                                 languages: PERSPECTIVE.LANGUAGES
                         })
-                        const response = await callPerspectiveModeration(moderationInput)
+                        const response = await callPerspectiveModeration(moderationInput, jobPostId)
                         rawResponse = response
                         normalisedResult = normalisePerspectiveResult(response)
 

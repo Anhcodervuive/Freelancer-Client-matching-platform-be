@@ -1,3 +1,4 @@
+import fs from 'fs'
 import dotenv from 'dotenv'
 
 dotenv.config({ path: '.env', quiet: true })
@@ -24,6 +25,65 @@ const parseBoolean = (value: string | undefined, fallback: boolean) => {
 const optionalEnv = (value: string | undefined) => {
         const trimmed = value?.trim()
         return trimmed ? trimmed : undefined
+}
+
+const readOptionalFile = (filePath: string | undefined) => {
+        if (!filePath) return undefined
+        try {
+                return fs.readFileSync(filePath, 'utf8')
+        } catch {
+                return undefined
+        }
+}
+
+const tryParseJson = <T>(value: string): T | undefined => {
+        try {
+                return JSON.parse(value) as T
+        } catch {
+                return undefined
+        }
+}
+
+type ServiceAccountCredentials = {
+        client_email: string
+        private_key: string
+        token_uri?: string
+        project_id?: string
+        [key: string]: unknown
+}
+
+const isServiceAccountCredentials = (value: unknown): value is ServiceAccountCredentials => {
+        if (!value || typeof value !== 'object') return false
+        const record = value as Record<string, unknown>
+        return typeof record.client_email === 'string' && typeof record.private_key === 'string'
+}
+
+const parseServiceAccount = (): ServiceAccountCredentials | undefined => {
+        const rawInline = optionalEnv(process.env.PERSPECTIVE_SERVICE_ACCOUNT_JSON)
+        const rawFileContent = readOptionalFile(optionalEnv(process.env.PERSPECTIVE_SERVICE_ACCOUNT_FILE))
+
+        const candidates = [rawInline, rawFileContent].filter(
+                (value): value is string => typeof value === 'string' && value.length > 0
+        )
+
+        for (const candidate of candidates) {
+                const direct = tryParseJson<ServiceAccountCredentials>(candidate)
+                if (direct && isServiceAccountCredentials(direct)) {
+                        return direct
+                }
+
+                try {
+                        const decoded = Buffer.from(candidate, 'base64').toString('utf8')
+                        const parsed = tryParseJson<ServiceAccountCredentials>(decoded)
+                        if (parsed && isServiceAccountCredentials(parsed)) {
+                                return parsed
+                        }
+                } catch {
+                        // ignore base64 parse errors
+                }
+        }
+
+        return undefined
 }
 
 const parseStringList = (value: string | undefined, fallback: string[]): string[] => {
@@ -126,7 +186,8 @@ export const PERSPECTIVE = {
         ATTRIBUTES: parseStringList(
                 process.env.PERSPECTIVE_ATTRIBUTES,
                 ['TOXICITY', 'SEVERE_TOXICITY', 'SEXUAL_EXPLICIT', 'INSULT', 'THREAT', 'PROFANITY']
-        )
+        ),
+        SERVICE_ACCOUNT: parseServiceAccount()
 }
 
 const rawPauseThreshold = clamp(parseNumber(process.env.JOB_MODERATION_PAUSE_THRESHOLD, 0.4), 0, 1)
