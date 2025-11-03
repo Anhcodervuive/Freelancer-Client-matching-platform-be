@@ -112,6 +112,10 @@ export const JOB_MODERATION = {
         REJECT_THRESHOLD: Math.max(rawPauseThreshold, rawRejectThreshold),
         RETRY_ATTEMPTS: Math.max(1, Math.round(parseNumber(process.env.JOB_MODERATION_RETRY_ATTEMPTS, 3))),
         RETRY_DELAY_MS: Math.max(500, Math.round(parseNumber(process.env.JOB_MODERATION_RETRY_DELAY_MS, 3000))),
+        WORKER_CONCURRENCY: Math.max(
+                1,
+                Math.round(parseNumber(process.env.JOB_MODERATION_WORKER_CONCURRENCY, 1))
+        ),
         MAX_INPUT_CHARS: Math.max(500, Math.round(parseNumber(process.env.JOB_MODERATION_MAX_INPUT_CHARS, 6000))),
         LOG_VERBOSE: parseBoolean(process.env.JOB_MODERATION_LOG_VERBOSE, true)
 }

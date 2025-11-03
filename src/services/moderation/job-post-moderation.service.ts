@@ -50,6 +50,60 @@ type ModerationDecision = {
         raw?: unknown
 }
 
+type ModerationAttemptContext = {
+        attemptsMade: number
+        attemptsTotal: number
+}
+
+class ModerationApiError extends Error {
+        status: number | undefined
+        retryable: boolean
+        responseBody: unknown
+        retryAfter: number | null | undefined
+
+        constructor(message: string, options?: { status?: number; retryable?: boolean; responseBody?: unknown; retryAfter?: number | null }) {
+                super(message)
+                this.name = 'ModerationApiError'
+                this.status = options?.status
+                this.retryable = options?.retryable ?? false
+                this.responseBody = options?.responseBody
+                this.retryAfter = options?.retryAfter ?? null
+        }
+}
+
+const isModerationApiError = (error: unknown): error is ModerationApiError => error instanceof ModerationApiError
+
+const normaliseAttemptContext = (context?: ModerationAttemptContext): ModerationAttemptContext => ({
+        attemptsMade: Math.max(0, context?.attemptsMade ?? 0),
+        attemptsTotal: Math.max(1, context?.attemptsTotal ?? 1)
+})
+
+const hasRemainingAttempts = (context: ModerationAttemptContext) =>
+        context.attemptsMade + 1 < context.attemptsTotal
+
+const serialiseModerationError = (error: unknown) => {
+        if (isModerationApiError(error)) {
+                return {
+                        type: 'ModerationApiError',
+                        message: error.message,
+                        status: error.status ?? null,
+                        retryable: error.retryable,
+                        retryAfter: error.retryAfter ?? null,
+                        response: error.responseBody ?? null
+                }
+        }
+
+        if (error instanceof Error) {
+                return {
+                        type: error.name || 'Error',
+                        message: error.message,
+                        stack: error.stack ?? null
+                }
+        }
+
+        return { error: String(error) }
+}
+
 const composeModerationInput = (job: JobPostModerationPayload) => {
         const sections: string[] = []
         sections.push(`Tiêu đề:\n${job.title}`)
@@ -171,7 +225,11 @@ const fetchJobForModeration = async (jobPostId: string) => {
         })
 }
 
-const buildFailureDecision = (job: JobPostModerationPayload, message: string): ModerationDecision => ({
+const buildFailureDecision = (
+        job: JobPostModerationPayload,
+        message: string,
+        raw?: unknown
+): ModerationDecision => ({
         status:
                 job.status === JobStatus.PUBLISHED_PENDING_REVIEW || job.status === JobStatus.PUBLISHED
                         ? JobStatus.PAUSED
@@ -179,8 +237,19 @@ const buildFailureDecision = (job: JobPostModerationPayload, message: string): M
         score: null,
         category: 'system',
         summary: message,
-        raw: { error: message }
+        raw: raw ?? { error: message }
 })
+
+const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504])
+
+const parseRetryAfter = (header: string | null): number | null => {
+        if (!header) return null
+        const parsed = Number(header)
+        if (Number.isFinite(parsed) && parsed >= 0) {
+                return parsed
+        }
+        return null
+}
 
 const callOpenAIModeration = async (payload: string): Promise<OpenAIModerationResponse> => {
         const headers: Record<string, string> = {
@@ -196,31 +265,88 @@ const callOpenAIModeration = async (payload: string): Promise<OpenAIModerationRe
                 headers['OpenAI-Project'] = OPENAI.PROJECT
         }
 
-        const response = await fetch(MODERATION_ENDPOINT, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                        model: JOB_MODERATION.MODEL,
-                        input: payload
+        try {
+                const response = await fetch(MODERATION_ENDPOINT, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({
+                                model: JOB_MODERATION.MODEL,
+                                input: payload
+                        })
                 })
-        })
 
-        if (!response.ok) {
-                const errorText = await response.text()
-                throw new Error(`OpenAI moderation error ${response.status}: ${errorText}`)
+                if (!response.ok) {
+                        const errorText = await response.text()
+                        let parsedBody: unknown = errorText
+                        let serviceMessage: string | undefined
+
+                        if (errorText) {
+                                try {
+                                        parsedBody = JSON.parse(errorText)
+                                        const maybeError = (parsedBody as { error?: { message?: string } }).error
+                                        if (maybeError && typeof maybeError === 'object' && 'message' in maybeError) {
+                                                const rawMessage = (maybeError as { message?: unknown }).message
+                                                if (typeof rawMessage === 'string') {
+                                                        serviceMessage = rawMessage
+                                                }
+                                        }
+                                } catch {
+                                        // giữ nguyên errorText nếu không phải JSON
+                                        parsedBody = errorText
+                                }
+                        }
+
+                        const status = response.status
+                        const retryAfter = parseRetryAfter(response.headers.get('retry-after'))
+                        const retryable = RETRYABLE_STATUS.has(status)
+                        const message = `OpenAI moderation error ${status}: ${serviceMessage ?? errorText ?? 'Unknown error'}`
+
+                        throw new ModerationApiError(message, {
+                                status,
+                                retryable,
+                                responseBody: parsedBody,
+                                retryAfter
+                        })
+                }
+
+                return (await response.json()) as OpenAIModerationResponse
+        } catch (error) {
+                if (isModerationApiError(error)) {
+                        throw error
+                }
+
+                const message =
+                        error instanceof Error
+                                ? `Không thể kết nối tới OpenAI moderation: ${error.message}`
+                                : 'Không thể kết nối tới OpenAI moderation do lỗi không xác định.'
+
+                throw new ModerationApiError(message, {
+                        retryable: true,
+                        responseBody:
+                                error instanceof Error
+                                        ? { name: error.name, message: error.message }
+                                        : String(error)
+                })
         }
-
-        return (await response.json()) as OpenAIModerationResponse
 }
 
-export const moderateJobPost = async ({ jobPostId }: JobModerationQueuePayload) => {
+export const moderateJobPost = async (
+        { jobPostId }: JobModerationQueuePayload,
+        context?: ModerationAttemptContext
+) => {
+        const attemptContext = normaliseAttemptContext(context)
         const job = await fetchJobForModeration(jobPostId)
         if (!job) {
                 logModeration('Không tìm thấy job để kiểm duyệt', { jobPostId })
                 return
         }
 
-        logModeration('Bắt đầu kiểm duyệt job', { jobPostId, status: job.status })
+        logModeration('Bắt đầu kiểm duyệt job', {
+                jobPostId,
+                status: job.status,
+                attempt: attemptContext.attemptsMade + 1,
+                attemptsTotal: attemptContext.attemptsTotal
+        })
 
         if (!JOB_MODERATION.ENABLED) {
                 logModeration('Moderation đang tắt, tự động duyệt job', { jobPostId })
@@ -280,10 +406,34 @@ export const moderateJobPost = async ({ jobPostId }: JobModerationQueuePayload) 
                 logModeration('Quyết định moderation', { jobPostId, decision })
                 await applyDecision(job, decision)
         } catch (error) {
-                const message =
-                        error instanceof Error ? error.message : 'Gọi OpenAI moderation thất bại không rõ lý do.'
-                logModerationError('Lỗi gọi OpenAI moderation', { jobPostId, error })
-                await applyDecision(job, buildFailureDecision(job, message))
+                if (isModerationApiError(error) && error.retryable && hasRemainingAttempts(attemptContext)) {
+                        logModeration('Lỗi tạm thời khi gọi OpenAI moderation, sẽ retry', {
+                                jobPostId,
+                                status: error.status ?? null,
+                                attempt: attemptContext.attemptsMade + 1,
+                                attemptsTotal: attemptContext.attemptsTotal,
+                                retryAfterSeconds: error.retryAfter ?? undefined
+                        })
+                        throw error
+                }
+
+                const fallbackSummary = isModerationApiError(error)
+                        ? error.status === 429
+                                ? 'OpenAI Moderation đang giới hạn tốc độ, job được tạm dừng để chờ kiểm tra thủ công.'
+                                : `Gọi OpenAI moderation thất bại (mã ${error.status ?? 'không xác định'}). Job cần kiểm duyệt thủ công.`
+                        : 'Gọi OpenAI moderation thất bại, job được tạm dừng để kiểm tra thủ công.'
+
+                logModerationError('Lỗi gọi OpenAI moderation', {
+                        jobPostId,
+                        attempt: attemptContext.attemptsMade + 1,
+                        attemptsTotal: attemptContext.attemptsTotal,
+                        error
+                })
+
+                await applyDecision(
+                        job,
+                        buildFailureDecision(job, fallbackSummary, serialiseModerationError(error))
+                )
         }
 }
 
@@ -298,7 +448,7 @@ export const requestJobPostModeration = async (
 
         if (!JOB_MODERATION.ENABLED) {
                 logModeration('Moderation queue bị bỏ qua vì đang tắt, chạy trực tiếp', data)
-                await moderateJobPost(data)
+                await moderateJobPost(data, { attemptsMade: 0, attemptsTotal: 1 })
                 return
         }
 
@@ -315,7 +465,7 @@ export const requestJobPostModeration = async (
         } catch (error) {
                 logModerationError('Không thể enqueue job moderation', { error })
                 logModeration('Enqueue thất bại, fallback sang xử lý đồng bộ', data)
-                await moderateJobPost(data)
+                await moderateJobPost(data, { attemptsMade: 0, attemptsTotal: 1 })
         }
 }
 

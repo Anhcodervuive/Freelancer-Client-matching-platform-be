@@ -117,9 +117,11 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
 - `OPENAI_PROJECT` (**tùy chọn**): dùng cho các workspace mới của OpenAI. Nếu API key của bạn không đính kèm project, có thể để trống, worker sẽ tự động bỏ qua header này.
 - `JOB_MODERATION_MODEL`, `JOB_MODERATION_PAUSE_THRESHOLD`, `JOB_MODERATION_REJECT_THRESHOLD`...: tinh chỉnh model và ngưỡng nội bộ. Nếu không khai báo, hệ thống dùng mặc định `omni-moderation-latest` với các ngưỡng gợi ý trong tài liệu.
 - `JOB_MODERATION_LOG_VERBOSE` (**tùy chọn**, mặc định `true`): bật/tắt log chi tiết tiến trình moderation trên console. Nếu muốn giảm log khi chạy production, đặt giá trị `false`.
+- `JOB_MODERATION_WORKER_CONCURRENCY` (**tùy chọn**, mặc định `1`): số job moderation xử lý song song. Để tránh bắn quá nhiều request cùng lúc (dễ dẫn tới lỗi 429), hãy giữ giá trị nhỏ và chỉ tăng khi đã có hạn mức cao hơn từ OpenAI.
 
 ## 6. Gợi ý vận hành
 - Thiết lập **retry/backoff** cho queue khi API ngoài bị lỗi.
+- Hệ thống hiện tự động nhận diện các lỗi tạm thời như `429 Too Many Requests` và retry với backoff. Nếu hết lượt retry mà vẫn thất bại, job sẽ được chuyển sang `PAUSED` để đội ngũ kiểm duyệt xử lý thủ công.
 - Dùng **rate limiting/caching** với các job bị chỉnh sửa nhiều lần để tối ưu chi phí.
 - Đặt **alert** khi tỉ lệ reject tăng bất thường hoặc khi worker backlog lớn.
 - Luôn duy trì kênh phản hồi từ đội kiểm duyệt để điều chỉnh ngưỡng và chính sách kịp thời.
