@@ -173,6 +173,35 @@ Chỉ nên tự huấn luyện khi đáp ứng điều kiện:
 - `PERSPECTIVE_LANGUAGES` (**tùy chọn**): danh sách ngôn ngữ (phân tách bằng dấu phẩy) gửi kèm request. Mặc định `vi,en`.
 - `PERSPECTIVE_ATTRIBUTES` (**tùy chọn**): danh sách attribute cần chấm điểm (phân tách bằng dấu phẩy). Mặc định `TOXICITY,SEVERE_TOXICITY,SEXUAL_EXPLICIT,INSULT,THREAT,PROFANITY`.
 
+#### Cách đưa service account JSON vào biến môi trường
+
+Giả sử bạn đã tải về file JSON giống ảnh chụp màn hình (`job-post-moderation-***.json`) từ Google Cloud Console:
+
+1. **Giữ an toàn file gốc**: đừng commit file này vào Git. Lưu nó ở nơi chỉ máy chủ/CI có quyền đọc.
+2. **Cấu hình bằng đường dẫn file**  
+   - Sao chép file JSON lên máy chạy worker (ví dụ `/etc/secrets/perspective-sa.json`).  
+   - Thêm vào `.env`:
+
+     ```env
+     JOB_MODERATION_PROVIDER=perspective
+     PERSPECTIVE_SERVICE_ACCOUNT_FILE=/etc/secrets/perspective-sa.json
+     ```
+
+   Worker sẽ đọc file, ký JWT và tự xin access token trước khi gọi Perspective.
+3. **Hoặc dán trực tiếp nội dung JSON**  
+   - Mở file và sao chép toàn bộ nội dung (bao gồm `{ ... }`).  
+   - Dán vào biến môi trường dưới dạng một dòng (hoặc base64 để tránh lỗi escape):
+
+     ```env
+     JOB_MODERATION_PROVIDER=perspective
+     PERSPECTIVE_SERVICE_ACCOUNT_JSON='{"type":"service_account","project_id":"...","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"..."}'
+     ```
+
+   Nếu bạn gửi base64, đặt giá trị đã mã hóa vào biến và worker sẽ tự giải mã.
+
+> ⚠️ **Lưu ý:** Dù dùng cách nào, bắt buộc phải bật Perspective API trong project Google Cloud tương ứng và cấp quyền `roles/iam.serviceAccountTokenCreator` (hoặc ít nhất cho phép tạo token) cho service account.
+
+
 ## 6. Gợi ý vận hành
 - Thiết lập **retry/backoff** cho queue khi API ngoài bị lỗi.
 - Hệ thống hiện tự động nhận diện các lỗi tạm thời như `429 Too Many Requests` và retry với backoff. Nếu hết lượt retry mà vẫn thất bại, job sẽ được chuyển sang `PAUSED` để đội ngũ kiểm duyệt xử lý thủ công.
