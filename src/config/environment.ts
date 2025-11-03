@@ -227,7 +227,7 @@ const configuredModerationProvider = parseModerationProvider(configuredModeratio
 
 const resolvedModerationProvider = hasExplicitModerationProvider
         ? configuredModerationProvider
-        : !OPENAI.API_KEY && (PERSPECTIVE.API_KEY || PERSPECTIVE.SERVICE_ACCOUNT)
+        : PERSPECTIVE.API_KEY || PERSPECTIVE.SERVICE_ACCOUNT
           ? 'perspective'
           : configuredModerationProvider
 
