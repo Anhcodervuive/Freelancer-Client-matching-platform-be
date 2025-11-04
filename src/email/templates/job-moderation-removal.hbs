@@ -1,0 +1,24 @@
+{{#> base subject=subject}}
+  <h2 style="margin-top:0;">Job đã bị gỡ bỏ</h2>
+  <p>Xin chào <strong>{{recipientName}}</strong>,</p>
+  <p>
+    Bài đăng việc làm <strong>{{jobTitle}}</strong> đã bị hệ thống tự động gỡ bỏ vì vượt quá ngưỡng
+    an toàn nội dung. Bài đăng hiện ở trạng thái: <strong>{{statusLabel}}</strong>.
+  </p>
+  <p><strong>Chi tiết vi phạm:</strong></p>
+  <ul style="padding-left:18px;">
+    <li>Danh mục bị đánh dấu: <strong>{{categoryLabel}}</strong></li>
+    <li>Mức điểm: <strong>{{scoreLabel}}</strong> ({{scorePercentLabel}})</li>
+    <li>Tóm tắt hệ thống: {{summary}}</li>
+  </ul>
+  <p>
+    Vui lòng rà soát lại toàn bộ nội dung job, chỉnh sửa các phần vi phạm và tạo lại bài đăng khi đã
+    đảm bảo tuân thủ chính sách. Hệ thống sẽ tự động kiểm tra lại trong lần đăng mới.
+  </p>
+  {{#if dashboardUrl}}
+    <div style="display:flex;justify-content:center;margin:18px 0;">
+      {{> button link=dashboardUrl text="Truy cập trang quản lý"}}
+    </div>
+  {{/if}}
+  <p>Nếu bạn cho rằng có sự nhầm lẫn, hãy phản hồi email này để được hỗ trợ thêm.</p>
+{{/base}}

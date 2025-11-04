@@ -2,7 +2,8 @@ import crypto from 'crypto'
 
 import { JobStatus, Prisma } from '~/generated/prisma'
 import { prismaClient } from '~/config/prisma-client'
-import { JOB_MODERATION, OPENAI, PERSPECTIVE } from '~/config/environment'
+import { CLIENT, JOB_MODERATION, OPENAI, PERSPECTIVE } from '~/config/environment'
+import { emailQueue } from '~/queues/email.queue'
 import { jobModerationQueue } from '~/queues/job-moderation.queue'
 import type { JobModerationQueuePayload, JobModerationTrigger } from '~/schema/job-moderation.schema'
 import { logModeration, logModerationError } from './job-moderation.logger'
@@ -34,6 +35,11 @@ const formatCategoryLabel = (category: string | null | undefined) => {
 const formatScore = (score: number | null | undefined) => {
         if (score === null || score === undefined || Number.isNaN(score)) return '0.00'
         return score.toFixed(2)
+}
+
+const formatPercentage = (score: number | null | undefined) => {
+        if (score === null || score === undefined || Number.isNaN(score)) return '0%'
+        return `${(score * 100).toFixed(1)}%`
 }
 
 const truncateInput = (value: string, maxLength: number) => {
@@ -189,9 +195,95 @@ const getPerspectiveAccessToken = async (jobPostId: number | string | undefined)
 type JobPostModerationPayload = Prisma.JobPostGetPayload<{
         include: {
                 requiredSkills: { include: { skill: true } }
-                languages: true
+                languages: true,
+                client: {
+                        select: {
+                                companyName: true
+                                profile: {
+                                        select: {
+                                                firstName: true
+                                                lastName: true
+                                                user: {
+                                                        select: {
+                                                                email: true
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
+                }
         }
 }>
+
+type ModerationPersistenceResult = {
+        softDeleted: boolean
+}
+
+type JobOwnerContact = {
+        email: string
+        name: string
+}
+
+const MODERATION_SYSTEM_DELETER = 'system:moderation'
+
+const buildClientJobManagementUrl = (jobId: string): string | null => {
+        const base = CLIENT.URL?.trim()
+        if (!base) return null
+
+        try {
+                const normalizedBase = base.endsWith('/') ? base : `${base}/`
+                return new URL(`client/jobs/${jobId}`, normalizedBase).toString()
+        } catch {
+                try {
+                        return new URL(base).toString()
+                } catch {
+                        return base
+                }
+        }
+}
+
+const translateJobStatus = (status: JobStatus) => {
+        switch (status) {
+                case JobStatus.PAUSED:
+                        return 'Tạm dừng chờ rà soát'
+                case JobStatus.REJECTED:
+                        return 'Đã bị từ chối'
+                case JobStatus.PUBLISHED_PENDING_REVIEW:
+                        return 'Đang chờ kiểm duyệt'
+                case JobStatus.PUBLISHED:
+                        return 'Đang hiển thị'
+                case JobStatus.CLOSED:
+                        return 'Đã đóng'
+                case JobStatus.DRAFT:
+                        return 'Bản nháp'
+                default:
+                        return status
+        }
+}
+
+const getJobOwnerContact = (job: JobPostModerationPayload): JobOwnerContact | null => {
+        const profile = job.client?.profile
+        const user = profile?.user
+        const email = user?.email?.trim()
+        if (!email) {
+                return null
+        }
+
+        const firstName = profile?.firstName?.trim()
+        const lastName = profile?.lastName?.trim()
+        const fullName = [firstName, lastName].filter(Boolean).join(' ')
+
+        if (fullName) {
+                return { email, name: fullName }
+        }
+
+        const companyName = job.client?.companyName?.trim()
+        if (companyName) {
+                return { email, name: companyName }
+        }
+
+        return { email, name: email }
+}
 
 type OpenAIModerationResult = {
         flagged?: boolean
@@ -351,7 +443,10 @@ const determineDecision = (result: OpenAIModerationResult): ModerationDecision =
         }
 }
 
-const applyDecision = async (job: JobPostModerationPayload, decision: ModerationDecision) => {
+const applyDecision = async (
+        job: JobPostModerationPayload,
+        decision: ModerationDecision
+): Promise<ModerationPersistenceResult> => {
         const now = new Date()
         const updateData: Prisma.JobPostUncheckedUpdateInput = {
                 moderationScore: decision.score ?? null,
@@ -378,6 +473,18 @@ const applyDecision = async (job: JobPostModerationPayload, decision: Moderation
                 }
         }
 
+        const shouldSoftDelete =
+                decision.status === JobStatus.REJECTED &&
+                !job.isDeleted &&
+                decision.score !== null &&
+                decision.score >= JOB_MODERATION.DELETE_THRESHOLD
+
+        if (shouldSoftDelete) {
+                updateData.isDeleted = true
+                updateData.deletedAt = now
+                updateData.deletedBy = MODERATION_SYSTEM_DELETER
+        }
+
         await prismaClient.jobPost.update({
                 where: { id: job.id },
                 data: updateData
@@ -385,8 +492,11 @@ const applyDecision = async (job: JobPostModerationPayload, decision: Moderation
 
         logModeration(
                 `Đã cập nhật job ${job.id} với trạng thái ${decision.status}, ` +
-                        `điểm=${decision.score ?? 'null'}, category=${decision.category ?? 'null'}`
+                        `điểm=${decision.score ?? 'null'}, category=${decision.category ?? 'null'}, ` +
+                        `softDeleted=${shouldSoftDelete}`
         )
+
+        return { softDeleted: shouldSoftDelete }
 }
 
 const fetchJobForModeration = async (jobPostId: string) => {
@@ -395,7 +505,23 @@ const fetchJobForModeration = async (jobPostId: string) => {
                 where: { id: jobPostId },
                 include: {
                         requiredSkills: { include: { skill: true } },
-                        languages: true
+                        languages: true,
+                        client: {
+                                select: {
+                                        companyName: true,
+                                        profile: {
+                                                select: {
+                                                        firstName: true,
+                                                        lastName: true,
+                                                        user: {
+                                                                select: {
+                                                                        email: true
+                                                                }
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
                 }
         })
 }
@@ -414,6 +540,79 @@ const buildFailureDecision = (
         summary: message,
         raw: raw ?? { error: message }
 })
+
+const notifyModerationOutcome = async (
+        job: JobPostModerationPayload,
+        decision: ModerationDecision,
+        persistence: ModerationPersistenceResult
+) => {
+        const score = typeof decision.score === 'number' && Number.isFinite(decision.score)
+                ? decision.score
+                : null
+
+        if (score === null) {
+                return
+        }
+
+        const contact = getJobOwnerContact(job)
+        if (!contact) {
+                logModeration('Bỏ qua gửi email moderation vì thiếu email client', {
+                        jobPostId: job.id
+                })
+                return
+        }
+
+        const shouldSendRemoval = persistence.softDeleted && score >= JOB_MODERATION.DELETE_THRESHOLD
+        const shouldSendWarning =
+                !shouldSendRemoval && !job.isDeleted && score >= JOB_MODERATION.WARNING_THRESHOLD
+
+        if (!shouldSendRemoval && !shouldSendWarning) {
+                return
+        }
+
+        const payload = {
+                recipientName: contact.name,
+                jobTitle: job.title,
+                statusLabel: translateJobStatus(decision.status),
+                summary: decision.summary,
+                categoryLabel: formatCategoryLabel(decision.category),
+                scoreLabel: formatScore(score),
+                scorePercentLabel: formatPercentage(score),
+                dashboardUrl: buildClientJobManagementUrl(job.id)
+        }
+
+        const baseLogContext = {
+                jobPostId: job.id,
+                recipient: contact.email,
+                score,
+                status: decision.status,
+                softDeleted: persistence.softDeleted
+        }
+
+        try {
+                if (shouldSendRemoval) {
+                        await emailQueue.add('sendJobModerationRemovalEmail', {
+                                to: contact.email,
+                                payload
+                        })
+
+                        logModeration('Đã enqueue email thông báo xóa job do vi phạm moderation', baseLogContext)
+                        return
+                }
+
+                await emailQueue.add('sendJobModerationWarningEmail', {
+                        to: contact.email,
+                        payload
+                })
+
+                logModeration('Đã enqueue email cảnh báo job moderation', baseLogContext)
+        } catch (error) {
+                logModerationError('Không thể enqueue email thông báo moderation', {
+                        ...baseLogContext,
+                        error
+                })
+        }
+}
 
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504])
 
@@ -955,7 +1154,8 @@ export const moderateJobPost = async (
                         result: normalisedResult
                 }
                 logModeration('Quyết định moderation', { jobPostId, decision })
-                await applyDecision(job, decision)
+                const persistence = await applyDecision(job, decision)
+                await notifyModerationOutcome(job, decision, persistence)
         } catch (error) {
                 if (isModerationApiError(error) && error.retryable && hasRemainingAttempts(attemptContext)) {
                         logModeration('Lỗi tạm thời khi gọi dịch vụ moderation, sẽ retry', {

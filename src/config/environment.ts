@@ -265,16 +265,33 @@ const resolvedModerationProvider = hasExplicitModerationProvider
           ? 'perspective'
           : configuredModerationProvider
 
+const rawWarningThreshold = clamp(
+        parseNumber(process.env.JOB_MODERATION_WARNING_THRESHOLD, 0.3),
+        0,
+        1
+)
 const rawPauseThreshold = clamp(parseNumber(process.env.JOB_MODERATION_PAUSE_THRESHOLD, 0.4), 0, 1)
 const rawRejectThreshold = clamp(parseNumber(process.env.JOB_MODERATION_REJECT_THRESHOLD, 0.7), 0, 1)
+const rawDeleteThreshold = clamp(
+        parseNumber(process.env.JOB_MODERATION_DELETE_THRESHOLD, rawRejectThreshold),
+        0,
+        1
+)
+
+const pauseThreshold = Math.max(rawPauseThreshold, rawWarningThreshold)
+const rejectThreshold = Math.max(rawRejectThreshold, pauseThreshold)
+const deleteThreshold = Math.max(rawDeleteThreshold, rejectThreshold)
+const warningThreshold = Math.min(rawWarningThreshold, pauseThreshold)
 
 export const JOB_MODERATION = {
         ENABLED: parseBoolean(process.env.JOB_MODERATION_ENABLED, true),
         CONFIGURED_PROVIDER: configuredModerationProvider,
         PROVIDER: resolvedModerationProvider,
         MODEL: process.env.JOB_MODERATION_MODEL ?? 'omni-moderation-latest',
-        PAUSE_THRESHOLD: Math.min(rawPauseThreshold, rawRejectThreshold),
-        REJECT_THRESHOLD: Math.max(rawPauseThreshold, rawRejectThreshold),
+        WARNING_THRESHOLD: warningThreshold,
+        PAUSE_THRESHOLD: Math.min(pauseThreshold, deleteThreshold),
+        REJECT_THRESHOLD: Math.min(rejectThreshold, deleteThreshold),
+        DELETE_THRESHOLD: deleteThreshold,
         RETRY_ATTEMPTS: Math.max(1, Math.round(parseNumber(process.env.JOB_MODERATION_RETRY_ATTEMPTS, 3))),
         RETRY_DELAY_MS: Math.max(500, Math.round(parseNumber(process.env.JOB_MODERATION_RETRY_DELAY_MS, 3000))),
         WORKER_CONCURRENCY: Math.max(

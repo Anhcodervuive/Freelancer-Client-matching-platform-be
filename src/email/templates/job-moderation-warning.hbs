@@ -1,0 +1,25 @@
+{{#> base subject=subject}}
+  <h2 style="margin-top:0;">Cảnh báo nội dung bài đăng</h2>
+  <p>Xin chào <strong>{{recipientName}}</strong>,</p>
+  <p>
+    Hệ thống kiểm duyệt tự động phát hiện một số nội dung có khả năng vi phạm chính sách
+    trong bài đăng việc làm <strong>{{jobTitle}}</strong>.
+  </p>
+  <p><strong>Trạng thái hiện tại:</strong> {{statusLabel}}</p>
+  <p><strong>Chi tiết phát hiện:</strong></p>
+  <ul style="padding-left:18px;">
+    <li>Danh mục bị đánh dấu: <strong>{{categoryLabel}}</strong></li>
+    <li>Mức điểm: <strong>{{scoreLabel}}</strong> ({{scorePercentLabel}})</li>
+    <li>Tóm tắt hệ thống: {{summary}}</li>
+  </ul>
+  <p>
+    Vui lòng rà soát lại nội dung job, chỉnh sửa các đoạn văn bản nhạy cảm và gửi lại để hệ thống
+    kiểm tra. Việc xử lý sớm sẽ giúp bài đăng được phê duyệt nhanh hơn.
+  </p>
+  {{#if dashboardUrl}}
+    <div style="display:flex;justify-content:center;margin:18px 0;">
+      {{> button link=dashboardUrl text="Mở trang quản lý job"}}
+    </div>
+  {{/if}}
+  <p>Nếu bạn cần hỗ trợ thêm, hãy phản hồi email này để đội ngũ chúng tôi trợ giúp.</p>
+{{/base}}

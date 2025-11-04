@@ -44,6 +44,17 @@ type UserUnbanEmailPayload = {
         reactivated: boolean
 }
 
+type JobModerationEmailPayload = {
+        recipientName: string
+        jobTitle: string
+        statusLabel: string
+        summary: string
+        categoryLabel: string
+        scoreLabel: string
+        scorePercentLabel: string
+        dashboardUrl?: string | null
+}
+
 const createTransporter = () => {
         return nodemailer.createTransport({
                 host: 'smtp.gmail.com',
@@ -211,6 +222,26 @@ export async function sendArbitrationDecisionEmail(to: string, payload: Arbitrat
                 formattedRefundAmount,
                 recipientOutcome,
                 ctaLink: payload.disputeUrl
+        })
+
+        await sendMail({ to, subject, html })
+}
+
+export async function sendJobModerationWarningEmail(to: string, payload: JobModerationEmailPayload) {
+        const subject = `Cảnh báo nội dung cho job "${payload.jobTitle}"`
+        const html = renderEmailTemplate('job-moderation-warning.hbs', {
+                subject,
+                ...payload
+        })
+
+        await sendMail({ to, subject, html })
+}
+
+export async function sendJobModerationRemovalEmail(to: string, payload: JobModerationEmailPayload) {
+        const subject = `Job "${payload.jobTitle}" đã bị gỡ do vi phạm chính sách`
+        const html = renderEmailTemplate('job-moderation-removal.hbs', {
+                subject,
+                ...payload
         })
 
         await sendMail({ to, subject, html })

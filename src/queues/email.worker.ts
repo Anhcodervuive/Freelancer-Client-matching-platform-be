@@ -3,6 +3,8 @@ import { connection } from './redis'
 import {
         sendArbitrationDecisionEmail,
         sendDisputeNegotiationEmail,
+        sendJobModerationRemovalEmail,
+        sendJobModerationWarningEmail,
         sendVerifyEmail
 } from '~/providers/mail.provider'
 
@@ -23,6 +25,16 @@ new Worker(
                         case 'sendArbitrationDecisionEmail': {
                                 const { to, payload } = job.data
                                 await sendArbitrationDecisionEmail(to, payload)
+                                break
+                        }
+                        case 'sendJobModerationWarningEmail': {
+                                const { to, payload } = job.data
+                                await sendJobModerationWarningEmail(to, payload)
+                                break
+                        }
+                        case 'sendJobModerationRemovalEmail': {
+                                const { to, payload } = job.data
+                                await sendJobModerationRemovalEmail(to, payload)
                                 break
                         }
                         default:
