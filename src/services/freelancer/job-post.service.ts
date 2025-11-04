@@ -1,13 +1,14 @@
 import {
-	JobStatus,
-	JobVisibility,
-	MatchInteractionSource,
-	MatchInteractionType,
-	Prisma,
-	Role
+        JobStatus,
+        JobVisibility,
+        MatchInteractionSource,
+        MatchInteractionType,
+        Prisma,
+        Role
 } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
+import { JOB_MODERATION } from '~/config/environment'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
@@ -15,8 +16,19 @@ import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { FreelancerJobPostFilterInput } from '~/schema/job-post.schema'
 import matchInteractionService from '~/services/match-interaction.service'
 
-const PUBLIC_JOB_STATUS_LIST = [JobStatus.PUBLISHED, JobStatus.PUBLISHED_PENDING_REVIEW] as const
+const PUBLIC_JOB_STATUS_LIST = [JobStatus.PUBLISHED] as const
 const PUBLIC_JOB_STATUSES = new Set<JobStatus>(PUBLIC_JOB_STATUS_LIST)
+
+const buildModerationSafeWhere = (): Prisma.JobPostWhereInput | undefined => {
+        const warningThreshold = JOB_MODERATION.WARNING_THRESHOLD
+        if (!(warningThreshold > 0)) {
+                return undefined
+        }
+
+        return {
+                OR: [{ moderationScore: null }, { moderationScore: { lt: warningThreshold } }]
+        }
+}
 
 const publicJobDetailInclude = Prisma.validator<Prisma.JobPostInclude>()({
 	specialty: {
@@ -296,12 +308,15 @@ const recordJobActivities = async (entries: readonly ActivityEntry[]) => {
 }
 
 const ensurePublicJobExists = async (jobId: string) => {
+        const moderationFilter = buildModerationSafeWhere()
+
         const job = await prismaClient.jobPost.findFirst({
                 where: {
                         id: jobId,
                         status: { in: [...PUBLIC_JOB_STATUS_LIST] },
                         visibility: JobVisibility.PUBLIC,
-                        isDeleted: false
+                        isDeleted: false,
+                        ...(moderationFilter ? { AND: moderationFilter } : {})
                 },
                 select: { id: true }
         })
@@ -312,6 +327,8 @@ const ensurePublicJobExists = async (jobId: string) => {
 }
 
 const buildPublicJobWhere = (filters: FreelancerJobPostFilterInput, viewerId?: string): Prisma.JobPostWhereInput => {
+        const moderationFilter = buildModerationSafeWhere()
+
         const where: Prisma.JobPostWhereInput = {
                 status: { in: [...PUBLIC_JOB_STATUS_LIST] },
                 visibility: JobVisibility.PUBLIC,
@@ -330,7 +347,7 @@ const buildPublicJobWhere = (filters: FreelancerJobPostFilterInput, viewerId?: s
 		where.specialty = { categoryId: filters.categoryId }
 	}
 
-	const andConditions: Prisma.JobPostWhereInput[] = []
+        const andConditions: Prisma.JobPostWhereInput[] = moderationFilter ? [moderationFilter] : []
 
 	if (filters.paymentModes && filters.paymentModes.length > 0) {
 		where.paymentMode = filters.paymentModes.length === 1 ? filters.paymentModes[0]! : { in: filters.paymentModes }
@@ -389,9 +406,9 @@ const buildPublicJobWhere = (filters: FreelancerJobPostFilterInput, viewerId?: s
 		andConditions.push({ savedByFreelancers: { some: { freelancerId: viewerId } } })
 	}
 
-	if (andConditions.length > 0) {
-		where.AND = andConditions
-	}
+        if (andConditions.length > 0) {
+                where.AND = andConditions
+        }
 
 	return where
 }
@@ -477,15 +494,18 @@ const listJobPosts = async (filters: FreelancerJobPostFilterInput, viewerId?: st
 }
 
 const getJobPostDetail = async (jobId: string, viewerId?: string) => {
+        const moderationFilter = buildModerationSafeWhere()
+
         const job = await prismaClient.jobPost.findFirst({
                 where: {
                         id: jobId,
                         status: { in: [...PUBLIC_JOB_STATUS_LIST] },
                         visibility: JobVisibility.PUBLIC,
-                        isDeleted: false
+                        isDeleted: false,
+                        ...(moderationFilter ? { AND: moderationFilter } : {})
                 },
-		include: publicJobDetailInclude
-	})
+                include: publicJobDetailInclude
+        })
 
 	if (!job) {
 		throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
