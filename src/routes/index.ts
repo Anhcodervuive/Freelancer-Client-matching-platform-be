@@ -28,6 +28,7 @@ import uploadRoute from './upload.route'
 import contractRoute from './contract.route'
 import adminDisputeRoute from './admin-dispute.route'
 import adminUserRoute from './admin-user.route'
+import adminJobPostRoute from './admin-job-post.route'
 import arbitratorDisputeRoute from './arbitrator-dispute.route'
 
 const rootRouter: Router = Router()
@@ -58,6 +59,7 @@ rootRouter.use('/upload', uploadRoute)
 rootRouter.use('/contracts', contractRoute)
 rootRouter.use('/admin/disputes', adminDisputeRoute)
 rootRouter.use('/admin/users', adminUserRoute)
+rootRouter.use('/admin/job-posts', adminJobPostRoute)
 rootRouter.use('/arbitrator/disputes', arbitratorDisputeRoute)
 
 export default rootRouter
