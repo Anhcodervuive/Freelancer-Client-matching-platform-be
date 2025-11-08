@@ -18,7 +18,7 @@ const basePortfolioSchema = z
                 publishedAt: nullableDate(),
                 coverAssetId: z.string().cuid().optional().nullable(),
                 galleryAssetIds: z.array(z.string().cuid()).optional(),
-                skillIds: z.array(z.string().cuid()).optional()
+                skillIds: z.array(z.string().min(1)).optional()
         })
         .superRefine((data, ctx) => {
                 if (data.startedAt instanceof Date && data.completedAt instanceof Date && data.startedAt > data.completedAt) {
