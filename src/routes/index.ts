@@ -30,6 +30,7 @@ import adminDisputeRoute from './admin-dispute.route'
 import adminUserRoute from './admin-user.route'
 import adminJobPostRoute from './admin-job-post.route'
 import arbitratorDisputeRoute from './arbitrator-dispute.route'
+import freelancerPayoutRoute from './freelancer-payout.route'
 
 const rootRouter: Router = Router()
 
@@ -43,6 +44,7 @@ rootRouter.use('/skill', skillRoute)
 rootRouter.use('/portfolio', portfolioRoute)
 rootRouter.use('/freelancer/connect-account', freelancerConnectAccountRoute)
 rootRouter.use('/freelancer/financial', freelancerFinancialRoute)
+rootRouter.use('/freelancer/payouts', freelancerPayoutRoute)
 rootRouter.use('/freelancer/job-posts', freelancerJobPostRoute)
 rootRouter.use('/freelancer/job-invitations', freelancerJobInvitationRoute)
 rootRouter.use('/freelancer/job-proposals', freelancerJobProposalRoute)

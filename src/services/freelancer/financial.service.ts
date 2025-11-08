@@ -12,6 +12,11 @@ import {
         formatPeriodKey,
         generatePeriodKeys
 } from '~/services/financial/statistics-helpers'
+import freelancerPayoutService, {
+        BalanceEntry as StripeBalanceEntry,
+        PayoutHistoryEntry,
+        PayoutSummaryEntry
+} from '~/services/freelancer/payout.service'
 
 type TransferSummaryAccumulator = {
         pendingAmount: Prisma.Decimal
@@ -45,6 +50,8 @@ type EarningsSummaryEntry = {
         availablePayoutAmount: string
         failedPayoutAmount: string
         reversedPayoutAmount: string
+        stripeAvailableBalance: string
+        stripePendingBalance: string
         transferCount: {
                 total: number
                 pending: number
@@ -80,6 +87,16 @@ export type FreelancerFinancialOverview = {
         earnings: {
                 summary: EarningsSummaryEntry[]
                 timelineByCurrency: Record<string, EarningsTimelineEntry[]>
+        }
+        stripeBalance: {
+                available: StripeBalanceEntry[]
+                pending: StripeBalanceEntry[]
+        }
+        payouts: {
+                payoutsEnabled: boolean
+                stripeAccountId: string | null
+                summary: PayoutSummaryEntry[]
+                history: PayoutHistoryEntry[]
         }
         spending: SpendingStatisticsResult
 }
@@ -127,7 +144,7 @@ const getFreelancerFinancialOverview = async (
 ): Promise<FreelancerFinancialOverview> => {
         const { rangeStart, rangeEnd, timelineStart, timelineEnd, granularity } = computeDateRange(filters)
 
-        const [escrowBalances, transferSummaries, transfersInRange, spending] = await Promise.all([
+        const [escrowBalances, transferSummaries, transfersInRange, spending, payoutSnapshot] = await Promise.all([
                 prismaClient.escrow.groupBy({
                         by: ['currency'],
                         where: {
@@ -180,11 +197,26 @@ const getFreelancerFinancialOverview = async (
                         },
                         orderBy: { createdAt: 'asc' }
                 }),
-                clientFinancialService.getSpendingStatistics(freelancerId, filters)
+                clientFinancialService.getSpendingStatistics(freelancerId, filters),
+                freelancerPayoutService.getPayoutSnapshot(freelancerId, {
+                        currency: filters.currency,
+                        limit: 25
+                })
         ])
 
         const escrowHoldings = new Map<string, Prisma.Decimal>()
         const currencies = new Set<string>()
+
+        const stripeAvailableMap = new Map<string, string>()
+        const stripePendingMap = new Map<string, string>()
+
+        for (const entry of payoutSnapshot.balance.available) {
+                stripeAvailableMap.set(entry.currency, entry.amount)
+        }
+
+        for (const entry of payoutSnapshot.balance.pending) {
+                stripePendingMap.set(entry.currency, entry.amount)
+        }
 
         if (filters.currency) {
                 currencies.add(filters.currency)
@@ -294,6 +326,8 @@ const getFreelancerFinancialOverview = async (
                         availablePayoutAmount: decimalToString(summaryAccumulator.succeededAmount),
                         failedPayoutAmount: decimalToString(summaryAccumulator.failedAmount),
                         reversedPayoutAmount: decimalToString(summaryAccumulator.reversedAmount),
+                        stripeAvailableBalance: stripeAvailableMap.get(currency) ?? '0',
+                        stripePendingBalance: stripePendingMap.get(currency) ?? '0',
                         transferCount: {
                                 total: summaryAccumulator.counts.total,
                                 pending: summaryAccumulator.counts.pending,
@@ -352,6 +386,13 @@ const getFreelancerFinancialOverview = async (
                 earnings: {
                         summary: earningsSummary,
                         timelineByCurrency
+                },
+                stripeBalance: payoutSnapshot.balance,
+                payouts: {
+                        payoutsEnabled: payoutSnapshot.payoutsEnabled,
+                        stripeAccountId: payoutSnapshot.stripeAccountId,
+                        summary: payoutSnapshot.summary,
+                        history: payoutSnapshot.history
                 },
                 spending
         }

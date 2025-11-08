@@ -475,10 +475,10 @@ const createLoginLink = async (userId: string, input: ConnectAccountLoginLinkInp
 }
 
 const deleteConnectAccount = async (userId: string) => {
-	await ensureFreelancerContext(userId)
+        await ensureFreelancerContext(userId)
 
-	const accountRecord = await prismaClient.freelancerConnectAccount.findUnique({
-		where: { freelancerId: userId }
+        const accountRecord = await prismaClient.freelancerConnectAccount.findUnique({
+                where: { freelancerId: userId }
 	})
 
 	if (!accountRecord) {
@@ -495,15 +495,17 @@ const deleteConnectAccount = async (userId: string) => {
 		}
 	}
 
-	await prismaClient.freelancerConnectAccount.delete({
-		where: { freelancerId: userId }
-	})
+        await prismaClient.freelancerConnectAccount.delete({
+                where: { freelancerId: userId }
+        })
 }
 
+export { ensureStripeAccount }
+
 export default {
-	getConnectAccount,
-	getConnectAccountStatus,
-	createAccountLink,
+        getConnectAccount,
+        getConnectAccountStatus,
+        createAccountLink,
 	createLoginLink,
 	deleteConnectAccount
 }

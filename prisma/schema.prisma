@@ -194,6 +194,7 @@ model Freelancer {
   matchInteractions            MatchInteraction[]
   savedJobs                    FreelancerSavedJob[]
   savedByClients               ClientSavedFreelancer[]
+  payouts                     FreelancerPayout[]
 
   createdAt            DateTime              @default(now()) @map("created_at")
   updatedAt            DateTime              @updatedAt @map("updated_at")
@@ -206,6 +207,19 @@ enum StripeConnectAccountType {
   EXPRESS
   STANDARD
   CUSTOM
+}
+
+enum FreelancerPayoutStatus {
+  PENDING
+  IN_TRANSIT
+  PAID
+  FAILED
+  CANCELED
+}
+
+enum FreelancerPayoutSource {
+  PLATFORM
+  STRIPE_DASHBOARD
 }
 
 model FreelancerConnectAccount {
@@ -234,6 +248,49 @@ model FreelancerConnectAccount {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("freelancer_connect_account")
+}
+
+model FreelancerPayout {
+  id          String                  @id @default(cuid())
+  freelancerId String                 @map("freelancer_id")
+  freelancer   Freelancer             @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+  amount   Decimal               @db.Decimal(12, 2)
+  currency String
+  status   FreelancerPayoutStatus @default(PENDING)
+  source   FreelancerPayoutSource @default(PLATFORM)
+
+  stripePayoutId             String? @unique @map("stripe_payout_id")
+  stripeBalanceTransactionId String? @map("stripe_balance_transaction_id")
+  idemKey                    String? @unique @map("idem_key")
+  description                String? @db.VarChar(255)
+  failureCode                String? @map("failure_code") @db.VarChar(255)
+  failureMessage             String? @map("failure_message") @db.VarChar(255)
+  metadata                   Json?   @map("metadata")
+  stripeCreatedAt            DateTime? @map("stripe_created_at")
+  arrivalDate                DateTime? @map("arrival_date")
+  requestedAt                DateTime? @map("requested_at")
+  completedAt                DateTime? @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  payoutTransfers FreelancerPayoutTransfer[]
+
+  @@index([freelancerId])
+  @@map("freelancer_payout")
+}
+
+model FreelancerPayoutTransfer {
+  payoutId   String @map("payout_id")
+  transferId String @map("transfer_id")
+
+  payout   FreelancerPayout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  transfer Transfer         @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  @@id([payoutId, transferId])
+  @@index([transferId])
+  @@map("freelancer_payout_transfer")
 }
 
 enum PortfolioVisibility {
@@ -1180,6 +1237,8 @@ model Transfer {
   updatedAt            DateTime       @updatedAt @map("updated_at")
 
   escrow Escrow @relation(fields: [escrowId], references: [id])
+
+  payoutLinks FreelancerPayoutTransfer[]
 
   @@index([escrowId])
 }
