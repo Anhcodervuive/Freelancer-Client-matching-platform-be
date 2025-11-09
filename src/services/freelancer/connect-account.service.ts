@@ -366,18 +366,45 @@ const createAccountLinkForAccount = async (
                 }
         }
 
+        const shouldFallbackToOnboarding = (
+                error: unknown,
+                attemptedType: Stripe.AccountLinkCreateParams.Type
+        ): error is Stripe.errors.StripeInvalidRequestError => {
+                if (attemptedType !== 'account_update') {
+                        return false
+                }
+
+                if (!(error instanceof Stripe.errors.StripeInvalidRequestError)) {
+                        return false
+                }
+
+                const normalize = (value: unknown) =>
+                        typeof value === 'string' ? value.toLowerCase() : ''
+
+                const message = normalize(error.message)
+                const rawMessage = normalize((error.raw && (error.raw as { message?: string }).message) ?? undefined)
+
+                if (message.includes('account_update') && message.includes('account_onboarding')) {
+                        return true
+                }
+
+                if (rawMessage.includes('account_update') && rawMessage.includes('account_onboarding')) {
+                        return true
+                }
+
+                if (normalize(error.code).includes('account') && normalize(error.param) === 'type') {
+                        return true
+                }
+
+                return false
+        }
+
         const initialType = resolveLinkType(options.mode)
 
         try {
                 return await attemptCreate(initialType)
         } catch (error) {
-                const shouldFallbackToOnboarding =
-                        initialType === 'account_update' &&
-                        error instanceof Stripe.errors.StripeInvalidRequestError &&
-                        typeof error.message === 'string' &&
-                        error.message.includes('cannot create account_update')
-
-                if (shouldFallbackToOnboarding) {
+                if (shouldFallbackToOnboarding(error, initialType)) {
                         return attemptCreate('account_onboarding')
                 }
 
