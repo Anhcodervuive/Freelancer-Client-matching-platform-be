@@ -328,6 +328,46 @@ const ensureStripeAccount = async (userId: string, options?: EnsureAccountOption
 	return { user, freelancer, account, accountRecord }
 }
 
+const hasOutstandingRequirements = (account: Stripe.Account | null, accountRecord: FreelancerConnectAccount) => {
+        if (!accountRecord.detailsSubmitted) {
+                return true
+        }
+
+        const requirements = account?.requirements
+
+        if (!requirements) {
+                return false
+        }
+
+        const requiredFields = [
+                ...(requirements.currently_due ?? []),
+                ...(requirements.past_due ?? []),
+                ...(requirements.eventually_due ?? []),
+                ...(requirements.pending_verification ?? [])
+        ]
+
+        if (requiredFields.some(value => typeof value === 'string' && value.trim().length > 0)) {
+                return true
+        }
+
+        if ((requirements.errors ?? []).length > 0) {
+                return true
+        }
+
+        const disabledReason = requirements.disabled_reason ?? accountRecord.disabledReason
+        if (typeof disabledReason === 'string' && disabledReason.trim().length > 0) {
+                return true
+        }
+
+        if (account && !account.payouts_enabled) {
+                return true
+        }
+
+        const universe = gatherRequirementCodes(account ?? null, accountRecord)
+
+        return universe.size > 0
+}
+
 const createAccountLinkForAccount = async (
         account: Stripe.Account,
         accountRecord: FreelancerConnectAccount,
@@ -337,8 +377,13 @@ const createAccountLinkForAccount = async (
                 refreshUrl: string
         }
 ): Promise<AccountLinkResponse> => {
-        const resolveLinkType = (mode: AccountLinkMode): Stripe.AccountLinkCreateParams.Type =>
-                accountRecord.detailsSubmitted && mode === 'update' ? 'account_update' : 'account_onboarding'
+        const resolveLinkType = (mode: AccountLinkMode): Stripe.AccountLinkCreateParams.Type => {
+                if (mode === 'onboarding') {
+                        return 'account_onboarding'
+                }
+
+                return hasOutstandingRequirements(account, accountRecord) ? 'account_onboarding' : 'account_update'
+        }
 
         const buildParams = (linkType: Stripe.AccountLinkCreateParams.Type): Stripe.AccountLinkCreateParams => {
                 const params: Stripe.AccountLinkCreateParams = {
@@ -393,6 +438,16 @@ const createAccountLinkForAccount = async (
                 }
 
                 if (normalize(error.code).includes('account') && normalize(error.param) === 'type') {
+                        return true
+                }
+
+                const rawType = normalize((error.raw && (error.raw as { type?: string }).type) ?? undefined)
+                if (rawType === 'invalid_request_error' && normalize((error.raw && (error.raw as { param?: string }).param) ?? undefined) === 'type') {
+                        return true
+                }
+
+                const rawCode = normalize((error.raw && (error.raw as { code?: string }).code) ?? undefined)
+                if (rawCode.includes('link_type') || rawCode.includes('account_link')) {
                         return true
                 }
 
