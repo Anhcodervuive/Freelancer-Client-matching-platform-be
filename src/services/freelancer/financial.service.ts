@@ -15,6 +15,7 @@ import {
 import freelancerPayoutService, {
         BalanceEntry as StripeBalanceEntry,
         PayoutHistoryEntry,
+        PayoutRestrictions,
         PayoutSummaryEntry
 } from '~/services/freelancer/payout.service'
 
@@ -97,6 +98,7 @@ export type FreelancerFinancialOverview = {
                 stripeAccountId: string | null
                 summary: PayoutSummaryEntry[]
                 history: PayoutHistoryEntry[]
+                restrictions: PayoutRestrictions
         }
         spending: SpendingStatisticsResult
 }
@@ -404,7 +406,8 @@ const getFreelancerFinancialOverview = async (
                         payoutsEnabled: payoutSnapshot.payoutsEnabled,
                         stripeAccountId: payoutSnapshot.stripeAccountId,
                         summary: payoutSnapshot.summary,
-                        history: payoutSnapshot.history
+                        history: payoutSnapshot.history,
+                        restrictions: payoutSnapshot.restrictions
                 },
                 spending
         }

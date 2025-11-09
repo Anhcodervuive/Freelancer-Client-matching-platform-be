@@ -37,11 +37,100 @@ const ZERO_DECIMAL_CURRENCIES = new Set([
 
 const DEFAULT_HISTORY_LIMIT = 50
 
+const DISABLED_REASON_MESSAGES: Record<string, string> = {
+        requirements_past_due: 'Stripe đã khoá chức năng rút tiền vì hồ sơ có thông tin quá hạn',
+        requirements_pending_verification: 'Stripe đang tạm khoá payouts cho tới khi hoàn tất kiểm tra hồ sơ',
+        requirements_pending_review: 'Stripe đang xem xét hồ sơ payouts của bạn',
+        rejected_fraud: 'Stripe nghi ngờ gian lận và đã từ chối payouts',
+        rejected_terms_of_service: 'Stripe đã vô hiệu hoá payouts vì vi phạm điều khoản sử dụng',
+        rejected_other: 'Stripe đã vô hiệu hoá payouts cho tài khoản này',
+        platform_paused: 'Stripe đã khoá payouts theo yêu cầu của nền tảng',
+        platform_restricted: 'Stripe đã khoá payouts do nền tảng giới hạn quyền sử dụng',
+        listed: 'Stripe đã khoá payouts do tài khoản nằm trong danh sách hạn chế',
+        government_request: 'Stripe đã khoá payouts theo yêu cầu của cơ quan quản lý',
+        bank_account_restricted: 'Stripe không thể sử dụng tài khoản ngân hàng hiện tại để trả tiền',
+        external_account: 'Stripe yêu cầu cập nhật lại tài khoản ngân hàng nhận tiền',
+        payouts_not_allowed: 'Stripe chưa cho phép tài khoản này rút tiền'
+}
+
+const REQUIREMENT_MESSAGES: Record<string, string> = {
+        external_account: 'Cập nhật hoặc thay đổi tài khoản ngân hàng nhận tiền',
+        'external_account.verification': 'Xác thực tài khoản ngân hàng nhận tiền',
+        'external_account.ownership_declaration': 'Xác nhận quyền sở hữu tài khoản ngân hàng',
+        'individual.verification.document': 'Tải giấy tờ xác minh danh tính cá nhân',
+        'individual.verification.additional_document': 'Bổ sung giấy tờ xác minh danh tính cá nhân',
+        'representative.verification.document': 'Tải giấy tờ xác minh đại diện tài khoản',
+        'company.verification.document': 'Tải giấy tờ chứng minh doanh nghiệp',
+        'relationship.account_opener.verification.document': 'Tải giấy tờ xác minh người mở tài khoản',
+        'relationship.director.verification.document': 'Tải giấy tờ xác minh giám đốc doanh nghiệp',
+        'relationship.owner.verification.document': 'Tải giấy tờ xác minh chủ sở hữu doanh nghiệp'
+}
+
 const handleStripeError = (error: unknown): never => {
         if (error instanceof Stripe.errors.StripeError) {
                 throw new BadRequestException(error.message, ErrorCode.PARAM_QUERY_ERROR)
         }
         throw error
+}
+
+const humanizeDisabledReason = (code: string | null | undefined) => {
+        if (!code) {
+                return 'Stripe đã khoá chức năng rút tiền cho tài khoản này'
+        }
+
+        const normalized = code.replace(/\./g, '_')
+        return DISABLED_REASON_MESSAGES[normalized] ?? `Stripe đã khoá payouts (${code})`
+}
+
+const humanizeRequirementCode = (code: string) => {
+        const normalized = code.trim()
+        if (!normalized) {
+                return null
+        }
+
+        if (REQUIREMENT_MESSAGES[normalized]) {
+                return REQUIREMENT_MESSAGES[normalized]
+        }
+
+        const readable = normalized
+                .replace(/\./g, ' ')
+                .replace(/_/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+
+        return `Cập nhật hạng mục "${readable}" trên Stripe`
+}
+
+const describeRequirementList = (requirements: string[]) =>
+        requirements
+                .map(humanizeRequirementCode)
+                .filter((message): message is string => Boolean(message))
+
+const describeBankAccountIssue = (bankAccount: Stripe.BankAccount) => {
+        const bankName = bankAccount.bank_name ?? 'tài khoản ngân hàng'
+        const masked = bankAccount.last4 ? `${bankName} ****${bankAccount.last4}` : bankName
+        const failureCode = (bankAccount as Stripe.BankAccount & { failure_code?: string }).failure_code
+        const failureDetails = failureCode ?? bankAccount.status ?? null
+        const statusHint = failureDetails ? `. Stripe báo cáo trạng thái: ${failureDetails}` : ''
+
+        return `Stripe đã đánh dấu ${masked} không thể nhận payout${statusHint}. Vui lòng cập nhật lại thông tin ngân hàng trên Stripe trước khi rút tiền.`
+}
+
+const findProblematicBankAccount = (account: Stripe.Account) => {
+        const externalAccounts = account.external_accounts?.data ?? []
+
+        for (const external of externalAccounts) {
+                if (external.object !== 'bank_account') {
+                        continue
+                }
+
+                const bank = external as Stripe.BankAccount
+                if (bank.status === 'errored' || bank.status === 'verification_failed') {
+                        return bank
+                }
+        }
+
+        return null
 }
 
 const toMinorUnitAmount = (value: Prisma.Decimal | number | string, currency: string) => {
@@ -64,23 +153,31 @@ const fromMinorUnitAmount = (value: number, currency: string) => {
         return new Prisma.Decimal(value).dividedBy(100)
 }
 
+const normalizeCurrency = (value: string | null | undefined) => value?.toUpperCase() ?? ''
+
 const sumBalanceMinorUnits = (entries: Stripe.Balance.Available[], currency: string) => {
         const lowerCurrency = currency.toLowerCase()
         return entries
-                .filter(entry => entry.currency === lowerCurrency)
+                .filter(entry => entry.currency.toLowerCase() === lowerCurrency)
                 .reduce((sum, entry) => sum + entry.amount, 0)
 }
 
 const aggregateBalanceEntries = (items: Stripe.Balance.Available[], currency?: string) => {
         const map = new Map<string, Prisma.Decimal>()
-        const currencyFilter = currency?.toLowerCase()
+        const currencyFilter = currency ? currency.toUpperCase() : undefined
 
         for (const item of items) {
-                if (currencyFilter && item.currency !== currencyFilter) {
+                const itemCurrency = normalizeCurrency(item.currency)
+
+                if (!itemCurrency) {
                         continue
                 }
 
-                const key = item.currency.toUpperCase()
+                if (currencyFilter && itemCurrency !== currencyFilter) {
+                        continue
+                }
+
+                const key = itemCurrency
                 const existing = map.get(key) ?? new Prisma.Decimal(0)
                 const value = fromMinorUnitAmount(item.amount, item.currency)
                 map.set(key, existing.plus(value))
@@ -152,10 +249,15 @@ type PayoutSummaryEntry = {
 
 type PayoutRestrictions = {
         disabledReason: string | null
+        disabledReasonMessage: string | null
         disabledAt: string | null
         currentlyDue: string[]
+        currentlyDueMessages: string[]
         pastDue: string[]
+        pastDueMessages: string[]
         eventuallyDue: string[]
+        eventuallyDueMessages: string[]
+        externalAccountIssueMessage: string | null
 }
 
 type PayoutSnapshot = {
@@ -390,15 +492,28 @@ const getPayoutSnapshot = async (
                 const summary = computePayoutSummary(payoutRecords)
 
                 const requirements = account.requirements
+                const disabledReasonCode =
+                        requirements?.disabled_reason ?? accountRecord.disabledReason ?? null
+                const currentlyDue = requirements?.currently_due ?? []
+                const pastDue = requirements?.past_due ?? []
+                const eventuallyDue = requirements?.eventually_due ?? []
+                const problematicBank = findProblematicBankAccount(account)
 
                 const restrictions: PayoutRestrictions = {
-                        disabledReason: requirements?.disabled_reason ?? null,
+                        disabledReason: disabledReasonCode,
+                        disabledReasonMessage: humanizeDisabledReason(disabledReasonCode),
                         disabledAt: requirements?.current_deadline
                                 ? new Date(requirements.current_deadline * 1000).toISOString()
-                                : null,
-                        currentlyDue: requirements?.currently_due ?? [],
-                        pastDue: requirements?.past_due ?? [],
-                        eventuallyDue: requirements?.eventually_due ?? []
+                                : accountRecord.disabledAt?.toISOString() ?? null,
+                        currentlyDue,
+                        currentlyDueMessages: describeRequirementList(currentlyDue),
+                        pastDue,
+                        pastDueMessages: describeRequirementList(pastDue),
+                        eventuallyDue,
+                        eventuallyDueMessages: describeRequirementList(eventuallyDue),
+                        externalAccountIssueMessage: problematicBank
+                                ? describeBankAccountIssue(problematicBank)
+                                : null
                 }
 
                 return {
@@ -432,10 +547,15 @@ const getPayoutSnapshot = async (
                 history: payoutRecords.map(mapPayoutRecord),
                 restrictions: {
                         disabledReason: null,
+                        disabledReasonMessage: null,
                         disabledAt: null,
                         currentlyDue: [],
+                        currentlyDueMessages: [],
                         pastDue: [],
-                        eventuallyDue: []
+                        pastDueMessages: [],
+                        eventuallyDue: [],
+                        eventuallyDueMessages: [],
+                        externalAccountIssueMessage: null
                 }
         }
 }
@@ -500,22 +620,31 @@ const createFreelancerPayout = async (
 
         if (!account.payouts_enabled || !accountRecord.payoutsEnabled) {
                 const requirements = account.requirements
-                const disabledReason =
-                        requirements?.disabled_reason ?? accountRecord.disabledReason ?? 'Stripe đã khoá payouts'
+                const disabledReasonCode =
+                        requirements?.disabled_reason ?? accountRecord.disabledReason ?? null
                 const pendingFields = [
                         ...(requirements?.currently_due ?? []),
                         ...(requirements?.past_due ?? []),
                         ...(requirements?.eventually_due ?? [])
                 ]
+                const pendingDescriptions = describeRequirementList(pendingFields)
 
-                let message = disabledReason
-                if (pendingFields.length > 0) {
-                        message = `${message}. Vui lòng cập nhật các thông tin còn thiếu (${pendingFields.join(', ')}) trên Stripe trước khi rút tiền.`
+                let message = humanizeDisabledReason(disabledReasonCode)
+                if (pendingDescriptions.length > 0) {
+                        message = `${message}. Bạn cần hoàn tất các hạng mục sau trên Stripe: ${pendingDescriptions.join(', ')}.`
                 } else {
-                        message = `${message}. Vui lòng đăng nhập Stripe để cập nhật thông tin trước khi rút tiền.`
+                        message = `${message}. Vui lòng đăng nhập Stripe Dashboard để cập nhật thông tin trước khi rút tiền.`
                 }
 
                 throw new BadRequestException(message, ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const problematicBank = findProblematicBankAccount(account)
+        if (problematicBank) {
+                throw new BadRequestException(
+                        describeBankAccountIssue(problematicBank),
+                        ErrorCode.PARAM_QUERY_ERROR
+                )
         }
 
         if (input.transferIds && input.transferIds.length > 0) {
