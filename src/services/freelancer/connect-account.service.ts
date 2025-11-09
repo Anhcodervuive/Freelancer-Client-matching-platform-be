@@ -329,36 +329,60 @@ const ensureStripeAccount = async (userId: string, options?: EnsureAccountOption
 }
 
 const createAccountLinkForAccount = async (
-	account: Stripe.Account,
-	accountRecord: FreelancerConnectAccount,
-	options: {
-		mode: AccountLinkMode
-		returnUrl: string
-		refreshUrl: string
-	}
+        account: Stripe.Account,
+        accountRecord: FreelancerConnectAccount,
+        options: {
+                mode: AccountLinkMode
+                returnUrl: string
+                refreshUrl: string
+        }
 ): Promise<AccountLinkResponse> => {
-	const linkType: Stripe.AccountLinkCreateParams.Type =
-		accountRecord.detailsSubmitted && options.mode === 'update' ? 'account_update' : 'account_onboarding'
+        const resolveLinkType = (mode: AccountLinkMode): Stripe.AccountLinkCreateParams.Type =>
+                accountRecord.detailsSubmitted && mode === 'update' ? 'account_update' : 'account_onboarding'
 
-	const params: Stripe.AccountLinkCreateParams = {
-		account: account.id,
-		return_url: options.returnUrl,
-		refresh_url: options.refreshUrl,
-		type: linkType
-	}
+        const buildParams = (linkType: Stripe.AccountLinkCreateParams.Type): Stripe.AccountLinkCreateParams => {
+                const params: Stripe.AccountLinkCreateParams = {
+                        account: account.id,
+                        return_url: options.returnUrl,
+                        refresh_url: options.refreshUrl,
+                        type: linkType
+                }
 
-	if (params.type === 'account_onboarding') {
-		params.collect = 'eventually_due'
-	}
+                if (linkType === 'account_onboarding') {
+                        params.collect = 'eventually_due'
+                }
 
-	const accountLink = await stripe.accountLinks.create(params)
+                return params
+        }
 
-	return {
-		url: accountLink.url,
-		expiresAt: new Date(accountLink.expires_at * 1000).toISOString(),
-		linkType: params.type,
-		connectAccount: accountRecord
-	}
+        const attemptCreate = async (linkType: Stripe.AccountLinkCreateParams.Type): Promise<AccountLinkResponse> => {
+                const accountLink = await stripe.accountLinks.create(buildParams(linkType))
+
+                return {
+                        url: accountLink.url,
+                        expiresAt: new Date(accountLink.expires_at * 1000).toISOString(),
+                        linkType,
+                        connectAccount: accountRecord
+                }
+        }
+
+        const initialType = resolveLinkType(options.mode)
+
+        try {
+                return await attemptCreate(initialType)
+        } catch (error) {
+                const shouldFallbackToOnboarding =
+                        initialType === 'account_update' &&
+                        error instanceof Stripe.errors.StripeInvalidRequestError &&
+                        typeof error.message === 'string' &&
+                        error.message.includes('cannot create account_update')
+
+                if (shouldFallbackToOnboarding) {
+                        return attemptCreate('account_onboarding')
+                }
+
+                return handleStripeError(error)
+        }
 }
 
 /**
