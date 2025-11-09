@@ -20,6 +20,20 @@ export const ConnectAccountLinkSchema = z.object({
         country: CountryCodeSchema.optional()
 })
 
+const RequirementCodeSchema = z
+        .string()
+        .trim()
+        .min(1, 'Mã yêu cầu không được để trống.')
+
+export const ConnectAccountRequirementLinkSchema = z.object({
+        requirementCodes: z
+                .array(RequirementCodeSchema)
+                .min(1, 'Cần truyền ít nhất một mã yêu cầu nếu muốn giới hạn hạng mục cần cập nhật.')
+                .optional(),
+        returnUrl: z.string().url().optional(),
+        refreshUrl: z.string().url().optional()
+})
+
 // Request body for generating a dashboard login link. When no redirectUrl is
 // provided Stripe will send the freelancer back to the previous page.
 export const ConnectAccountLoginLinkSchema = z.object({
@@ -32,5 +46,6 @@ export const ConnectAccountStatusQuerySchema = z.object({
 })
 
 export type ConnectAccountLinkInput = z.infer<typeof ConnectAccountLinkSchema>
+export type ConnectAccountRequirementLinkInput = z.infer<typeof ConnectAccountRequirementLinkSchema>
 export type ConnectAccountLoginLinkInput = z.infer<typeof ConnectAccountLoginLinkSchema>
 export type ConnectAccountStatusQuery = z.infer<typeof ConnectAccountStatusQuerySchema>

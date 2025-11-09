@@ -3,6 +3,7 @@ import { Router } from 'express'
 import {
         createConnectAccountLink,
         createConnectAccountLoginLink,
+        createConnectAccountRequirementLink,
         deleteConnectAccount,
         getConnectAccount,
         getConnectAccountStatus
@@ -18,6 +19,11 @@ const router = Router()
 router.get('/', authenticateMiddleware, errorHandler(getConnectAccount))
 router.get('/status', authenticateMiddleware, errorHandler(getConnectAccountStatus))
 router.post('/link', authenticateMiddleware, errorHandler(createConnectAccountLink))
+router.post(
+        '/requirements-link',
+        authenticateMiddleware,
+        errorHandler(createConnectAccountRequirementLink)
+)
 router.post('/login-link', authenticateMiddleware, errorHandler(createConnectAccountLoginLink))
 router.delete('/', authenticateMiddleware, errorHandler(deleteConnectAccount))
 

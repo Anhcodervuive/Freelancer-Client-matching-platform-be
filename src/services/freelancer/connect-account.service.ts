@@ -8,9 +8,10 @@ import { BadRequestException } from '~/exceptions/bad-request'
 import { InternalServerException } from '~/exceptions/internal-server'
 import { ErrorCode } from '~/exceptions/root'
 import type {
-	ConnectAccountLinkInput,
-	ConnectAccountLoginLinkInput,
-	ConnectAccountStatusQuery
+        ConnectAccountLinkInput,
+        ConnectAccountLoginLinkInput,
+        ConnectAccountRequirementLinkInput,
+        ConnectAccountStatusQuery
 } from '~/schema/freelancer-connect-account.schema'
 
 const stripe = new Stripe(STRIPE_CONFIG_INFO.API_KEY!)
@@ -62,10 +63,11 @@ type EnsureAccountOptions = {
 }
 
 type AccountLinkResponse = {
-	url: string
-	expiresAt: string
-	linkType: Stripe.AccountLinkCreateParams.Type
-	connectAccount: FreelancerConnectAccount
+        url: string
+        expiresAt: string
+        linkType: Stripe.AccountLinkCreateParams.Type
+        connectAccount: FreelancerConnectAccount
+        targetedRequirements?: string[]
 }
 
 // Helper to convert Stripe enums into our uppercase representation so that the
@@ -83,11 +85,59 @@ const mapAccountType = (type: Stripe.Account.Type | null | undefined): 'EXPRESS'
 }
 
 const parseJsonStringArray = (value: unknown): string[] => {
-	if (!Array.isArray(value)) {
-		return []
-	}
+        if (!Array.isArray(value)) {
+                return []
+        }
 
-	return value.filter((item): item is string => typeof item === 'string')
+        return value.filter((item): item is string => typeof item === 'string')
+}
+
+const normalizeRequirementCodes = (codes: string[]): string[] => {
+        const unique = new Set<string>()
+
+        for (const code of codes) {
+                const trimmed = code.trim()
+                if (trimmed) {
+                        unique.add(trimmed)
+                }
+        }
+
+        return Array.from(unique)
+}
+
+const gatherRequirementCodes = (
+        account: Stripe.Account | null,
+        accountRecord: FreelancerConnectAccount
+): Set<string> => {
+        const codes = new Set<string>()
+
+        const pushMany = (values: string[]) => {
+                for (const value of values) {
+                        if (value) {
+                                codes.add(value)
+                        }
+                }
+        }
+
+        pushMany(parseJsonStringArray(accountRecord.requirementsCurrentlyDue))
+        pushMany(parseJsonStringArray(accountRecord.requirementsPastDue))
+        pushMany(parseJsonStringArray(accountRecord.requirementsDue))
+
+        const requirementErrors = account?.requirements?.errors ?? []
+        for (const error of requirementErrors) {
+                if (typeof error.code === 'string') {
+                        codes.add(error.code)
+                }
+
+                if (typeof error.requirement === 'string') {
+                        codes.add(error.requirement)
+                }
+        }
+
+        const pendingVerification = account?.requirements?.pending_verification ?? []
+        pushMany(pendingVerification.filter((value): value is string => typeof value === 'string'))
+
+        return codes
 }
 
 /**
@@ -356,7 +406,7 @@ const getConnectAccountStatus = async (userId: string, query: ConnectAccountStat
 		}
 	}
 
-	const mode: AccountLinkMode = 'onboarding'
+        const mode: AccountLinkMode = accountRecord.detailsSubmitted ? 'update' : 'onboarding'
 
 	const returnUrl = query.returnUrl ?? DEFAULT_RETURN_URL
 	const refreshUrl = query.refreshUrl ?? DEFAULT_REFRESH_URL
@@ -374,13 +424,11 @@ const getConnectAccountStatus = async (userId: string, query: ConnectAccountStat
 			}
 		}
 	}
-	console.log('flag 1')
-
-	try {
-		const accountLink = await createAccountLinkForAccount(account, accountRecord, {
-			mode,
-			returnUrl,
-			refreshUrl
+        try {
+                const accountLink = await createAccountLinkForAccount(account, accountRecord, {
+                        mode,
+                        returnUrl,
+                        refreshUrl
 		})
 
 		return {
@@ -405,10 +453,10 @@ const getConnectAccountStatus = async (userId: string, query: ConnectAccountStat
  * the dashboard.
  */
 const createAccountLink = async (userId: string, input: ConnectAccountLinkInput) => {
-	const requestedCountry = input.country ?? null
+        const requestedCountry = input.country ?? null
 
-	const result = await ensureStripeAccount(userId, {
-		createIfMissing: true,
+        const result = await ensureStripeAccount(userId, {
+                createIfMissing: true,
 		requestedCountry
 	})
 
@@ -439,8 +487,66 @@ const createAccountLink = async (userId: string, input: ConnectAccountLinkInput)
 
 		return accountLink
 	} catch (error) {
-		handleStripeError(error)
-	}
+                handleStripeError(error)
+        }
+}
+
+const createRequirementUpdateLink = async (userId: string, input: ConnectAccountRequirementLinkInput) => {
+        const result = await ensureStripeAccount(userId, { createIfMissing: false })
+
+        const { account, accountRecord } = result
+
+        if (!account || !accountRecord) {
+                throw new BadRequestException('Stripe Connect account not found', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const requirementUniverse = gatherRequirementCodes(account, accountRecord)
+
+        const returnUrl = input.returnUrl ?? DEFAULT_RETURN_URL
+        const refreshUrl = input.refreshUrl ?? DEFAULT_REFRESH_URL
+
+        if (!returnUrl || !refreshUrl) {
+                throw new InternalServerException(
+                        'Stripe account links require absolute return and refresh URLs. Provide them in the request body or set CLIENT_URL to a public https domain.',
+                        ErrorCode.INTERNAL_SERVER_ERROR
+                )
+        }
+
+        let targetedRequirements: string[] = []
+
+        if (input.requirementCodes && input.requirementCodes.length > 0) {
+                const normalized = normalizeRequirementCodes(input.requirementCodes)
+
+                const missingCodes = normalized.filter(code => !requirementUniverse.has(code))
+
+                if (missingCodes.length > 0) {
+                        throw new BadRequestException(
+                                `Stripe không yêu cầu các hạng mục: ${missingCodes.join(', ')}. Vui lòng tải lại trang để đồng bộ yêu cầu mới nhất.`,
+                                ErrorCode.PARAM_QUERY_ERROR
+                        )
+                }
+
+                targetedRequirements = normalized
+        } else {
+                targetedRequirements = Array.from(requirementUniverse)
+        }
+
+        const mode: AccountLinkMode = accountRecord.detailsSubmitted ? 'update' : 'onboarding'
+
+        try {
+                const accountLink = await createAccountLinkForAccount(account, accountRecord, {
+                        mode,
+                        returnUrl,
+                        refreshUrl
+                })
+
+                return {
+                        ...accountLink,
+                        targetedRequirements
+                }
+        } catch (error) {
+                handleStripeError(error)
+        }
 }
 
 /**
@@ -506,6 +612,7 @@ export default {
         getConnectAccount,
         getConnectAccountStatus,
         createAccountLink,
-	createLoginLink,
-	deleteConnectAccount
+        createRequirementUpdateLink,
+        createLoginLink,
+        deleteConnectAccount
 }

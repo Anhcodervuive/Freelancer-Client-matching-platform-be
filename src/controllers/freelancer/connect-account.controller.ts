@@ -5,6 +5,7 @@ import freelancerConnectAccountService from '~/services/freelancer/connect-accou
 import {
         ConnectAccountLinkSchema,
         ConnectAccountLoginLinkSchema,
+        ConnectAccountRequirementLinkSchema,
         ConnectAccountStatusQuerySchema
 } from '~/schema/freelancer-connect-account.schema'
 
@@ -43,13 +44,29 @@ export const getConnectAccountStatus = async (req: Request, res: Response) => {
  * capture the freelancer's payout country before starting onboarding.
  */
 export const createConnectAccountLink = async (req: Request, res: Response) => {
-	const userId = req.user?.id
+        const userId = req.user?.id
 
-	const payload = ConnectAccountLinkSchema.parse(req.body)
+        const payload = ConnectAccountLinkSchema.parse(req.body)
 
-	const result = await freelancerConnectAccountService.createAccountLink(userId!, payload)
+        const result = await freelancerConnectAccountService.createAccountLink(userId!, payload)
 
-	return res.status(StatusCodes.CREATED).json(result)
+        return res.status(StatusCodes.CREATED).json(result)
+}
+
+/**
+ * POST /freelancer/connect-account/requirements-link
+ * Generates an update link that focuses on the currently failing Stripe requirements
+ * (for example, sửa thông tin ngân hàng). The frontend can optionally pass specific
+ * requirement codes to double-check that Stripe vẫn đang yêu cầu chúng.
+ */
+export const createConnectAccountRequirementLink = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+
+        const payload = ConnectAccountRequirementLinkSchema.parse(req.body)
+
+        const result = await freelancerConnectAccountService.createRequirementUpdateLink(userId!, payload)
+
+        return res.status(StatusCodes.CREATED).json(result)
 }
 
 /**
