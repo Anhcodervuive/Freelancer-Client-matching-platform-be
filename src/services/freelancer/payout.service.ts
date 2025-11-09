@@ -373,7 +373,7 @@ const getPayoutSnapshot = async (
 
                 const [balance, payoutRecords] = await Promise.all([
                         stripe.balance
-                                .retrieve({ stripeAccount: account.id })
+                                .retrieve({}, { stripeAccount: account.id })
                                 .catch(handleStripeError),
                         prismaClient.freelancerPayout.findMany({
                                 where: {
@@ -526,7 +526,7 @@ const createFreelancerPayout = async (
         }
 
         const balance = await stripe.balance
-                .retrieve({ stripeAccount: account.id })
+                .retrieve({}, { stripeAccount: account.id })
                 .catch(handleStripeError)
 
         const availableMinorUnits = sumBalanceMinorUnits(balance.available, currency)
