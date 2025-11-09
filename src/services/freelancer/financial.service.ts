@@ -315,15 +315,27 @@ const getFreelancerFinancialOverview = async (
         const periodKeys = generatePeriodKeys(timelineStart, timelineEnd, granularity)
         const currencyList = Array.from(currencies).sort()
 
+        const hasStripeBalanceData = payoutSnapshot.stripeAccountId !== null
+
         const earningsSummary: EarningsSummaryEntry[] = currencyList.map(currency => {
                 const summaryAccumulator = transferSummaryMap.get(currency) ?? createSummaryAccumulator()
                 const escrowHolding = escrowHoldings.get(currency) ?? new Prisma.Decimal(0)
 
+                const stripeAvailableBalance = normalizeDecimal(stripeAvailableMap.get(currency))
+                const stripePendingBalance = normalizeDecimal(stripePendingMap.get(currency))
+
+                const pendingPayoutAmount = hasStripeBalanceData
+                        ? stripePendingBalance
+                        : summaryAccumulator.pendingAmount
+                const availablePayoutAmount = hasStripeBalanceData
+                        ? stripeAvailableBalance
+                        : summaryAccumulator.succeededAmount
+
                 return {
                         currency,
                         escrowHoldingAmount: decimalToString(escrowHolding),
-                        pendingPayoutAmount: decimalToString(summaryAccumulator.pendingAmount),
-                        availablePayoutAmount: decimalToString(summaryAccumulator.succeededAmount),
+                        pendingPayoutAmount: decimalToString(pendingPayoutAmount),
+                        availablePayoutAmount: decimalToString(availablePayoutAmount),
                         failedPayoutAmount: decimalToString(summaryAccumulator.failedAmount),
                         reversedPayoutAmount: decimalToString(summaryAccumulator.reversedAmount),
                         stripeAvailableBalance: stripeAvailableMap.get(currency) ?? '0',
