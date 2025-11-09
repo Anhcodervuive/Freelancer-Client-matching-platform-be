@@ -10,6 +10,7 @@ import { ErrorCode } from '~/exceptions/root'
 import type {
         ConnectAccountLinkInput,
         ConnectAccountLoginLinkInput,
+        ConnectAccountRequestCapabilitiesInput,
         ConnectAccountRequirementLinkInput,
         ConnectAccountStatusQuery
 } from '~/schema/freelancer-connect-account.schema'
@@ -70,6 +71,24 @@ type AccountLinkResponse = {
         targetedRequirements?: string[]
 }
 
+const SUPPORTED_CAPABILITIES = ['card_payments', 'transfers'] as const
+
+type SupportedCapability = (typeof SUPPORTED_CAPABILITIES)[number]
+
+type CapabilityStatus = 'active' | 'inactive' | 'pending'
+
+type CapabilityStatusSummary = {
+        capability: SupportedCapability
+        label: string
+        status: CapabilityStatus
+        statusMessage: string
+}
+
+const CAPABILITY_LABELS: Record<SupportedCapability, string> = {
+        card_payments: 'Nhận thanh toán',
+        transfers: 'Rút tiền về ngân hàng'
+}
+
 // Helper to convert Stripe enums into our uppercase representation so that the
 // API response stays consistent with other payment resources.
 const mapAccountType = (type: Stripe.Account.Type | null | undefined): 'EXPRESS' | 'STANDARD' | 'CUSTOM' => {
@@ -103,6 +122,55 @@ const normalizeRequirementCodes = (codes: string[]): string[] => {
         }
 
         return Array.from(unique)
+}
+
+const normalizeCapabilityStatus = (value: unknown): CapabilityStatus => {
+        if (value === 'active' || value === 'pending') {
+                return value
+        }
+
+        return 'inactive'
+}
+
+const describeCapabilityStatus = (capability: SupportedCapability, status: CapabilityStatus) => {
+        switch (capability) {
+                case 'card_payments':
+                        switch (status) {
+                                case 'active':
+                                        return 'Stripe đã bật chức năng nhận thanh toán cho tài khoản này.'
+                                case 'pending':
+                                        return 'Stripe đang xem xét lại hồ sơ để bật nhận thanh toán trực tiếp.'
+                                case 'inactive':
+                                default:
+                                        return 'Stripe chưa cho phép nhận thanh toán trực tiếp. Hãy hoàn tất onboarding và yêu cầu Stripe kích hoạt lại.'
+                        }
+                case 'transfers':
+                default:
+                        switch (status) {
+                                case 'active':
+                                        return 'Stripe đã bật chức năng chuyển tiền về ngân hàng cho tài khoản này.'
+                                case 'pending':
+                                        return 'Stripe đang xử lý yêu cầu bật rút tiền về ngân hàng.'
+                                case 'inactive':
+                                default:
+                                        return 'Stripe chưa cho phép rút tiền về ngân hàng. Cần hoàn tất đầy đủ yêu cầu xác minh trước khi thử lại.'
+                        }
+        }
+}
+
+const summarizeCapabilityStatuses = (account: Stripe.Account): CapabilityStatusSummary[] => {
+        const capabilities = (account.capabilities ?? {}) as Record<string, unknown>
+
+        return SUPPORTED_CAPABILITIES.map(capability => {
+                const status = normalizeCapabilityStatus(capabilities[capability])
+
+                return {
+                        capability,
+                        label: CAPABILITY_LABELS[capability],
+                        status,
+                        statusMessage: describeCapabilityStatus(capability, status)
+                }
+        })
 }
 
 const gatherRequirementCodes = (
@@ -480,10 +548,10 @@ const getConnectAccount = async (userId: string) => {
 }
 
 const getConnectAccountStatus = async (userId: string, query: ConnectAccountStatusQuery) => {
-	const result = await ensureStripeAccount(userId, { createIfMissing: false })
+        const result = await ensureStripeAccount(userId, { createIfMissing: false })
 
-	if (!result.account || !result.accountRecord) {
-		return {
+        if (!result.account || !result.accountRecord) {
+                return {
 			connectAccount: null,
 			needsUpdate: false,
 			nextAction: null
@@ -550,6 +618,57 @@ const getConnectAccountStatus = async (userId: string, query: ConnectAccountStat
 	} catch (error) {
 		return handleStripeError(error)
 	}
+}
+
+const requestCapabilityReview = async (
+        userId: string,
+        input: ConnectAccountRequestCapabilitiesInput
+) => {
+        const result = await ensureStripeAccount(userId, { createIfMissing: false })
+
+        const { account, accountRecord } = result
+
+        if (!account || !accountRecord) {
+                throw new BadRequestException('Stripe Connect account not found', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const requested = input.capabilities && input.capabilities.length > 0
+                ? Array.from(new Set<SupportedCapability>(input.capabilities))
+                : Array.from(SUPPORTED_CAPABILITIES)
+
+        const capabilitiesPayload: Stripe.AccountUpdateParams.Capabilities = {}
+
+        for (const capability of requested) {
+                capabilitiesPayload[
+                        capability as keyof Stripe.AccountUpdateParams.Capabilities
+                ] = { requested: true }
+        }
+
+        let updatedAccount = account
+        let updatedAccountRecord = accountRecord
+
+        if (requested.length > 0) {
+                try {
+                        updatedAccount = (await stripe.accounts.update(account.id, {
+                                capabilities: capabilitiesPayload
+                        })) as Stripe.Account
+
+                        updatedAccountRecord = await prismaClient.freelancerConnectAccount.update({
+                                where: { freelancerId: userId },
+                                data: mapStripeAccountToConnectAccountData(updatedAccount)
+                        })
+                } catch (error) {
+                        handleStripeError(error)
+                }
+        }
+
+        const capabilityStatuses = summarizeCapabilityStatuses(updatedAccount)
+
+        return {
+                requestedCapabilities: requested,
+                capabilityStatuses,
+                connectAccount: updatedAccountRecord
+        }
 }
 
 /**
@@ -712,11 +831,14 @@ const deleteConnectAccount = async (userId: string) => {
         })
 }
 
-export { ensureStripeAccount }
+export { ensureStripeAccount, summarizeCapabilityStatuses }
+
+export type { CapabilityStatusSummary }
 
 export default {
         getConnectAccount,
         getConnectAccountStatus,
+        requestCapabilityReview,
         createAccountLink,
         createRequirementUpdateLink,
         createLoginLink,

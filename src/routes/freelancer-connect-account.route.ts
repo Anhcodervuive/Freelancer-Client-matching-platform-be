@@ -6,7 +6,8 @@ import {
         createConnectAccountRequirementLink,
         deleteConnectAccount,
         getConnectAccount,
-        getConnectAccountStatus
+        getConnectAccountStatus,
+        requestConnectAccountCapabilityReview
 } from '~/controllers/freelancer/connect-account.controller'
 import authenticateMiddleware from '~/middlewares/authentication'
 import { errorHandler } from '~/utils/error-handler'
@@ -23,6 +24,11 @@ router.post(
         '/requirements-link',
         authenticateMiddleware,
         errorHandler(createConnectAccountRequirementLink)
+)
+router.post(
+        '/capabilities/retry',
+        authenticateMiddleware,
+        errorHandler(requestConnectAccountCapabilityReview)
 )
 router.post('/login-link', authenticateMiddleware, errorHandler(createConnectAccountLoginLink))
 router.delete('/', authenticateMiddleware, errorHandler(deleteConnectAccount))

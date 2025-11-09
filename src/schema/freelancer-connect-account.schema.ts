@@ -45,7 +45,19 @@ export const ConnectAccountStatusQuerySchema = z.object({
         refreshUrl: z.string().url().optional()
 })
 
+const CapabilitySchema = z.enum(['card_payments', 'transfers'])
+
+export const ConnectAccountRequestCapabilitiesSchema = z.object({
+        capabilities: z
+                .array(CapabilitySchema)
+                .min(1, 'Cần chọn ít nhất một capability để Stripe xem xét lại.')
+                .optional()
+})
+
 export type ConnectAccountLinkInput = z.infer<typeof ConnectAccountLinkSchema>
 export type ConnectAccountRequirementLinkInput = z.infer<typeof ConnectAccountRequirementLinkSchema>
 export type ConnectAccountLoginLinkInput = z.infer<typeof ConnectAccountLoginLinkSchema>
 export type ConnectAccountStatusQuery = z.infer<typeof ConnectAccountStatusQuerySchema>
+export type ConnectAccountRequestCapabilitiesInput = z.infer<
+        typeof ConnectAccountRequestCapabilitiesSchema
+>

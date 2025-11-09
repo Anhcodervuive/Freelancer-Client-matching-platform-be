@@ -5,6 +5,7 @@ import freelancerConnectAccountService from '~/services/freelancer/connect-accou
 import {
         ConnectAccountLinkSchema,
         ConnectAccountLoginLinkSchema,
+        ConnectAccountRequestCapabilitiesSchema,
         ConnectAccountRequirementLinkSchema,
         ConnectAccountStatusQuerySchema
 } from '~/schema/freelancer-connect-account.schema'
@@ -80,6 +81,21 @@ export const createConnectAccountLoginLink = async (req: Request, res: Response)
         const payload = ConnectAccountLoginLinkSchema.parse(req.body)
 
         const result = await freelancerConnectAccountService.createLoginLink(userId!, payload)
+
+        return res.status(StatusCodes.OK).json(result)
+}
+
+/**
+ * POST /freelancer/connect-account/capabilities/retry
+ * Yêu cầu Stripe kích hoạt lại các capability quan trọng (card_payments, transfers) sau khi freelancer
+ * đã cập nhật hồ sơ, đồng thời trả về trạng thái mới nhất để giao diện hiển thị thông báo rõ ràng.
+ */
+export const requestConnectAccountCapabilityReview = async (req: Request, res: Response) => {
+        const userId = req.user?.id
+
+        const payload = ConnectAccountRequestCapabilitiesSchema.parse(req.body)
+
+        const result = await freelancerConnectAccountService.requestCapabilityReview(userId!, payload)
 
         return res.status(StatusCodes.OK).json(result)
 }

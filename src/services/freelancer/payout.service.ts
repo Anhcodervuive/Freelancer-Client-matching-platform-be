@@ -12,7 +12,11 @@ import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
 import { decimalToString } from '~/services/financial/statistics-helpers'
-import { ensureStripeAccount } from '~/services/freelancer/connect-account.service'
+import {
+        ensureStripeAccount,
+        summarizeCapabilityStatuses,
+        type CapabilityStatusSummary
+} from '~/services/freelancer/connect-account.service'
 
 const stripe = new Stripe(STRIPE_CONFIG_INFO.API_KEY!)
 
@@ -258,6 +262,7 @@ type PayoutRestrictions = {
         eventuallyDue: string[]
         eventuallyDueMessages: string[]
         externalAccountIssueMessage: string | null
+        capabilityStatuses: CapabilityStatusSummary[]
 }
 
 type PayoutSnapshot = {
@@ -513,7 +518,8 @@ const getPayoutSnapshot = async (
                         eventuallyDueMessages: describeRequirementList(eventuallyDue),
                         externalAccountIssueMessage: problematicBank
                                 ? describeBankAccountIssue(problematicBank)
-                                : null
+                                : null,
+                        capabilityStatuses: summarizeCapabilityStatuses(account)
                 }
 
                 return {
@@ -555,7 +561,8 @@ const getPayoutSnapshot = async (
                         pastDueMessages: [],
                         eventuallyDue: [],
                         eventuallyDueMessages: [],
-                        externalAccountIssueMessage: null
+                        externalAccountIssueMessage: null,
+                        capabilityStatuses: []
                 }
         }
 }

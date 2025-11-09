@@ -26,3 +26,8 @@ Nếu Stripe báo lỗi ngân hàng (ví dụ `external_account.bank_name_invali
 Sau khi hoàn tất, Stripe thường xác nhận trong vòng vài phút. Hệ thống của chúng ta sẽ tự đồng bộ trạng thái và freelancer có thể rút tiền lại bình thường.
 
 > **Mẹo**: Nếu vẫn gặp lỗi, hãy xoá tài khoản ngân hàng khỏi Stripe Express rồi thêm lại từ đầu với thông tin mới để Stripe chạy lại quy trình xác minh.
+
+## 5. Yêu cầu Stripe bật lại capability khi tài khoản bị khoá
+- Sau khi cập nhật đầy đủ hồ sơ (bao gồm giấy tờ định danh và ngân hàng), gọi API `POST /api/freelancer/connect-account/capabilities/retry`.
+- Backend sẽ gửi yêu cầu tới Stripe để kích hoạt lại hai capability quan trọng `card_payments` và `transfers`, đồng thời trả về `capabilityStatuses` mô tả tình trạng mới nhất từng capability.
+- Nếu trạng thái vẫn là `inactive`, hãy kiểm tra trường `currentlyDueMessages`/`pastDueMessages` trong response để biết các hạng mục còn thiếu và tiếp tục hoàn tất trên Stripe Dashboard.
