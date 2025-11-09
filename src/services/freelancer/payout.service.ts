@@ -150,6 +150,14 @@ type PayoutSummaryEntry = {
         canceledAmount: string
 }
 
+type PayoutRestrictions = {
+        disabledReason: string | null
+        disabledAt: string | null
+        currentlyDue: string[]
+        pastDue: string[]
+        eventuallyDue: string[]
+}
+
 type PayoutSnapshot = {
         payoutsEnabled: boolean
         stripeAccountId: string | null
@@ -159,6 +167,7 @@ type PayoutSnapshot = {
         }
         summary: PayoutSummaryEntry[]
         history: PayoutHistoryEntry[]
+        restrictions: PayoutRestrictions
 }
 
 type PayoutSnapshotOptions = {
@@ -380,6 +389,18 @@ const getPayoutSnapshot = async (
                 const history = payoutRecords.map(mapPayoutRecord)
                 const summary = computePayoutSummary(payoutRecords)
 
+                const requirements = account.requirements
+
+                const restrictions: PayoutRestrictions = {
+                        disabledReason: requirements?.disabled_reason ?? null,
+                        disabledAt: requirements?.current_deadline
+                                ? new Date(requirements.current_deadline * 1000).toISOString()
+                                : null,
+                        currentlyDue: requirements?.currently_due ?? [],
+                        pastDue: requirements?.past_due ?? [],
+                        eventuallyDue: requirements?.eventually_due ?? []
+                }
+
                 return {
                         payoutsEnabled: accountRecord.payoutsEnabled ?? false,
                         stripeAccountId: accountRecord.stripeAccountId,
@@ -388,7 +409,8 @@ const getPayoutSnapshot = async (
                                 pending: aggregateBalanceEntries(balance.pending, currencyFilter)
                         },
                         summary,
-                        history
+                        history,
+                        restrictions
                 }
         }
 
@@ -407,7 +429,14 @@ const getPayoutSnapshot = async (
                 stripeAccountId: null,
                 balance: { available: [], pending: [] },
                 summary: computePayoutSummary(payoutRecords),
-                history: payoutRecords.map(mapPayoutRecord)
+                history: payoutRecords.map(mapPayoutRecord),
+                restrictions: {
+                        disabledReason: null,
+                        disabledAt: null,
+                        currentlyDue: [],
+                        pastDue: [],
+                        eventuallyDue: []
+                }
         }
 }
 
@@ -469,11 +498,24 @@ const createFreelancerPayout = async (
                 throw new BadRequestException('Freelancer chưa liên kết tài khoản Stripe', ErrorCode.ITEM_NOT_FOUND)
         }
 
-        if (!accountRecord.payoutsEnabled) {
-                throw new BadRequestException(
-                        'Stripe chưa bật payouts cho tài khoản này',
-                        ErrorCode.PARAM_QUERY_ERROR
-                )
+        if (!account.payouts_enabled || !accountRecord.payoutsEnabled) {
+                const requirements = account.requirements
+                const disabledReason =
+                        requirements?.disabled_reason ?? accountRecord.disabledReason ?? 'Stripe đã khoá payouts'
+                const pendingFields = [
+                        ...(requirements?.currently_due ?? []),
+                        ...(requirements?.past_due ?? []),
+                        ...(requirements?.eventually_due ?? [])
+                ]
+
+                let message = disabledReason
+                if (pendingFields.length > 0) {
+                        message = `${message}. Vui lòng cập nhật các thông tin còn thiếu (${pendingFields.join(', ')}) trên Stripe trước khi rút tiền.`
+                } else {
+                        message = `${message}. Vui lòng đăng nhập Stripe để cập nhật thông tin trước khi rút tiền.`
+                }
+
+                throw new BadRequestException(message, ErrorCode.PARAM_QUERY_ERROR)
         }
 
         if (input.transferIds && input.transferIds.length > 0) {
@@ -568,6 +610,7 @@ export type {
         CreateFreelancerPayoutInput,
         PayoutHistoryEntry,
         PayoutSnapshot,
+        PayoutRestrictions,
         PayoutSummaryEntry
 }
 
