@@ -98,6 +98,22 @@ const CAPABILITY_LABELS: Record<SupportedCapability, string> = {
         cash_balance: 'Số dư Stripe Balance'
 }
 
+const CAPABILITY_STATUS_KEYS: Record<SupportedCapability, keyof Stripe.Account.Capabilities | null> = {
+        card_payments: 'card_payments',
+        transfers: 'transfers',
+        platform_payments: 'legacy_payments',
+        bank_account_payments: 'bank_transfer_payments',
+        cash_balance: 'treasury'
+}
+
+const CAPABILITY_REQUEST_KEYS: Record<SupportedCapability, keyof Stripe.AccountUpdateParams.Capabilities | null> = {
+        card_payments: 'card_payments',
+        transfers: 'transfers',
+        platform_payments: 'legacy_payments',
+        bank_account_payments: 'bank_transfer_payments',
+        cash_balance: 'treasury'
+}
+
 // Helper to convert Stripe enums into our uppercase representation so that the
 // API response stays consistent with other payment resources.
 const mapAccountType = (type: Stripe.Account.Type | null | undefined): 'EXPRESS' | 'STANDARD' | 'CUSTOM' => {
@@ -201,10 +217,12 @@ const describeCapabilityStatus = (capability: SupportedCapability, status: Capab
 }
 
 const summarizeCapabilityStatuses = (account: Stripe.Account): CapabilityStatusSummary[] => {
-        const capabilities = (account.capabilities ?? {}) as Record<string, unknown>
+        const capabilities = account.capabilities ?? {}
 
         return SUPPORTED_CAPABILITIES.map(capability => {
-                const status = normalizeCapabilityStatus(capabilities[capability])
+                const stripeKey = CAPABILITY_STATUS_KEYS[capability]
+                const rawStatus = stripeKey ? capabilities[stripeKey] : undefined
+                const status = normalizeCapabilityStatus(rawStatus)
 
                 return {
                         capability,
@@ -679,17 +697,23 @@ const requestCapabilityReview = async (
                 : Array.from(SUPPORTED_CAPABILITIES)
 
         const capabilitiesPayload: Stripe.AccountUpdateParams.Capabilities = {}
+        const ignoredCapabilities: SupportedCapability[] = []
 
         for (const capability of requested) {
-                capabilitiesPayload[
-                        capability as keyof Stripe.AccountUpdateParams.Capabilities
-                ] = { requested: true }
+                const stripeKey = CAPABILITY_REQUEST_KEYS[capability]
+
+                if (!stripeKey) {
+                        ignoredCapabilities.push(capability)
+                        continue
+                }
+
+                capabilitiesPayload[stripeKey] = { requested: true }
         }
 
         let updatedAccount = account
         let updatedAccountRecord = accountRecord
 
-        if (requested.length > 0) {
+        if (Object.keys(capabilitiesPayload).length > 0) {
                 try {
                         updatedAccount = (await stripe.accounts.update(account.id, {
                                 capabilities: capabilitiesPayload
@@ -708,6 +732,7 @@ const requestCapabilityReview = async (
 
         return {
                 requestedCapabilities: requested,
+                ignoredCapabilities,
                 capabilityStatuses,
                 connectAccount: updatedAccountRecord
         }
