@@ -71,15 +71,11 @@ type AccountLinkResponse = {
         targetedRequirements?: string[]
 }
 
-const SUPPORTED_CAPABILITIES = [
-        'card_payments',
-        'transfers',
-        'platform_payments',
-        'bank_account_payments',
-        'cash_balance'
-] as const
+const SUPPORTED_CAPABILITIES = ['card_payments', 'transfers', 'payouts'] as const
 
 type SupportedCapability = (typeof SUPPORTED_CAPABILITIES)[number]
+
+const REQUESTABLE_CAPABILITIES: SupportedCapability[] = ['transfers']
 
 type CapabilityStatus = 'active' | 'inactive' | 'pending'
 
@@ -93,25 +89,19 @@ type CapabilityStatusSummary = {
 const CAPABILITY_LABELS: Record<SupportedCapability, string> = {
         card_payments: 'Nhận thanh toán',
         transfers: 'Rút tiền về ngân hàng',
-        platform_payments: 'Thanh toán qua nền tảng',
-        bank_account_payments: 'Thanh toán qua ngân hàng',
-        cash_balance: 'Số dư Stripe Balance'
+        payouts: 'Kích hoạt rút tiền'
 }
 
 const CAPABILITY_STATUS_KEYS: Record<SupportedCapability, keyof Stripe.Account.Capabilities | null> = {
         card_payments: 'card_payments',
         transfers: 'transfers',
-        platform_payments: 'legacy_payments',
-        bank_account_payments: 'bank_transfer_payments',
-        cash_balance: 'treasury'
+        payouts: null
 }
 
 const CAPABILITY_REQUEST_KEYS: Record<SupportedCapability, keyof Stripe.AccountUpdateParams.Capabilities | null> = {
-        card_payments: 'card_payments',
+        card_payments: null,
         transfers: 'transfers',
-        platform_payments: 'legacy_payments',
-        bank_account_payments: 'bank_transfer_payments',
-        cash_balance: 'treasury'
+        payouts: null
 }
 
 // Helper to convert Stripe enums into our uppercase representation so that the
@@ -185,42 +175,44 @@ const describeCapabilityStatus = (capability: SupportedCapability, status: Capab
                                 inactive:
                                         'Stripe chưa cho phép rút tiền về ngân hàng. Cần hoàn tất đầy đủ yêu cầu xác minh trước khi thử lại.'
                         })
-                case 'platform_payments':
-                        return render({
-                                active: 'Stripe đã bật xử lý thanh toán qua nền tảng cho tài khoản này.',
-                                pending: 'Stripe đang xem xét yêu cầu kích hoạt xử lý thanh toán qua nền tảng.',
-                                inactive:
-                                        'Stripe chưa cho phép xử lý thanh toán qua nền tảng. Cần hoàn tất onboarding và gửi yêu cầu kích hoạt.'
-                        })
-                case 'bank_account_payments':
-                        return render({
-                                active: 'Stripe đã bật thanh toán qua tài khoản ngân hàng (ví dụ: ACH, chuyển khoản) cho tài khoản này.',
-                                pending: 'Stripe đang thẩm định để bật thanh toán qua tài khoản ngân hàng.',
-                                inactive:
-                                        'Stripe chưa cho phép thanh toán qua tài khoản ngân hàng. Hãy bổ sung hồ sơ và yêu cầu Stripe kích hoạt.'
-                        })
-                case 'cash_balance':
-                        return render({
-                                active: 'Stripe đã bật số dư Stripe Balance để giữ và sử dụng tiền trong tài khoản.',
-                                pending: 'Stripe đang xử lý yêu cầu bật số dư Stripe Balance.',
-                                inactive:
-                                        'Stripe chưa cho phép sử dụng Stripe Balance. Hãy kiểm tra các yêu cầu xác minh còn thiếu và gửi lại yêu cầu.'
-                        })
+                case 'payouts':
                 default:
                         return render({
-                                active: 'Stripe đã bật capability này.',
-                                pending: 'Stripe đang xử lý yêu cầu kích hoạt capability này.',
+                                active: 'Stripe đã bật chức năng rút tiền cho tài khoản này.',
+                                pending: 'Stripe đang xem xét hồ sơ để mở khoá chức năng rút tiền.',
                                 inactive:
-                                        'Stripe chưa bật capability này. Hãy hoàn tất các yêu cầu xác minh và thử lại.'
+                                        'Stripe đang khoá chức năng rút tiền. Hãy kiểm tra các yêu cầu còn thiếu và gửi lại yêu cầu xem xét.'
                         })
         }
 }
 
 const summarizeCapabilityStatuses = (account: Stripe.Account): CapabilityStatusSummary[] => {
         const capabilities = account.capabilities ?? {}
+        const disabledReason = account.requirements?.disabled_reason ?? null
 
         return SUPPORTED_CAPABILITIES.map(capability => {
                 const stripeKey = CAPABILITY_STATUS_KEYS[capability]
+
+                if (capability === 'payouts') {
+                        const payoutsEnabled = Boolean(account.payouts_enabled)
+                        const pendingReasons = new Set([
+                                'requirements_pending_review',
+                                'requirements_pending_verification'
+                        ])
+                        const status: CapabilityStatus = payoutsEnabled
+                                ? 'active'
+                                : disabledReason && pendingReasons.has(disabledReason)
+                                  ? 'pending'
+                                  : 'inactive'
+
+                        return {
+                                capability,
+                                label: CAPABILITY_LABELS[capability],
+                                status,
+                                statusMessage: describeCapabilityStatus(capability, status)
+                        }
+                }
+
                 const rawStatus = stripeKey ? capabilities[stripeKey] : undefined
                 const status = normalizeCapabilityStatus(rawStatus)
 
@@ -692,18 +684,23 @@ const requestCapabilityReview = async (
                 throw new BadRequestException('Stripe Connect account not found', ErrorCode.ITEM_NOT_FOUND)
         }
 
-        const requested = input.capabilities && input.capabilities.length > 0
+        const requestedRaw = input.capabilities && input.capabilities.length > 0
                 ? Array.from(new Set<SupportedCapability>(input.capabilities))
-                : Array.from(SUPPORTED_CAPABILITIES)
+                : REQUESTABLE_CAPABILITIES
+
+        const allowedRequested = requestedRaw.filter(capability =>
+                REQUESTABLE_CAPABILITIES.includes(capability)
+        )
+        const ignoredCapabilities = requestedRaw.filter(
+                capability => !REQUESTABLE_CAPABILITIES.includes(capability)
+        )
 
         const capabilitiesPayload: Stripe.AccountUpdateParams.Capabilities = {}
-        const ignoredCapabilities: SupportedCapability[] = []
 
-        for (const capability of requested) {
+        for (const capability of allowedRequested) {
                 const stripeKey = CAPABILITY_REQUEST_KEYS[capability]
 
                 if (!stripeKey) {
-                        ignoredCapabilities.push(capability)
                         continue
                 }
 
@@ -728,12 +725,10 @@ const requestCapabilityReview = async (
                 }
         }
 
-        const capabilityStatuses = summarizeCapabilityStatuses(updatedAccount)
-
         return {
-                requestedCapabilities: requested,
+                requestedCapabilities: allowedRequested,
                 ignoredCapabilities,
-                capabilityStatuses,
+                capabilityStatuses: summarizeCapabilityStatuses(updatedAccount),
                 connectAccount: updatedAccountRecord
         }
 }
