@@ -87,8 +87,9 @@ export const createConnectAccountLoginLink = async (req: Request, res: Response)
 
 /**
  * POST /freelancer/connect-account/capabilities/retry
- * Yêu cầu Stripe kích hoạt lại các capability quan trọng (card_payments, transfers) sau khi freelancer
- * đã cập nhật hồ sơ, đồng thời trả về trạng thái mới nhất để giao diện hiển thị thông báo rõ ràng.
+ * Yêu cầu Stripe kích hoạt lại các capability quan trọng (card_payments, transfers, platform_payments,
+ * bank_account_payments, cash_balance) sau khi freelancer đã cập nhật hồ sơ, đồng thời trả về trạng thái
+ * mới nhất để giao diện hiển thị thông báo rõ ràng.
  */
 export const requestConnectAccountCapabilityReview = async (req: Request, res: Response) => {
         const userId = req.user?.id

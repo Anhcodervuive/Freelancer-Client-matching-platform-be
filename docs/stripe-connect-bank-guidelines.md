@@ -29,5 +29,5 @@ Sau khi hoàn tất, Stripe thường xác nhận trong vòng vài phút. Hệ t
 
 ## 5. Yêu cầu Stripe bật lại capability khi tài khoản bị khoá
 - Sau khi cập nhật đầy đủ hồ sơ (bao gồm giấy tờ định danh và ngân hàng), gọi API `POST /api/freelancer/connect-account/capabilities/retry`.
-- Backend sẽ gửi yêu cầu tới Stripe để kích hoạt lại hai capability quan trọng `card_payments` và `transfers`, đồng thời trả về `capabilityStatuses` mô tả tình trạng mới nhất từng capability.
+- Backend sẽ gửi yêu cầu tới Stripe để kích hoạt lại các capability quan trọng như `card_payments`, `transfers`, `platform_payments`, `bank_account_payments` và `cash_balance`, đồng thời trả về `capabilityStatuses` mô tả tình trạng mới nhất từng capability.
 - Nếu trạng thái vẫn là `inactive`, hãy kiểm tra trường `currentlyDueMessages`/`pastDueMessages` trong response để biết các hạng mục còn thiếu và tiếp tục hoàn tất trên Stripe Dashboard.

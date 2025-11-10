@@ -45,7 +45,13 @@ export const ConnectAccountStatusQuerySchema = z.object({
         refreshUrl: z.string().url().optional()
 })
 
-const CapabilitySchema = z.enum(['card_payments', 'transfers'])
+const CapabilitySchema = z.enum([
+        'card_payments',
+        'transfers',
+        'platform_payments',
+        'bank_account_payments',
+        'cash_balance'
+])
 
 export const ConnectAccountRequestCapabilitiesSchema = z.object({
         capabilities: z
