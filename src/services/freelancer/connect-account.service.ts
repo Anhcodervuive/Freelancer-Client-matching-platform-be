@@ -71,7 +71,13 @@ type AccountLinkResponse = {
         targetedRequirements?: string[]
 }
 
-const SUPPORTED_CAPABILITIES = ['card_payments', 'transfers'] as const
+const SUPPORTED_CAPABILITIES = [
+        'card_payments',
+        'transfers',
+        'platform_payments',
+        'bank_account_payments',
+        'cash_balance'
+] as const
 
 type SupportedCapability = (typeof SUPPORTED_CAPABILITIES)[number]
 
@@ -86,7 +92,10 @@ type CapabilityStatusSummary = {
 
 const CAPABILITY_LABELS: Record<SupportedCapability, string> = {
         card_payments: 'Nhận thanh toán',
-        transfers: 'Rút tiền về ngân hàng'
+        transfers: 'Rút tiền về ngân hàng',
+        platform_payments: 'Thanh toán qua nền tảng',
+        bank_account_payments: 'Thanh toán qua ngân hàng',
+        cash_balance: 'Số dư Stripe Balance'
 }
 
 // Helper to convert Stripe enums into our uppercase representation so that the
@@ -133,28 +142,61 @@ const normalizeCapabilityStatus = (value: unknown): CapabilityStatus => {
 }
 
 const describeCapabilityStatus = (capability: SupportedCapability, status: CapabilityStatus) => {
+        const render = (messages: { active: string; pending: string; inactive: string }) => {
+                switch (status) {
+                        case 'active':
+                                return messages.active
+                        case 'pending':
+                                return messages.pending
+                        case 'inactive':
+                        default:
+                                return messages.inactive
+                }
+        }
+
         switch (capability) {
                 case 'card_payments':
-                        switch (status) {
-                                case 'active':
-                                        return 'Stripe đã bật chức năng nhận thanh toán cho tài khoản này.'
-                                case 'pending':
-                                        return 'Stripe đang xem xét lại hồ sơ để bật nhận thanh toán trực tiếp.'
-                                case 'inactive':
-                                default:
-                                        return 'Stripe chưa cho phép nhận thanh toán trực tiếp. Hãy hoàn tất onboarding và yêu cầu Stripe kích hoạt lại.'
-                        }
+                        return render({
+                                active: 'Stripe đã bật chức năng nhận thanh toán cho tài khoản này.',
+                                pending: 'Stripe đang xem xét lại hồ sơ để bật nhận thanh toán trực tiếp.',
+                                inactive:
+                                        'Stripe chưa cho phép nhận thanh toán trực tiếp. Hãy hoàn tất onboarding và yêu cầu Stripe kích hoạt lại.'
+                        })
                 case 'transfers':
+                        return render({
+                                active: 'Stripe đã bật chức năng chuyển tiền về ngân hàng cho tài khoản này.',
+                                pending: 'Stripe đang xử lý yêu cầu bật rút tiền về ngân hàng.',
+                                inactive:
+                                        'Stripe chưa cho phép rút tiền về ngân hàng. Cần hoàn tất đầy đủ yêu cầu xác minh trước khi thử lại.'
+                        })
+                case 'platform_payments':
+                        return render({
+                                active: 'Stripe đã bật xử lý thanh toán qua nền tảng cho tài khoản này.',
+                                pending: 'Stripe đang xem xét yêu cầu kích hoạt xử lý thanh toán qua nền tảng.',
+                                inactive:
+                                        'Stripe chưa cho phép xử lý thanh toán qua nền tảng. Cần hoàn tất onboarding và gửi yêu cầu kích hoạt.'
+                        })
+                case 'bank_account_payments':
+                        return render({
+                                active: 'Stripe đã bật thanh toán qua tài khoản ngân hàng (ví dụ: ACH, chuyển khoản) cho tài khoản này.',
+                                pending: 'Stripe đang thẩm định để bật thanh toán qua tài khoản ngân hàng.',
+                                inactive:
+                                        'Stripe chưa cho phép thanh toán qua tài khoản ngân hàng. Hãy bổ sung hồ sơ và yêu cầu Stripe kích hoạt.'
+                        })
+                case 'cash_balance':
+                        return render({
+                                active: 'Stripe đã bật số dư Stripe Balance để giữ và sử dụng tiền trong tài khoản.',
+                                pending: 'Stripe đang xử lý yêu cầu bật số dư Stripe Balance.',
+                                inactive:
+                                        'Stripe chưa cho phép sử dụng Stripe Balance. Hãy kiểm tra các yêu cầu xác minh còn thiếu và gửi lại yêu cầu.'
+                        })
                 default:
-                        switch (status) {
-                                case 'active':
-                                        return 'Stripe đã bật chức năng chuyển tiền về ngân hàng cho tài khoản này.'
-                                case 'pending':
-                                        return 'Stripe đang xử lý yêu cầu bật rút tiền về ngân hàng.'
-                                case 'inactive':
-                                default:
-                                        return 'Stripe chưa cho phép rút tiền về ngân hàng. Cần hoàn tất đầy đủ yêu cầu xác minh trước khi thử lại.'
-                        }
+                        return render({
+                                active: 'Stripe đã bật capability này.',
+                                pending: 'Stripe đang xử lý yêu cầu kích hoạt capability này.',
+                                inactive:
+                                        'Stripe chưa bật capability này. Hãy hoàn tất các yêu cầu xác minh và thử lại.'
+                        })
         }
 }
 
