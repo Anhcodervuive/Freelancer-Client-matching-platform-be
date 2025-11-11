@@ -79,7 +79,7 @@ const handleStripeError = (error: unknown): never => {
 
 const humanizeDisabledReason = (code: string | null | undefined) => {
         if (!code) {
-                return 'Stripe đã khoá chức năng rút tiền cho tài khoản này'
+                return null
         }
 
         const normalized = code.replace(/\./g, '_')
@@ -496,9 +496,15 @@ const getPayoutSnapshot = async (
                 const history = payoutRecords.map(mapPayoutRecord)
                 const summary = computePayoutSummary(payoutRecords)
 
+                const payoutsEnabled = account.payouts_enabled ?? false
                 const requirements = account.requirements
                 const disabledReasonCode =
                         requirements?.disabled_reason ?? accountRecord.disabledReason ?? null
+                const disabledReasonMessage = disabledReasonCode
+                        ? humanizeDisabledReason(disabledReasonCode)
+                        : payoutsEnabled
+                          ? null
+                          : 'Stripe đã khoá chức năng rút tiền cho tài khoản này'
                 const currentlyDue = requirements?.currently_due ?? []
                 const pastDue = requirements?.past_due ?? []
                 const eventuallyDue = requirements?.eventually_due ?? []
@@ -506,7 +512,7 @@ const getPayoutSnapshot = async (
 
                 const restrictions: PayoutRestrictions = {
                         disabledReason: disabledReasonCode,
-                        disabledReasonMessage: humanizeDisabledReason(disabledReasonCode),
+                        disabledReasonMessage,
                         disabledAt: requirements?.current_deadline
                                 ? new Date(requirements.current_deadline * 1000).toISOString()
                                 : accountRecord.disabledAt?.toISOString() ?? null,
@@ -523,7 +529,7 @@ const getPayoutSnapshot = async (
                 }
 
                 return {
-                        payoutsEnabled: accountRecord.payoutsEnabled ?? false,
+                        payoutsEnabled,
                         stripeAccountId: accountRecord.stripeAccountId,
                         balance: {
                                 available: aggregateBalanceEntries(balance.available, currencyFilter),
@@ -636,7 +642,11 @@ const createFreelancerPayout = async (
                 ]
                 const pendingDescriptions = describeRequirementList(pendingFields)
 
-                let message = humanizeDisabledReason(disabledReasonCode)
+                const baseMessage =
+                        humanizeDisabledReason(disabledReasonCode) ??
+                        'Stripe đã khoá chức năng rút tiền cho tài khoản này'
+
+                let message = baseMessage
                 if (pendingDescriptions.length > 0) {
                         message = `${message}. Bạn cần hoàn tất các hạng mục sau trên Stripe: ${pendingDescriptions.join(', ')}.`
                 } else {
