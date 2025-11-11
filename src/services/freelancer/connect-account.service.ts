@@ -438,12 +438,24 @@ const ensureStripeAccount = async (userId: string, options?: EnsureAccountOption
 	// Always refresh the remote account so that our stored requirements stay in sync
 	// with Stripe. If the account was deleted externally Stripe will surface an
 	// error that bubbles up via the shared handler.
-	const account = await stripe.accounts.retrieve(accountRecord.stripeAccountId)
+        let account = await stripe.accounts.retrieve(accountRecord.stripeAccountId)
 
-	accountRecord = await prismaClient.freelancerConnectAccount.update({
-		where: { freelancerId: userId },
-		data: mapStripeAccountToConnectAccountData(account)
-	})
+        if (account.settings?.payouts?.schedule?.interval !== 'manual') {
+                account = await stripe.accounts.update(account.id, {
+                        settings: {
+                                payouts: {
+                                        schedule: {
+                                                interval: 'manual'
+                                        }
+                                }
+                        }
+                })
+        }
+
+        accountRecord = await prismaClient.freelancerConnectAccount.update({
+                where: { freelancerId: userId },
+                data: mapStripeAccountToConnectAccountData(account)
+        })
 
 	return { user, freelancer, account, accountRecord }
 }
