@@ -3,9 +3,8 @@ import { Prisma, NotificationStatus } from '~/generated/prisma'
 import { prismaClient } from '~/config/prisma-client'
 import { CreateNotificationInput, CreateNotificationSchema } from '~/schema/notification.schema'
 import { NotificationRealtimeEvent, notificationEventEmitter } from '~/realtime/notifications/notification.events'
-import { ForbiddenException } from '~/exceptions/Forbidden'
 import { ErrorCode } from '~/exceptions/root'
-import { BadRequestException } from '~/exceptions/bad-request'
+import { NotFoundException } from '~/exceptions/not-found'
 
 const notificationService = {
 	async create(input: CreateNotificationInput) {
@@ -63,18 +62,41 @@ const notificationService = {
 		})
 	},
 
-	async markAsRead(notificationId: string) {
-		const now = new Date()
+        async markAsRead(recipientId: string, notificationId: string) {
+                const notification = await prismaClient.notification.findFirst({
+                        where: {
+                                id: notificationId,
+                                recipientId
+                        }
+                })
 
-		return prismaClient.notification.update({
-			where: { id: notificationId },
-			data: {
-				deliveredAt: now,
-				readAt: now,
-				status: NotificationStatus.READ
-			}
-		})
-	},
+                if (!notification) {
+                        throw new NotFoundException('Notification not found', ErrorCode.ITEM_NOT_FOUND)
+                }
+
+                const now = new Date()
+
+                return prismaClient.notification.update({
+                        where: { id: notificationId },
+                        data: {
+                                deliveredAt: now,
+                                readAt: now,
+                                status: NotificationStatus.READ
+                        },
+                        include: {
+                                actor: {
+                                        include: {
+                                                profile: true
+                                        }
+                                },
+                                recipient: {
+                                        include: {
+                                                profile: true
+                                        }
+                                }
+                        }
+                })
+        },
 
 	async listRecentByRecipient(recipientId: string, limit = 20) {
 		return prismaClient.notification.findMany({
