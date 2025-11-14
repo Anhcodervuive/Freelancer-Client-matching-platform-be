@@ -8,6 +8,7 @@ import { ErrorCode } from '~/exceptions/root'
 import {
         CreatePlatformTermsInput,
         PlatformTermsListQuery,
+        PublicPlatformTermsListQuery,
         UpdatePlatformTermsInput
 } from '~/schema/platform-terms.schema'
 
@@ -139,6 +140,40 @@ const listTerms = async ({ page, limit, status, search }: PlatformTermsListQuery
         }
 }
 
+const listPublicTerms = async ({ page, limit }: PublicPlatformTermsListQuery) => {
+        const skip = (page - 1) * limit
+        const where: Prisma.PlatformTermsWhereInput = {
+                status: { not: PlatformTermsStatus.DRAFT }
+        }
+
+        const [records, total] = await Promise.all([
+                prismaClient.platformTerms.findMany({
+                        where,
+                        select: platformTermsSelect,
+                        orderBy: [
+                                { effectiveFrom: 'desc' },
+                                { createdAt: 'desc' }
+                        ],
+                        skip,
+                        take: limit
+                }),
+                prismaClient.platformTerms.count({ where })
+        ])
+
+        const data = records.map(record => serializePlatformTerms(record, { includeCreator: false }))
+        const totalPages = Math.ceil(total / limit)
+
+        return {
+                data,
+                pagination: {
+                        page,
+                        limit,
+                        total,
+                        totalPages
+                }
+        }
+}
+
 const getTermById = async (termsId: string) => {
         const record = await prismaClient.platformTerms.findUnique({
                 where: { id: termsId },
@@ -257,6 +292,7 @@ const updateTerms = async (termsId: string, _adminId: string, payload: UpdatePla
 
 const platformTermsService = {
         listTerms,
+        listPublicTerms,
         getTermById,
         createTerms,
         updateTerms,

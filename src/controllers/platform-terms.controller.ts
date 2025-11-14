@@ -3,8 +3,18 @@ import { Request, Response } from 'express'
 
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
-import { PlatformTermsVersionParamSchema } from '~/schema/platform-terms.schema'
+import {
+        PlatformTermsVersionParamSchema,
+        PublicPlatformTermsListQuerySchema
+} from '~/schema/platform-terms.schema'
 import platformTermsService from '~/services/platform-terms.service'
+
+export const listPublicPlatformTerms = async (req: Request, res: Response) => {
+        const query = PublicPlatformTermsListQuerySchema.parse(req.query)
+        const result = await platformTermsService.listPublicTerms(query)
+
+        return res.status(StatusCodes.OK).json(result)
+}
 
 export const getLatestPlatformTerms = async (_req: Request, res: Response) => {
         const data = await platformTermsService.getLatestActiveTerms()

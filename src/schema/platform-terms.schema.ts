@@ -90,6 +90,13 @@ export const PlatformTermsListQuerySchema = z.object({
 
 export type PlatformTermsListQuery = z.infer<typeof PlatformTermsListQuerySchema>
 
+export const PublicPlatformTermsListQuerySchema = z.object({
+        page: z.coerce.number().int().min(1).default(1),
+        limit: z.coerce.number().int().min(1).max(50).default(10)
+})
+
+export type PublicPlatformTermsListQuery = z.infer<typeof PublicPlatformTermsListQuerySchema>
+
 export const PlatformTermsVersionParamSchema = z.object({
         version: z.string().trim().min(1).max(100)
 })

@@ -142,6 +142,7 @@ Thiết kế này cho phép:
 
 * `GET /platform-terms/latest` – trả về phiên bản `ACTIVE` mới nhất để client hiển thị.
 * `GET /platform-terms/:version` – tra cứu lịch sử điều khoản.
+* `GET /platform-terms` – liệt kê các phiên bản điều khoản đã công bố để người dùng xem lại.
 
 ### 4.3 Serializer hợp đồng (`ContractService`)
 
