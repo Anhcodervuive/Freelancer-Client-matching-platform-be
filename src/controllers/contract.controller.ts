@@ -21,7 +21,8 @@ import {
         UpdateDisputeNegotiationSchema,
         EndContractSchema,
         SubmitContractFeedbackSchema,
-        UpdateContractFeedbackSchema
+        UpdateContractFeedbackSchema,
+        AcceptContractTermsSchema
 } from '~/schema/contract.schema'
 import { SubmitFinalEvidenceSchema } from '~/schema/dispute.schema'
 import contractService from '~/services/contract.service'
@@ -51,6 +52,28 @@ const extractSubmissionFiles = (files: Request['files']): Express.Multer.File[] 
         const map = files as Record<string, Express.Multer.File[] | undefined>
 
         return Array.from(SUBMISSION_FILE_FIELD_NAMES).flatMap(fieldName => map[fieldName] ?? [])
+}
+
+const extractRequestIp = (req: Request): string | null => {
+        const forwarded = req.headers['x-forwarded-for']
+
+        if (typeof forwarded === 'string' && forwarded.trim().length > 0) {
+                const [first] = forwarded.split(',').map(value => value.trim()).filter(Boolean)
+                if (first) {
+                        return first
+                }
+        } else if (Array.isArray(forwarded) && forwarded.length > 0) {
+                const first = forwarded.map(value => value.trim()).find(value => value.length > 0)
+                if (first) {
+                        return first
+                }
+        }
+
+        if (req.ip) {
+                return req.ip
+        }
+
+        return req.socket?.remoteAddress ?? null
 }
 
 export const listContracts = async (req: Request, res: Response) => {
@@ -86,6 +109,34 @@ export const getContractDetail = async (req: Request, res: Response) => {
         )
 
         return res.status(StatusCodes.OK).json(contract)
+}
+
+export const acceptContractTerms = async (req: Request, res: Response) => {
+        const user = req.user
+        const userId = user?.id
+        const { contractId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để đồng ý điều khoản', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId) {
+                throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = AcceptContractTermsSchema.parse(req.body)
+        const ipAddress = extractRequestIp(req)
+        const headerUserAgent = req.get('user-agent') ?? null
+        const userAgent = payload.userAgent ?? headerUserAgent
+
+        const result = await contractService.acceptContractTerms(
+                contractId,
+                { id: userId, role: user?.role ?? null },
+                payload,
+                { ipAddress, userAgent }
+        )
+
+        return res.status(StatusCodes.OK).json(result)
 }
 
 export const endContract = async (req: Request, res: Response) => {

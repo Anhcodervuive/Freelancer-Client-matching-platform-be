@@ -9,6 +9,7 @@ import {
         AssetKind,
         AssetProvider,
         AssetStatus,
+        ContractAcceptanceAction,
         ContractClosureType,
         ContractParticipantRole,
         ContractStatus,
@@ -52,7 +53,8 @@ import {
         UpdateDisputeNegotiationInput,
         EndContractInput,
         SubmitContractFeedbackInput,
-        UpdateContractFeedbackInput
+        UpdateContractFeedbackInput,
+        AcceptContractTermsInput
 } from '~/schema/contract.schema'
 import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 import { InternalServerException } from '~/exceptions/internal-server'
@@ -66,6 +68,20 @@ const isAdminUser = (user: ContractAuthUser) => user.role === Role.ADMIN
 
 const FEEDBACK_ACTION_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
 const FEEDBACK_VISIBILITY_DELAY_MS = 14 * 24 * 60 * 60 * 1000
+
+const sanitizeMetadataString = (value: string | null | undefined, limit: number) => {
+        if (!value) {
+                return null
+        }
+
+        const trimmed = value.trim()
+
+        if (trimmed.length === 0) {
+                return null
+        }
+
+        return trimmed.length > limit ? trimmed.slice(0, limit) : trimmed
+}
 
 const contractJobSummarySelect = Prisma.validator<Prisma.JobPostSelect>()({
 	id: true,
@@ -114,11 +130,26 @@ const contractClosedBySelect = Prisma.validator<Prisma.UserSelect>()({
         }
 })
 
+const contractPlatformTermsSelect = Prisma.validator<Prisma.PlatformTermsSelect>()({
+        id: true,
+        version: true,
+        title: true,
+        status: true,
+        effectiveFrom: true,
+        effectiveTo: true
+})
+
+const contractAcceptanceLogInclude = Prisma.validator<Prisma.ContractAcceptanceLogInclude>()({
+        actor: {
+                select: contractClosedBySelect
+        }
+})
+
 const disputeArbitratorSelect = Prisma.validator<Prisma.UserSelect>()({
-	id: true,
-	email: true,
-	profile: {
-		select: {
+        id: true,
+        email: true,
+        profile: {
+                select: {
 			firstName: true,
 			lastName: true
 		}
@@ -137,6 +168,15 @@ const contractSummaryInclude = Prisma.validator<Prisma.ContractInclude>()({
         },
         closedBy: {
                 select: contractClosedBySelect
+        },
+        termsAcceptedBy: {
+                select: contractClosedBySelect
+        },
+        clientAcceptedBy: {
+                select: contractClosedBySelect
+        },
+        platformTerms: {
+                select: contractPlatformTermsSelect
         }
 })
 
@@ -449,11 +489,20 @@ const contractDetailInclude = Prisma.validator<Prisma.ContractInclude>()({
         closedBy: {
                 select: contractClosedBySelect
         },
+        termsAcceptedBy: {
+                select: contractClosedBySelect
+        },
+        clientAcceptedBy: {
+                select: contractClosedBySelect
+        },
+        platformTerms: {
+                select: contractPlatformTermsSelect
+        },
         proposal: {
                 select: {
                         id: true,
                         status: true,
-			submittedAt: true
+                        submittedAt: true
 		}
 	},
 	offer: {
@@ -471,11 +520,16 @@ const contractDetailInclude = Prisma.validator<Prisma.ContractInclude>()({
         feedbacks: {
                 include: contractFeedbackInclude,
                 orderBy: { createdAt: 'asc' }
+        },
+        acceptanceLogs: {
+                include: contractAcceptanceLogInclude,
+                orderBy: { createdAt: 'asc' }
         }
 })
 
 type ContractSummaryPayload = Prisma.ContractGetPayload<{ include: typeof contractSummaryInclude }>
 type ContractDetailPayload = Prisma.ContractGetPayload<{ include: typeof contractDetailInclude }>
+type ContractAcceptanceLogPayload = Prisma.ContractAcceptanceLogGetPayload<{ include: typeof contractAcceptanceLogInclude }>
 type ContractFeedbackPayload = Prisma.ContractFeedbackGetPayload<{ include: typeof contractFeedbackInclude }>
 type MilestonePayload = Prisma.MilestoneGetPayload<{ include: typeof milestoneInclude }>
 type MilestoneResourcePayload = Prisma.MilestoneResourceGetPayload<{ include: typeof milestoneResourceInclude }>
@@ -902,6 +956,55 @@ const serializeJobPostDetail = (jobPost: ContractDetailPayload['jobPost']) => {
 	}
 }
 
+const serializeContractTerms = (
+        contract: {
+                platformTermsId: string | null
+                platformTermsVersion: string | null
+                platformTermsSnapshot: Prisma.JsonValue | null
+                platformTerms?: Prisma.PlatformTermsGetPayload<{ select: typeof contractPlatformTermsSelect }> | null
+                termsAcceptedAt: Date | null
+                termsAcceptedById: string | null
+                termsAcceptedBy?: ContractUserSummary | null
+                termsAcceptedIp: string | null
+                termsAcceptedUserAgent: string | null
+                clientAcceptedAt: Date | null
+                clientAcceptedById: string | null
+                clientAcceptedBy?: ContractUserSummary | null
+                clientAcceptedIp: string | null
+                clientAcceptedUserAgent: string | null
+        }
+) => {
+        if (
+                !contract.platformTermsId &&
+                !contract.platformTermsVersion &&
+                !contract.platformTermsSnapshot
+        ) {
+                return null
+        }
+
+        const version = contract.platformTermsVersion ?? contract.platformTerms?.version ?? null
+
+        return {
+                id: contract.platformTermsId ?? null,
+                version,
+                title: contract.platformTerms?.title ?? null,
+                status: contract.platformTerms?.status ?? null,
+                effectiveFrom: contract.platformTerms?.effectiveFrom ?? null,
+                effectiveTo: contract.platformTerms?.effectiveTo ?? null,
+                snapshot: contract.platformTermsSnapshot ?? null,
+                acceptedAt: contract.termsAcceptedAt ?? null,
+                acceptedById: contract.termsAcceptedById ?? null,
+                acceptedBy: serializeContractUser(contract.termsAcceptedBy),
+                acceptedIp: contract.termsAcceptedIp ?? null,
+                acceptedUserAgent: contract.termsAcceptedUserAgent ?? null,
+                clientAcceptedAt: contract.clientAcceptedAt ?? null,
+                clientAcceptedById: contract.clientAcceptedById ?? null,
+                clientAcceptedBy: serializeContractUser(contract.clientAcceptedBy),
+                clientAcceptedIp: contract.clientAcceptedIp ?? null,
+                clientAcceptedUserAgent: contract.clientAcceptedUserAgent ?? null
+        }
+}
+
 const serializeContractSummary = (contract: ContractSummaryPayload) => {
         return {
                 id: contract.id,
@@ -921,6 +1024,7 @@ const serializeContractSummary = (contract: ContractSummaryPayload) => {
                 endedAt: contract.endedAt ?? null,
                 closedById: contract.closedById ?? null,
                 closedBy: serializeContractUser(contract.closedBy),
+                platformTerms: serializeContractTerms(contract),
                 createdAt: contract.createdAt,
                 updatedAt: contract.updatedAt
         }
@@ -940,6 +1044,21 @@ const serializeContractFeedback = (feedback: ContractFeedbackPayload) => {
                 updatedAt: feedback.updatedAt,
                 reviewer: serializeContractUser(feedback.reviewer),
                 reviewee: serializeContractUser(feedback.reviewee)
+        }
+}
+
+const serializeContractAcceptanceLog = (log: ContractAcceptanceLogPayload) => {
+        return {
+                id: log.id,
+                contractId: log.contractId,
+                actorId: log.actorId,
+                action: log.action,
+                termsVersion: log.termsVersion,
+                termsSnapshot: log.termsSnapshot ?? null,
+                ipAddress: log.ipAddress ?? null,
+                userAgent: log.userAgent ?? null,
+                createdAt: log.createdAt,
+                actor: serializeContractUser(log.actor)
         }
 }
 
@@ -1001,7 +1120,10 @@ const serializeContractDetail = (
                           }
                         : null,
                 milestones: contract.milestones.map(milestone => serializeMilestone(milestone)),
-                feedbacks: feedbacks.map(feedback => serializeContractFeedback(feedback))
+                feedbacks: feedbacks.map(feedback => serializeContractFeedback(feedback)),
+                acceptanceLogs: contract.acceptanceLogs
+                        ? contract.acceptanceLogs.map(log => serializeContractAcceptanceLog(log))
+                        : []
         }
 }
 
@@ -1754,6 +1876,144 @@ const getContractDetail = async (user: ContractAuthUser, contractId: string) => 
         }
 
         return serializeContractDetail(contract, { viewer: user })
+}
+
+const acceptContractTerms = async (
+        contractId: string,
+        user: ContractAuthUser,
+        payload: AcceptContractTermsInput,
+        metadata: { ipAddress?: string | null; userAgent?: string | null } = {}
+) => {
+        const contractRecord = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: {
+                        id: true,
+                        status: true,
+                        clientId: true,
+                        freelancerId: true,
+                        platformTermsId: true,
+                        platformTermsVersion: true,
+                        platformTermsSnapshot: true,
+                        termsAcceptedAt: true,
+                        termsAcceptedById: true,
+                        clientAcceptedAt: true,
+                        clientAcceptedById: true
+                }
+        })
+
+        if (!contractRecord) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        const isClient = contractRecord.clientId === user.id
+        const isFreelancer = contractRecord.freelancerId === user.id
+
+        if (!isClient && !isFreelancer) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        if (
+                !contractRecord.platformTermsId ||
+                !contractRecord.platformTermsVersion ||
+                contractRecord.platformTermsSnapshot === null ||
+                contractRecord.platformTermsSnapshot === undefined
+        ) {
+                throw new BadRequestException('Hợp đồng chưa được gắn điều khoản nền tảng', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (payload.termsVersion !== contractRecord.platformTermsVersion) {
+                throw new BadRequestException('Phiên bản điều khoản không khớp', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (
+                contractRecord.status === ContractStatus.CANCELLED ||
+                contractRecord.status === ContractStatus.COMPLETED
+        ) {
+                throw new BadRequestException('Hợp đồng đã kết thúc', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (isFreelancer && contractRecord.termsAcceptedAt && contractRecord.termsAcceptedById === user.id) {
+                const existing = await prismaClient.contract.findUnique({
+                        where: { id: contractId },
+                        include: contractDetailInclude
+                })
+
+                if (!existing) {
+                        throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+                }
+
+                return serializeContractDetail(existing, { viewer: user })
+        }
+
+        if (isClient && contractRecord.clientAcceptedAt && contractRecord.clientAcceptedById === user.id) {
+                const existing = await prismaClient.contract.findUnique({
+                        where: { id: contractId },
+                        include: contractDetailInclude
+                })
+
+                if (!existing) {
+                        throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+                }
+
+                return serializeContractDetail(existing, { viewer: user })
+        }
+
+        const ipAddress = sanitizeMetadataString(metadata.ipAddress ?? null, 255)
+        const userAgent = sanitizeMetadataString(metadata.userAgent ?? null, 500)
+        const now = new Date()
+
+        await prismaClient.$transaction(async tx => {
+                const updateData: Prisma.ContractUpdateInput = {}
+
+                if (isFreelancer) {
+                        updateData.termsAcceptedAt = now
+                        updateData.termsAcceptedIp = ipAddress
+                        updateData.termsAcceptedUserAgent = userAgent
+                        updateData.termsAcceptedBy = { connect: { id: user.id } }
+
+                        if (contractRecord.status === ContractStatus.DRAFT) {
+                                updateData.status = ContractStatus.ACTIVE
+                        }
+                } else {
+                        updateData.clientAcceptedAt = now
+                        updateData.clientAcceptedIp = ipAddress
+                        updateData.clientAcceptedUserAgent = userAgent
+                        updateData.clientAcceptedBy = { connect: { id: user.id } }
+                }
+
+                await tx.contract.update({
+                        where: { id: contractId },
+                        data: updateData
+                })
+
+                await tx.contractAcceptanceLog.create({
+                        data: {
+                                contractId,
+                                actorId: user.id,
+                                action: ContractAcceptanceAction.ACCEPTED,
+                                termsVersion: payload.termsVersion,
+                                termsSnapshot:
+                                        contractRecord.platformTermsSnapshot ?? Prisma.JsonNull,
+                                ipAddress,
+                                userAgent
+                        }
+                })
+        })
+
+        const viewerRole = user.role ?? (isClient ? Role.CLIENT : Role.FREELANCER)
+
+        const updated = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                include: contractDetailInclude
+        })
+
+        if (!updated) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        return serializeContractDetail(updated, {
+                viewer: { id: user.id, role: viewerRole }
+        })
 }
 
 const endContract = async (userId: string, contractId: string, payload: EndContractInput) => {
@@ -4945,6 +5205,7 @@ const declineMilestoneSubmission = async (
 const contractService = {
         listContracts,
         getContractDetail,
+        acceptContractTerms,
         endContract,
         listContractMilestones,
         listMilestoneResources,
