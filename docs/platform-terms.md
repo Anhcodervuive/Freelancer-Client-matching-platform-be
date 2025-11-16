@@ -194,6 +194,7 @@ Mở rộng payload trả về:
     * **Khi nào cần?** Khi marketplace hướng tới thị trường yêu cầu chữ ký đáp ứng chuẩn pháp lý quốc tế, hoặc cần bằng chứng mạnh để trình cho trọng tài/tòa án ở nhiều quốc gia. Với hợp đồng giá trị lớn, việc dùng e-sign giúp tăng độ tin cậy hơn so với tự ký.
     * **Chọn nhà cung cấp nào?**
       * **DocuSign:** phổ biến toàn cầu, đạt chuẩn eIDAS Advanced, ESIGN/UETA; có sẵn SDK Node.js. Phù hợp nếu cần nhiều workflow (multi-signer, conditional routing) và muốn audit trail chi tiết.
+        * DocuSign cung cấp tài khoản developer miễn phí kèm sandbox `demo.docusign.net`, cho phép gửi envelope không giới hạn phục vụ test; khi triển khai production cần gửi hồ sơ `Go-Live` để được cấp quyền dùng môi trường thật và bắt đầu trả phí theo gói.
       * **Adobe Acrobat Sign:** mạnh về tích hợp với hệ sinh thái Adobe/Microsoft, hỗ trợ ký nâng cao (Qualified) ở EU, có UI tốt cho admin kiểm soát mẫu hợp đồng.
       * **Dropbox Sign (HelloSign):** API đơn giản, chi phí thấp hơn cho lưu lượng vừa và nhỏ, hỗ trợ embedded signing nhanh.
       * **Nhà cung cấp nội địa (FPT.eSign, ViettelSign, VNPT eContract…):** phù hợp nếu cần chứng thư được cơ quan nhà nước Việt Nam công nhận. Có thể kết hợp: dùng DocuSign/Adobe cho hợp đồng quốc tế, dịch vụ nội địa cho thị trường Việt Nam.
@@ -207,6 +208,11 @@ Mở rộng payload trả về:
     * **Lưu ý bảo mật vận hành:** giới hạn IP/allowlist cho webhook, bật MFA cho tài khoản admin e-sign, phân quyền tối thiểu, và lên lịch xoay khóa OAuth/private key (6–12 tháng/lần).
   * **Ràng buộc & lưu ý khi tích hợp e-sign:**
     * **Pháp lý & khu vực:** một số dịch vụ chỉ hỗ trợ ký hợp lệ ở các khu vực nhất định; cần chọn provider đáp ứng quốc gia mục tiêu (ví dụ DocuSign hỗ trợ chứng thư tại Mỹ/EU, còn ở Việt Nam có VNPT, FPT.eSign). Kiểm tra điều kiện KYC hoặc giới hạn ngành nghề.
+    * **Sandbox & chi phí thử nghiệm:**
+      * **DocuSign:** sandbox developer miễn phí nhưng bị giới hạn ở domain demo; mỗi địa chỉ email chỉ được gắn với một tài khoản thử nghiệm, và trước khi phát hành tài liệu thật phải hoàn tất quy trình `Go-Live`.
+      * **Adobe Acrobat Sign:** cung cấp trial developer ~30 ngày; cần liên hệ sales để gia hạn hoặc mua license doanh nghiệp nếu muốn dùng lâu dài.
+      * **Dropbox Sign (HelloSign):** developer key miễn phí với hạn mức ~50 chữ ký/tháng; vượt hạn hoặc dùng production phải nâng cấp gói.
+      * **Nhà cung cấp nội địa (VNPT, FPT.eSign…):** đa phần yêu cầu ký hợp đồng dịch vụ trước rồi mới cấp môi trường test và chứng thư dùng thử, không có sandbox mở công khai.
     * **Chi phí & hạn ngạch:** e-sign thường tính phí theo số envelope/tháng; cần dự trù ngân sách và theo dõi quota để tránh gián đoạn.
     * **Tích hợp kỹ thuật:** phải xây dựng webhook để nhận trạng thái ký (completed/declined/expired), đồng bộ dữ liệu vào `ContractAcceptanceLog`, và xử lý việc re-send khi người dùng quên ký.
     * **Quản lý dữ liệu nhạy cảm:** audit log từ e-sign chứa thông tin cá nhân (email, IP, thời gian); phải lưu trữ an toàn, mã hóa khi cần, và tuân thủ quy định bảo vệ dữ liệu (GDPR, PDPD...).
