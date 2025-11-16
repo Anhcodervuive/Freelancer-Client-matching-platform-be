@@ -181,13 +181,16 @@ Mở rộng payload trả về:
 * **Tuân thủ dữ liệu:** hạn chế truy cập vào bảng snapshot thông qua RBAC; mã hóa dữ liệu nhạy cảm nếu chứa thông tin cá nhân.
 * **Sao lưu:** định kỳ backup bảng `PlatformTerms` và `Contract` để đảm bảo khả năng khôi phục.
 * **Chữ ký số & chứng thư số:**
-  * Triển khai cơ chế ký số (digital signature) trên snapshot điều khoản/hợp đồng để đảm bảo tài liệu không thể bị chỉnh sửa mà không bị phát hiện. Một quy trình phổ biến:
-    1. Tạo file PDF/JSON chuẩn hóa từ `platformTermsSnapshot` và metadata chấp thuận.
-    2. Tính hash (SHA-256) của file, ký hash bằng private key thuộc chứng thư số của nền tảng hoặc nhà cung cấp e-sign (ví dụ DocuSign, Adobe Sign).
-    3. Lưu chữ ký (`signature`), chứng thư (`certificate`) và thuật toán (`alg`) vào bảng hợp đồng; file ký số được đính kèm khi xuất hồ sơ tranh chấp.
-    4. Khi cần đối chứng, dùng public key trong chứng thư để verify chữ ký và đối chiếu hash nhằm chứng minh tài liệu không bị sửa.
-  * Nếu tích hợp nhà cung cấp e-sign, lưu cả mã giao dịch (envelope ID), trạng thái ký và audit trail mà họ trả về. Điều này giúp tuân thủ chuẩn eIDAS, UETA/ESIGN tại các thị trường lớn.
-  * Đối với chữ ký số nội bộ, bảo vệ private key bằng HSM/KMS, giới hạn quyền truy cập và xoay vòng định kỳ. Lưu log mỗi lần ký để đảm bảo khả năng truy vết.
+  * **Mục tiêu:** bảo đảm nội dung snapshot điều khoản/hợp đồng không thể bị chỉnh sửa mà không phát hiện được, đồng thời chứng minh nguồn gốc (authenticity) và sự toàn vẹn (integrity) của tài liệu khi xuất trình trước trọng tài hoặc tòa án.
+  * **Chuẩn hóa tài liệu trước khi ký:** chuyển `platformTermsSnapshot` cùng metadata chấp thuận (thời gian, IP, user-agent, id người dùng) sang định dạng bất biến như PDF/A hoặc JSON canonical. Việc canonical hóa giúp cùng một dữ liệu sinh ra cùng một chuỗi bytes để tính hash.
+  * **Quy trình ký số tham chiếu:**
+    1. Tạo hash SHA-256 của file canonical.
+    2. Ký hash bằng private key đi kèm chứng thư số doanh nghiệp hoặc thông qua nhà cung cấp e-sign (DocuSign, Adobe Sign, v.v.). Nếu tự vận hành, nên lưu private key trong HSM hoặc dịch vụ KMS (AWS KMS, GCP KMS) để tránh lộ khóa.
+    3. Lưu chữ ký số (`signature`), thuật toán (`alg`), mã chứng thư (`certificateId`) và chuỗi chứng thư (`certificatePem`) vào hợp đồng. Nếu dùng nhà cung cấp e-sign, lưu thêm mã giao dịch (envelope ID) và audit trail mà họ trả về.
+    4. Đính kèm file canonical và chữ ký số khi xuất hồ sơ tranh chấp; phía nhận có thể verify bằng public key trong chứng thư.
+  * **Xác thực và kiểm tra định kỳ:** xây dựng tiện ích verify nội bộ (CLI hoặc service) để kiểm tra chữ ký bất kỳ lúc nào. Quy trình verify gồm đọc file canonical, tính lại hash, giải mã chữ ký bằng public key và đối chiếu với hash gốc.
+  * **Quản lý vòng đời khóa:** định kỳ xoay vòng chứng thư (theo khuyến nghị 1–2 năm), lưu lịch sử khóa cũ để verify tài liệu đã ký trước đó. Khi thu hồi khóa, cập nhật CRL/OCSP để đối tác có thể kiểm tra hiệu lực chứng thư.
+  * **Chữ ký đa bên:** nếu yêu cầu cả freelancer và client ký, có thể tạo nhiều chữ ký độc lập hoặc dùng quy trình multi-signer của nhà cung cấp e-sign. Hệ thống nên lưu thứ tự ký, thời gian từng bước và trạng thái để hình thành audit trail đầy đủ.
 
 ## 7. Lộ trình triển khai gợi ý
 
