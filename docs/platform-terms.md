@@ -188,7 +188,17 @@ Mở rộng payload trả về:
     2. Ký hash bằng private key đi kèm chứng thư số doanh nghiệp hoặc thông qua nhà cung cấp e-sign (DocuSign, Adobe Sign, v.v.). Nếu tự vận hành, nên lưu private key trong HSM hoặc dịch vụ KMS (AWS KMS, GCP KMS) để tránh lộ khóa.
     3. Lưu chữ ký số (`signature`), thuật toán (`alg`), mã chứng thư (`certificateId`) và chuỗi chứng thư (`certificatePem`) vào hợp đồng. Nếu dùng nhà cung cấp e-sign, lưu thêm mã giao dịch (envelope ID) và audit trail mà họ trả về.
     4. Đính kèm file canonical và chữ ký số khi xuất hồ sơ tranh chấp; phía nhận có thể verify bằng public key trong chứng thư.
-  * **Xác thực và kiểm tra định kỳ:** xây dựng tiện ích verify nội bộ (CLI hoặc service) để kiểm tra chữ ký bất kỳ lúc nào. Quy trình verify gồm đọc file canonical, tính lại hash, giải mã chữ ký bằng public key và đối chiếu với hash gốc.
+  * **Tích hợp dịch vụ e-sign bên ngoài:**
+    * **E-sign đóng vai trò gì?** Các nhà cung cấp e-sign cung cấp hạ tầng ký số đạt chuẩn pháp lý (ví dụ eIDAS, ESIGN/UETA), quản lý chứng thư, xác thực danh tính người ký, và phát hành audit trail chi tiết. Sử dụng dịch vụ ngoài giúp nền tảng tận dụng chứng thư được công nhận rộng rãi, tránh phải tự xin cấp và vận hành PKI.
+    * **Luồng chuẩn:** backend gọi API tạo "envelope" chứa file canonical; dịch vụ e-sign gửi email hoặc embedded signing cho người dùng → người dùng ký trên giao diện của họ → nhà cung cấp trả về file đã ký, audit log, chứng thư. Hệ thống lưu trữ các artefact đó cùng bản snapshot ban đầu để đảm bảo chuỗi bằng chứng đầy đủ.
+    * **Khi nào cần?** Khi marketplace hướng tới thị trường yêu cầu chữ ký đáp ứng chuẩn pháp lý quốc tế, hoặc cần bằng chứng mạnh để trình cho trọng tài/tòa án ở nhiều quốc gia. Với hợp đồng giá trị lớn, việc dùng e-sign giúp tăng độ tin cậy hơn so với tự ký.
+  * **Ràng buộc & lưu ý khi tích hợp e-sign:**
+    * **Pháp lý & khu vực:** một số dịch vụ chỉ hỗ trợ ký hợp lệ ở các khu vực nhất định; cần chọn provider đáp ứng quốc gia mục tiêu (ví dụ DocuSign hỗ trợ chứng thư tại Mỹ/EU, còn ở Việt Nam có VNPT, FPT.eSign). Kiểm tra điều kiện KYC hoặc giới hạn ngành nghề.
+    * **Chi phí & hạn ngạch:** e-sign thường tính phí theo số envelope/tháng; cần dự trù ngân sách và theo dõi quota để tránh gián đoạn.
+    * **Tích hợp kỹ thuật:** phải xây dựng webhook để nhận trạng thái ký (completed/declined/expired), đồng bộ dữ liệu vào `ContractAcceptanceLog`, và xử lý việc re-send khi người dùng quên ký.
+    * **Quản lý dữ liệu nhạy cảm:** audit log từ e-sign chứa thông tin cá nhân (email, IP, thời gian); phải lưu trữ an toàn, mã hóa khi cần, và tuân thủ quy định bảo vệ dữ liệu (GDPR, PDPD...).
+    * **Khả năng khóa nhà cung cấp:** cần kế hoạch xuất dữ liệu nếu đổi provider (download bản PDF ký và chứng thư); nên lưu cả hash nội bộ để verify độc lập.
+  * **Xác thực và kiểm tra định kỳ:** xây dựng tiện ích verify nội bộ (CLI hoặc service) để kiểm tra chữ ký bất kỳ lúc nào. Quy trình verify gồm đọc file canonical, tính lại hash, giải mã chữ ký bằng public key và đối chiếu với hash gốc. Với e-sign, có thể dùng SDK/CLI của họ hoặc thư viện chuẩn PKCS#7/PDF để verify offline.
   * **Quản lý vòng đời khóa:** định kỳ xoay vòng chứng thư (theo khuyến nghị 1–2 năm), lưu lịch sử khóa cũ để verify tài liệu đã ký trước đó. Khi thu hồi khóa, cập nhật CRL/OCSP để đối tác có thể kiểm tra hiệu lực chứng thư.
   * **Chữ ký đa bên:** nếu yêu cầu cả freelancer và client ký, có thể tạo nhiều chữ ký độc lập hoặc dùng quy trình multi-signer của nhà cung cấp e-sign. Hệ thống nên lưu thứ tự ký, thời gian từng bước và trạng thái để hình thành audit trail đầy đủ.
 
