@@ -93,4 +93,33 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 * Kiểm tra compliance (ESIGN/UETA, eIDAS) theo khu vực kinh doanh.
 * Thiết lập backup/retention cho tài liệu ký.
 
+## 11. Vì Sao Không Tự Gửi Email Và Thu Thập Chữ Ký Thủ Công?
+
+DocuSign (và các nền tảng e-sign khác) không chỉ gửi email yêu cầu ký. Giá trị cốt lõi nằm ở:
+
+1. **Tuân thủ pháp lý quốc tế:**
+   * DocuSign đã chứng nhận theo các đạo luật e-sign lớn (ESIGN, UETA của Mỹ, eIDAS EU, nhiều chuẩn khu vực khác). Khi tranh chấp xảy ra, Certificate of Completion của DocuSign được tòa án, trọng tài chấp nhận rộng rãi.
+   * Nếu tự xây dựng, bạn phải chứng minh quy trình đáp ứng đầy đủ các yêu cầu về consent, intent to sign, tamper-proof, audit trail… điều này rất tốn kém và khó duy trì khi mở rộng quốc gia.
+
+2. **Bảo toàn tài liệu (tamper-evident):**
+   * DocuSign băm tài liệu và tạo “tamper seal” sau khi tất cả bên ký. Nếu có thay đổi byte nào, seal bị phá và có thể phát hiện ngay.
+   * Làm thủ công bằng email (đính kèm PDF, rồi các bên ký tay và gửi lại) không cung cấp cơ chế phát hiện chỉnh sửa hoặc kiểm tra toàn vẹn.
+
+3. **Chuỗi bằng chứng/Audit trail:**
+   * Mỗi envelope ghi lại IP, user agent, timestamp mở xem, timestamp ký, hành động từ chối/hủy, và lưu trong Certificate of Completion.
+   * Backend chỉ cần lưu `envelopeId` và tải chứng thư này khi cần. Nếu tự build, bạn phải log toàn bộ dữ liệu này, bảo vệ khỏi chỉnh sửa và cung cấp giao diện xuất chứng cứ.
+
+4. **Tùy chọn xác thực bổ sung:**
+   * Ngoài email, DocuSign hỗ trợ SMS OTP, KBA (knowledge-based authentication), ID verification, video liveness… Bạn có thể bật theo gói dịch vụ.
+   * Hệ thống nội bộ muốn đạt mức xác thực này phải tích hợp nhiều dịch vụ khác nhau, vừa tốn công vừa khó được công nhận pháp lý.
+
+5. **Chữ ký hợp lệ trên mọi thiết bị:**
+   * Người dùng không cần cài app hoặc máy in; chỉ cần mở link DocuSign và thao tác trực quan. Trải nghiệm được tối ưu để tránh lỗi “quên ký” hoặc ký sai vị trí.
+   * Nếu tự gửi email với file PDF, bạn phải hướng dẫn người dùng tải file, mở phần mềm ký số, sau đó upload lại – dễ gây nhầm lẫn và lỗi nghiệp vụ.
+
+6. **Quy trình phân quyền/phối hợp:**
+   * Routing order, conditional recipients, template reusable… được DocuSign xử lý sẵn. Điều này giảm logic phải code và hạn chế sai sót khi hợp đồng cần nhiều bên.
+
+Tóm lại, backend của bạn hoàn toàn có thể “tự xây” một luồng gửi email + nhận file ký tay, nhưng để đạt mức bằng chứng pháp lý tương đương DocuSign (được công nhận rộng rãi, có audit trail, chống giả mạo) thì chi phí kỹ thuật và pháp lý rất lớn. Tận dụng e-sign provider giúp bạn tập trung vào nghiệp vụ chính thay vì tự chứng minh quy trình ký điện tử.
+
 Tài liệu này nên được giữ cùng với kiến trúc điều khoản nền tảng để đội phát triển và vận hành có thể tham chiếu khi tích hợp DocuSign vào luồng hợp đồng hai bên.
