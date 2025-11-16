@@ -192,6 +192,19 @@ Mở rộng payload trả về:
     * **E-sign đóng vai trò gì?** Các nhà cung cấp e-sign cung cấp hạ tầng ký số đạt chuẩn pháp lý (ví dụ eIDAS, ESIGN/UETA), quản lý chứng thư, xác thực danh tính người ký, và phát hành audit trail chi tiết. Sử dụng dịch vụ ngoài giúp nền tảng tận dụng chứng thư được công nhận rộng rãi, tránh phải tự xin cấp và vận hành PKI.
     * **Luồng chuẩn:** backend gọi API tạo "envelope" chứa file canonical; dịch vụ e-sign gửi email hoặc embedded signing cho người dùng → người dùng ký trên giao diện của họ → nhà cung cấp trả về file đã ký, audit log, chứng thư. Hệ thống lưu trữ các artefact đó cùng bản snapshot ban đầu để đảm bảo chuỗi bằng chứng đầy đủ.
     * **Khi nào cần?** Khi marketplace hướng tới thị trường yêu cầu chữ ký đáp ứng chuẩn pháp lý quốc tế, hoặc cần bằng chứng mạnh để trình cho trọng tài/tòa án ở nhiều quốc gia. Với hợp đồng giá trị lớn, việc dùng e-sign giúp tăng độ tin cậy hơn so với tự ký.
+    * **Chọn nhà cung cấp nào?**
+      * **DocuSign:** phổ biến toàn cầu, đạt chuẩn eIDAS Advanced, ESIGN/UETA; có sẵn SDK Node.js. Phù hợp nếu cần nhiều workflow (multi-signer, conditional routing) và muốn audit trail chi tiết.
+      * **Adobe Acrobat Sign:** mạnh về tích hợp với hệ sinh thái Adobe/Microsoft, hỗ trợ ký nâng cao (Qualified) ở EU, có UI tốt cho admin kiểm soát mẫu hợp đồng.
+      * **Dropbox Sign (HelloSign):** API đơn giản, chi phí thấp hơn cho lưu lượng vừa và nhỏ, hỗ trợ embedded signing nhanh.
+      * **Nhà cung cấp nội địa (FPT.eSign, ViettelSign, VNPT eContract…):** phù hợp nếu cần chứng thư được cơ quan nhà nước Việt Nam công nhận. Có thể kết hợp: dùng DocuSign/Adobe cho hợp đồng quốc tế, dịch vụ nội địa cho thị trường Việt Nam.
+    * **Thông tin/khóa API cần chuẩn bị:**
+      * **API/Integration Key:** định danh ứng dụng khi gọi REST API (DocuSign Integration Key, Adobe OAuth Client ID, HelloSign API Key).
+      * **OAuth Secret/Private Key:** dùng để ký JWT hoặc trao đổi token OAuth2. Với DocuSign/Adobe bạn thường phải tạo RSA keypair và upload public key; backend lưu private key an toàn (KMS/HSM).
+      * **Account/Subdomain ID:** xác định tenant mà hợp đồng sẽ được phát hành (DocuSign `accountId`, Adobe `agreementId` namespace...).
+      * **Webhook Endpoint & Secret:** nếu muốn nhận sự kiện (completed, voided), cần đăng ký Connect/Webhook với shared secret để verify chữ ký HMAC.
+      * **Template/Library IDs:** nếu dùng mẫu hợp đồng dựng sẵn bên e-sign, lưu ID để backend tham chiếu khi tạo envelope.
+      * **Certificate/Audit Log Retention:** xác định thời hạn lưu file PDF đã ký và audit trail; một số vendor hỗ trợ export sang S3/Azure nhưng cần bật cấu hình trước.
+    * **Lưu ý bảo mật vận hành:** giới hạn IP/allowlist cho webhook, bật MFA cho tài khoản admin e-sign, phân quyền tối thiểu, và lên lịch xoay khóa OAuth/private key (6–12 tháng/lần).
   * **Ràng buộc & lưu ý khi tích hợp e-sign:**
     * **Pháp lý & khu vực:** một số dịch vụ chỉ hỗ trợ ký hợp lệ ở các khu vực nhất định; cần chọn provider đáp ứng quốc gia mục tiêu (ví dụ DocuSign hỗ trợ chứng thư tại Mỹ/EU, còn ở Việt Nam có VNPT, FPT.eSign). Kiểm tra điều kiện KYC hoặc giới hạn ngành nghề.
     * **Chi phí & hạn ngạch:** e-sign thường tính phí theo số envelope/tháng; cần dự trù ngân sách và theo dõi quota để tránh gián đoạn.
