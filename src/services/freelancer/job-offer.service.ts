@@ -24,6 +24,7 @@ import {
 import chatThreadService from '~/services/chat/chat-thread.service'
 import notificationService from '~/services/notification.service'
 import platformTermsService from '~/services/platform-terms.service'
+import contractSignatureService from '~/services/contract-signature.service'
 
 const uniquePreserveOrder = <T>(items: readonly T[]): T[] => {
 	const seen = new Set<T>()
@@ -401,11 +402,24 @@ const respondToJobOffer = async (freelancerUserId: string, offerId: string, payl
                         await chatThreadService.ensureProjectThreadForProposal({
                                 jobPostId: offer.jobId,
                                 proposalId: offer.proposalId,
-				clientId: offer.clientId,
-				freelancerId: offer.freelancerId,
-				jobTitle: offer.job?.title ?? offer.title,
+                                clientId: offer.clientId,
+                                freelancerId: offer.freelancerId,
+                                jobTitle: offer.job?.title ?? offer.title,
                                 contractId: result.contract.id
                         })
+                }
+
+                if (contractSignatureService.isDocuSignEnabled()) {
+                        try {
+                                await contractSignatureService.triggerDocuSignEnvelope(
+                                        result.contract.id,
+                                        null,
+                                        undefined,
+                                        { skipAuthorization: true }
+                                )
+                        } catch (error) {
+                                console.error('Không thể gửi envelope DocuSign', error)
+                        }
                 }
 
                 if (result.withdrawnOffers.length > 0) {

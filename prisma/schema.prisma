@@ -27,6 +27,19 @@ enum ContractParticipantRole {
   SYSTEM
 }
 
+enum ContractSignatureProvider {
+  DOCUSIGN
+}
+
+enum ContractSignatureStatus {
+  DRAFT
+  SENT
+  COMPLETED
+  DECLINED
+  VOIDED
+  ERROR
+}
+
 enum ArbitrationDossierStatus {
   DRAFT
   LOCKED
@@ -1048,6 +1061,18 @@ model Contract {
   clientAcceptedById      String?   @map("client_accepted_by_id")
   clientAcceptedIp        String?   @map("client_accepted_ip") @db.VarChar(255)
   clientAcceptedUserAgent String?   @map("client_accepted_user_agent") @db.VarChar(500)
+  signatureProvider       ContractSignatureProvider? @map("signature_provider")
+  signatureEnvelopeId     String?   @unique @map("signature_envelope_id") @db.VarChar(191)
+  signatureStatus         ContractSignatureStatus?   @map("signature_status")
+  signatureRecipients     Json?     @map("signature_recipients")
+  signatureEnvelopeSummary Json?    @map("signature_envelope_summary")
+  signatureDocumentsUri   String?   @map("signature_documents_uri") @db.VarChar(2048)
+  signatureCertificateUri String?   @map("signature_certificate_uri") @db.VarChar(2048)
+  signatureSentAt         DateTime? @map("signature_sent_at")
+  signatureCompletedAt    DateTime? @map("signature_completed_at")
+  signatureDeclinedAt     DateTime? @map("signature_declined_at")
+  signatureVoidedAt       DateTime? @map("signature_voided_at")
+  signatureLastError      String?   @map("signature_last_error") @db.VarChar(1000)
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
@@ -1070,6 +1095,7 @@ model Contract {
   @@index([platformTermsId], name: "idx_contract_platform_terms")
   @@index([termsAcceptedById], name: "idx_contract_terms_accepted_by")
   @@index([clientAcceptedById], name: "idx_contract_client_accepted_by")
+  @@index([signatureStatus], name: "idx_contract_signature_status")
 }
 
 model PlatformTerms {

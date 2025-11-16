@@ -301,3 +301,55 @@ export const JOB_MODERATION = {
         MAX_INPUT_CHARS: Math.max(500, Math.round(parseNumber(process.env.JOB_MODERATION_MAX_INPUT_CHARS, 6000))),
         LOG_VERBOSE: parseBoolean(process.env.JOB_MODERATION_LOG_VERBOSE, true)
 }
+
+const resolveDocuSignPrivateKey = () => {
+        const fileContent = readOptionalFile(process.env.DOCUSIGN_PRIVATE_KEY_FILE)
+        if (fileContent && fileContent.trim().length > 0) {
+                return fileContent
+        }
+
+        const inline = stripWrappingQuotes(process.env.DOCUSIGN_PRIVATE_KEY)
+        if (inline && inline.trim().length > 0) {
+                return inline
+        }
+
+        return undefined
+}
+
+const docuSignPrivateKey = resolveDocuSignPrivateKey()
+const docuSignIntegrationKey = optionalEnv(process.env.DOCUSIGN_INTEGRATION_KEY)
+const docuSignUserId = optionalEnv(process.env.DOCUSIGN_USER_ID)
+const docuSignAccountId = optionalEnv(process.env.DOCUSIGN_ACCOUNT_ID)
+const docuSignBaseUrl = optionalEnv(process.env.DOCUSIGN_BASE_URL) ?? 'https://demo.docusign.net/restapi'
+const docuSignAuthServer = optionalEnv(process.env.DOCUSIGN_AUTH_SERVER) ?? 'https://account-d.docusign.com'
+const docuSignWebhookSecret = optionalEnv(process.env.DOCUSIGN_WEBHOOK_SECRET)
+const docuSignPlatformSignerEmail = optionalEnv(process.env.DOCUSIGN_PLATFORM_SIGNER_EMAIL)
+const docuSignPlatformSignerName = optionalEnv(process.env.DOCUSIGN_PLATFORM_SIGNER_NAME)
+
+const docuSignEnabled = Boolean(
+        docuSignIntegrationKey && docuSignUserId && docuSignAccountId && docuSignPrivateKey
+)
+
+const normaliseBaseUrl = (value: string) => value.replace(/\/+$/, '')
+
+export const DOCUSIGN = {
+        ENABLED: docuSignEnabled,
+        INTEGRATION_KEY: docuSignIntegrationKey,
+        USER_ID: docuSignUserId,
+        ACCOUNT_ID: docuSignAccountId,
+        BASE_URL: normaliseBaseUrl(docuSignBaseUrl),
+        AUTH_SERVER: normaliseBaseUrl(docuSignAuthServer),
+        PRIVATE_KEY: docuSignPrivateKey,
+        WEBHOOK_SECRET: docuSignWebhookSecret,
+        EMAIL_SUBJECT:
+                optionalEnv(process.env.DOCUSIGN_EMAIL_SUBJECT) ?? 'Nền tảng - Yêu cầu ký hợp đồng',
+        EMAIL_BODY:
+                optionalEnv(process.env.DOCUSIGN_EMAIL_BODY) ??
+                'Vui lòng kiểm tra và ký hợp đồng điện tử để bắt đầu dự án.',
+        PLATFORM_SIGNER: docuSignPlatformSignerEmail
+                ? {
+                          email: docuSignPlatformSignerEmail,
+                          name: docuSignPlatformSignerName ?? 'Platform Admin'
+                  }
+                : null
+}

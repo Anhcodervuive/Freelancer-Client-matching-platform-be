@@ -33,6 +33,7 @@ import arbitratorDisputeRoute from './arbitrator-dispute.route'
 import freelancerPayoutRoute from './freelancer-payout.route'
 import platformTermsRoute from './platform-terms.route'
 import adminPlatformTermsRoute from './admin-platform-terms.route'
+import webhookRoute from './webhook.route'
 
 const rootRouter: Router = Router()
 
@@ -62,6 +63,7 @@ rootRouter.use('/chat', chatRoute)
 rootRouter.use('/upload', uploadRoute)
 rootRouter.use('/platform-terms', platformTermsRoute)
 rootRouter.use('/contracts', contractRoute)
+rootRouter.use('/webhooks', webhookRoute)
 rootRouter.use('/admin/disputes', adminDisputeRoute)
 rootRouter.use('/admin/users', adminUserRoute)
 rootRouter.use('/admin/job-posts', adminJobPostRoute)

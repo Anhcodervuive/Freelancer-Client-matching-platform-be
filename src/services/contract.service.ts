@@ -12,6 +12,8 @@ import {
         ContractAcceptanceAction,
         ContractClosureType,
         ContractParticipantRole,
+        ContractSignatureProvider,
+        ContractSignatureStatus,
         ContractStatus,
         DisputeNegotiationStatus,
         DisputeStatus,
@@ -1005,6 +1007,42 @@ const serializeContractTerms = (
         }
 }
 
+const serializeContractSignature = (
+        contract: {
+                signatureProvider: ContractSignatureProvider | null
+                signatureEnvelopeId: string | null
+                signatureStatus: ContractSignatureStatus | null
+                signatureSentAt: Date | null
+                signatureCompletedAt: Date | null
+                signatureDeclinedAt: Date | null
+                signatureVoidedAt: Date | null
+                signatureDocumentsUri: string | null
+                signatureCertificateUri: string | null
+                signatureRecipients: Prisma.JsonValue | null
+                signatureEnvelopeSummary: Prisma.JsonValue | null
+                signatureLastError: string | null
+        }
+) => {
+        if (!contract.signatureProvider && !contract.signatureEnvelopeId) {
+                        return null
+        }
+
+        return {
+                provider: contract.signatureProvider ?? null,
+                envelopeId: contract.signatureEnvelopeId ?? null,
+                status: contract.signatureStatus ?? null,
+                sentAt: contract.signatureSentAt ?? null,
+                completedAt: contract.signatureCompletedAt ?? null,
+                declinedAt: contract.signatureDeclinedAt ?? null,
+                voidedAt: contract.signatureVoidedAt ?? null,
+                documentsUri: contract.signatureDocumentsUri ?? null,
+                certificateUri: contract.signatureCertificateUri ?? null,
+                recipients: contract.signatureRecipients ?? null,
+                envelopeSummary: contract.signatureEnvelopeSummary ?? null,
+                lastError: contract.signatureLastError ?? null
+        }
+}
+
 const serializeContractSummary = (contract: ContractSummaryPayload) => {
         return {
                 id: contract.id,
@@ -1025,6 +1063,7 @@ const serializeContractSummary = (contract: ContractSummaryPayload) => {
                 closedById: contract.closedById ?? null,
                 closedBy: serializeContractUser(contract.closedBy),
                 platformTerms: serializeContractTerms(contract),
+                signature: serializeContractSignature(contract),
                 createdAt: contract.createdAt,
                 updatedAt: contract.updatedAt
         }

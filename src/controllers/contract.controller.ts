@@ -22,10 +22,12 @@ import {
         EndContractSchema,
         SubmitContractFeedbackSchema,
         UpdateContractFeedbackSchema,
-        AcceptContractTermsSchema
+        AcceptContractTermsSchema,
+        TriggerDocuSignEnvelopeSchema
 } from '~/schema/contract.schema'
 import { SubmitFinalEvidenceSchema } from '~/schema/dispute.schema'
 import contractService from '~/services/contract.service'
+import contractSignatureService from '~/services/contract-signature.service'
 
 const RESOURCE_FILE_FIELD_NAMES = new Set(['resourceFiles', 'resourceFiles[]', 'files', 'files[]'])
 const SUBMISSION_FILE_FIELD_NAMES = new Set(['attachments', 'attachments[]', 'files', 'files[]'])
@@ -137,6 +139,35 @@ export const acceptContractTerms = async (req: Request, res: Response) => {
         )
 
         return res.status(StatusCodes.OK).json(result)
+}
+
+export const sendContractSignatureEnvelope = async (req: Request, res: Response) => {
+        const user = req.user
+        const userId = user?.id
+        const { contractId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để gửi yêu cầu ký', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId) {
+                throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const payload = TriggerDocuSignEnvelopeSchema.parse(req.body ?? {})
+
+        await contractSignatureService.triggerDocuSignEnvelope(
+                contractId,
+                { id: userId, role: user?.role ?? null },
+                payload
+        )
+
+        const contract = await contractService.getContractDetail(
+                { id: userId, role: user?.role ?? null },
+                contractId
+        )
+
+        return res.status(StatusCodes.OK).json(contract)
 }
 
 export const endContract = async (req: Request, res: Response) => {
