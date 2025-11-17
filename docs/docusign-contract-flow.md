@@ -66,6 +66,18 @@ Việc tách riêng giúp hệ thống:
 1. Bảo đảm bằng chứng pháp lý về việc đồng ý điều khoản không phụ thuộc vào hành động “accept offer”.
 2. Cho phép từng bên hoàn thành bước đồng ý terms trước, sau đó mới kích hoạt ký số để tránh gửi nhầm phiên bản điều khoản.
 3. Hỗ trợ admin resend envelope hoặc thêm platform counter-signer mà không làm mất dữ liệu chấp thuận đã ghi nhận.
+4. Ràng buộc rằng DocuSign chỉ được gửi khi **tất cả** bên bắt buộc đã chấp thuận snapshot giống nhau; không để tình trạng một người nhấn accept là tự động email đi ngay.
+
+### 4.1. Vì sao không gộp hai bước?
+
+Giả sử ta gộp logic vào `POST /contracts/:id/terms/accept` (cứ có người đồng ý là gửi DocuSign ngay) thì sẽ gặp các vấn đề sau:
+
+* **Bất cân xứng vai trò:** Freelancer và client cần đồng ý riêng rẽ. Nếu freelancer bấm đồng ý và hệ thống lập tức gửi email DocuSign cho cả hai, client có thể chưa từng đăng nhập đọc snapshot nhưng vẫn bị kéo vào luồng ký – dễ bị khiếu nại.
+* **Khả năng chỉnh sửa:** Tới khi client đồng ý, admin có thể đã cập nhật terms version mới. Endpoint `terms/accept` kiểm tra phiên bản tại thời điểm gọi; nếu gom chung, bạn không thể kiểm soát trường hợp “freelancer đồng ý version 1, client phải ký version 2”.
+* **Tái gửi envelope:** Envelope có thể bị void, email rơi vào spam hoặc người ký yêu cầu gửi lại sau vài ngày. Route `signatures/docusign/send` cho phép admin hoặc hệ thống gửi lại theo yêu cầu mà không phải giả lập bước “đồng ý điều khoản” lần nữa.
+* **Audit tách bạch:** Nhật ký chấp thuận điều khoản (ai đồng ý lúc nào, IP nào) cần lưu kể cả khi DocuSign chưa gửi hoặc gửi thất bại. Khi gom chung, mọi lỗi DocuSign sẽ khiến endpoint terms/accept thất bại và người dùng phải thao tác lại, gây khó chịu.
+
+Vì vậy pipeline chuẩn là: mỗi bên vào trang hợp đồng → `POST /contracts/:id/terms/accept` để “khóa” điều khoản → sau khi đủ chữ ký nội bộ, hệ thống (hoặc admin) gọi `POST /contracts/:id/signatures/docusign/send` để gửi envelope. Luồng này giữ tính pháp lý và giúp vận hành linh hoạt hơn nhiều so với việc trộn hai nhiệm vụ vào cùng một endpoint.
 
 ## 4. Dòng Chảy Ký Từng Bên
 
