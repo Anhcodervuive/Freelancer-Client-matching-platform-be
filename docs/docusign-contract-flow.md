@@ -51,6 +51,12 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 ## 5. Nhận Thông Báo & Cập Nhật Hệ Thống
 
 1. **Webhook (DocuSign Connect)**: cấu hình endpoint `POST /webhooks/docusign` nhận sự kiện `EnvelopeCompleted`, `RecipientCompleted`.
+   * Trong giao diện DocuSign sandbox, vào **Settings → Connect → Connect Settings** và tạo một **Connect Configuration** mới.
+     * `URL to Publish`: nhập URL public của backend (ví dụ `https://api.dev.example.com/webhooks/docusign`). Đây là nơi DocuSign sẽ gọi tới.
+     * `Use HMAC Signature`: bật lên và đặt `HMAC Key` trùng với biến môi trường `DOCUSIGN_WEBHOOK_SECRET` của backend.
+     * `Envelope Events`: bật ít nhất `Completed`, `Declined`, `Voided`; `Recipient Events`: bật `Completed` để bắt từng người ký.
+     * `Logging`/`Retry`: bật `Include Documents` nếu muốn nhận file PDF ngay qua webhook, hoặc chỉ nhận metadata để tự tải sau.
+   * Ngoài Connect toàn cục, có thể gắn webhook riêng vào từng envelope khi gọi API (`eventNotification`). Khi đó URL/secret được truyền trực tiếp trong payload.
    * Xác thực HMAC bằng secret.
    * Parse `envelopeId`, `status`, `recipientEvents`.
 2. **Polling dự phòng**: nếu webhook thất bại, cron gọi `GET /v2.1/accounts/{accountId}/envelopes/{envelopeId}` để lấy trạng thái.
