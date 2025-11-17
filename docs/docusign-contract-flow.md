@@ -52,6 +52,21 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
    * `status`: `sent` để gửi ngay (hoặc `created` nếu muốn xem lại trong DocuSign).
 3. Lưu `envelopeId` vào bảng hợp đồng để đồng bộ trạng thái.
 
+## 4. Các route nội bộ hỗ trợ ký và chấp thuận điều khoản
+
+Để kết nối giữa bước chấp thuận điều khoản nền tảng và việc gửi envelope DocuSign, backend phơi bày hai endpoint REST riêng biệt:
+
+| Endpoint | Nhiệm vụ | Khi nào gọi |
+| --- | --- | --- |
+| `POST /contracts/:contractId/terms/accept` | Ghi nhận rằng người gọi (freelancer, client hoặc admin) đã đọc và chấp thuận snapshot điều khoản (`platformTermsVersion`, `platformTermsSnapshot`) gắn với hợp đồng. Service cập nhật dấu `termsAcceptedAt`/`clientAcceptedAt`, lưu log IP, user-agent vào `contractAcceptanceLog`, đồng thời từ chối nếu hợp đồng đã bị hủy hoặc terms thay đổi. | Sau khi hợp đồng được tạo từ offer (trạng thái `DRAFT`) và trước khi chuyển sang `ACTIVE` hoặc gửi DocuSign. Mỗi bên có thể gọi ở thời điểm khác nhau để tạo bằng chứng độc lập. |
+| `POST /contracts/:contractId/signatures/docusign/send` | Tạo tài liệu hợp đồng từ snapshot điều khoản, xây danh sách signer (freelancer → client → đại diện nền tảng) và gửi envelope qua DocuSign. Hỗ trợ `forceResend` nếu cần void envelope cũ và gửi lại email mời ký. | Sau khi cả hai bên đã hoàn thành bước chấp thuận điều khoản nội bộ, hoặc khi admin cần chủ động gửi lại/tái kích hoạt quy trình ký (ngoài flow tự động lúc freelancer nhận offer). |
+
+Việc tách riêng giúp hệ thống:
+
+1. Bảo đảm bằng chứng pháp lý về việc đồng ý điều khoản không phụ thuộc vào hành động “accept offer”.
+2. Cho phép từng bên hoàn thành bước đồng ý terms trước, sau đó mới kích hoạt ký số để tránh gửi nhầm phiên bản điều khoản.
+3. Hỗ trợ admin resend envelope hoặc thêm platform counter-signer mà không làm mất dữ liệu chấp thuận đã ghi nhận.
+
 ## 4. Dòng Chảy Ký Từng Bên
 
 | Bước | Freelancer | Client | Nền tảng |
