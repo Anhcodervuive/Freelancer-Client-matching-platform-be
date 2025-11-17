@@ -79,6 +79,18 @@ Giả sử ta gộp logic vào `POST /contracts/:id/terms/accept` (cứ có ngư
 
 Vì vậy pipeline chuẩn là: mỗi bên vào trang hợp đồng → `POST /contracts/:id/terms/accept` để “khóa” điều khoản → sau khi đủ chữ ký nội bộ, hệ thống (hoặc admin) gọi `POST /contracts/:id/signatures/docusign/send` để gửi envelope. Luồng này giữ tính pháp lý và giúp vận hành linh hoạt hơn nhiều so với việc trộn hai nhiệm vụ vào cùng một endpoint.
 
+### 4.2. Luồng sử dụng 2 endpoint trong thực tế
+
+1. **Client gửi offer:** Service `respondJobOffer` tạo bản ghi hợp đồng ở trạng thái `DRAFT`, chụp `platformTermsSnapshot` và gắn `platformTermsVersion` vào hợp đồng.
+2. **Freelancer đăng nhập và đồng ý điều khoản:** Frontend gọi `POST /contracts/:id/terms/accept` (payload chứa IP/UA). Service cập nhật `termsAcceptedAt` của freelancer và lưu log.
+3. **Client đồng ý điều khoản:** Client truy cập hợp đồng → gọi cùng endpoint. Nếu client chưa đồng ý, hệ thống chưa cho phép gửi DocuSign dù freelancer đã đồng ý.
+4. **Kiểm tra đủ chữ ký nội bộ:** Khi cả hai trường `termsAcceptedAt` và `clientAcceptedAt` có giá trị (hoặc bên nào đó được đánh dấu “not required”), workflow tự động kích hoạt `POST /contracts/:id/signatures/docusign/send`. Admin cũng có thể gọi thủ công nếu cần gửi lại.
+5. **Gửi DocuSign:** Endpoint thứ hai dựng tài liệu từ snapshot vừa “khóa”, thêm danh sách signer (freelancer → client → platform) và gọi DocuSign để phát hành envelope.
+6. **DocuSign xử lý chữ ký:** Email lần lượt được gửi cho từng bên; backend nhận webhook `POST /webhooks/docusign` để cập nhật trạng thái.
+7. **Hoàn tất:** Khi webhook báo `completed`, hợp đồng đổi sang `SIGNED/ACTIVE`. Nếu cần resend, chỉ gọi lại `signatures/docusign/send` với `forceResend` mà không đụng tới log chấp thuận terms.
+
+Luồng này bảo đảm mỗi bản hợp đồng luôn tham chiếu tới đúng phiên bản điều khoản mà **tất cả** các bên đã xác nhận trước khi bất kỳ email DocuSign nào được gửi đi.
+
 ## 4. Dòng Chảy Ký Từng Bên
 
 | Bước | Freelancer | Client | Nền tảng |
