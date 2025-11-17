@@ -12,6 +12,21 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 | **Webhook Secret (DocuSign Connect)** | Nếu dùng Connect để nhận callback, cấu hình một HMAC secret và endpoint tiếp nhận sự kiện. |
 | **Template (tuỳ chọn)** | Nếu hợp đồng có layout cố định, tạo template DocuSign với các tabs (chữ ký, checkbox, text) sẵn. |
 
+### 1.1. Bảng Tham Chiếu Biến Môi Trường
+
+| Biến môi trường | Lấy ở đâu trong DocuSign | Cách dùng trong hệ thống |
+| --- | --- | --- |
+| `DOCUSIGN_INTEGRATION_KEY` | Tab **Apps and Keys** của ứng dụng bạn tạo | Được client OAuth JWT sử dụng để ký `client_id`. |
+| `DOCUSIGN_USER_ID` | Trên cùng màn hình Apps and Keys (GUID của user được uỷ quyền) | Điền vào `sub` trong JWT để DocuSign cho phép impersonation. |
+| `DOCUSIGN_ACCOUNT_ID` | Tab **My Preferences → API and Keys** hoặc Apps and Keys | Tham chiếu khi gọi `POST /accounts/{accountId}/envelopes`. |
+| `DOCUSIGN_PRIVATE_KEY` | Tự sinh và lưu trong secret manager (DocuSign chỉ giữ public key) | Backend đọc để ký JWT lấy access token. |
+| `DOCUSIGN_WEBHOOK_SECRET` | Trường **HMAC Key** khi bạn cấu hình Connect | Middleware webhook dùng để verify chữ ký `X-DocuSign-Signature-1`. |
+| `DOCUSIGN_PLATFORM_SIGNER_EMAIL` / `NAME` | Email/nickname của đại diện nền tảng (có thể là tài khoản DocuSign bất kỳ) | Được thêm vào danh sách recipients để counter-sign hoặc nhận bản sao. |
+| `DOCUSIGN_PLATFORM_SIGNER_USER_ID` (tuỳ chọn) | Nếu dùng user cụ thể trong DocuSign | Cho phép định tuyến chính xác hoặc tạo đại diện trong audit log. |
+| `DOCUSIGN_BASE_PATH` | Hiển thị trong Apps and Keys (ví dụ `https://demo.docusign.net/restapi`) | Dùng để cấu hình SDK/client HTTP. |
+
+> **Mẹo:** đưa các biến này vào `.env` và tham chiếu qua `src/config/environment.ts`. Khi chuyển sang production, chỉ cần cập nhật giá trị tương ứng từ tài khoản DocuSign live.
+
 ## 2. Dữ Liệu Hợp Đồng Chuẩn Bị Ở Backend
 
 1. **Snapshot điều khoản**: Lấy `platformTermsSnapshot` và thông tin hợp đồng (title, giá trị, các bên tham gia).
