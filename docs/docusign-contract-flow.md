@@ -67,7 +67,11 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 
 1. **Webhook (DocuSign Connect)**: cấu hình endpoint `POST /webhooks/docusign` nhận sự kiện `EnvelopeCompleted`, `RecipientCompleted`.
    * Trong giao diện DocuSign sandbox, vào **Settings → Connect → Connect Settings** và tạo một **Connect Configuration** mới.
-     * `URL to Publish`: nhập URL public của backend (ví dụ `https://api.dev.example.com/webhooks/docusign`). Đây là nơi DocuSign sẽ gọi tới.
+     * `URL to Publish`: DocuSign **bắt buộc** URL này phải là HTTPS hợp lệ (có chứng chỉ tin cậy). Đối với môi trường dev, có thể dùng các cách sau để tạo HTTPS:
+       * Deploy backend lên môi trường cloud (Render, Railway, Fly.io, VPS…) rồi bật TLS.
+       * Hoặc dùng dịch vụ tunneling như `ngrok`, `Cloudflare Tunnel`, `LocalTunnel`. Ví dụ chạy `ngrok http 3000`, sau đó copy URL `https://<subdomain>.ngrok.io/webhooks/docusign` vào trường này.
+       * Không thể dùng `http://localhost` vì DocuSign sẽ từ chối lưu cấu hình.
+       * Đảm bảo firewall/public DNS cho phép DocuSign gọi đến.
      * `Use HMAC Signature`: bật lên và đặt `HMAC Key` trùng với biến môi trường `DOCUSIGN_WEBHOOK_SECRET` của backend.
      * `Envelope Events`: bật ít nhất `Completed`, `Declined`, `Voided`; `Recipient Events`: bật `Completed` để bắt từng người ký.
      * `Logging`/`Retry`: bật `Include Documents` nếu muốn nhận file PDF ngay qua webhook, hoặc chỉ nhận metadata để tự tải sau.
