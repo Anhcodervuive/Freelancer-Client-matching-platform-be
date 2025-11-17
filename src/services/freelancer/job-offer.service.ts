@@ -4,7 +4,8 @@ import {
         JobProposalStatus,
         NotificationCategory,
         NotificationEvent,
-        NotificationResource
+        NotificationResource,
+        ContractStatus
 } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
@@ -22,6 +23,7 @@ import {
 } from '~/services/job-offer/shared'
 import chatThreadService from '~/services/chat/chat-thread.service'
 import notificationService from '~/services/notification.service'
+import platformTermsService from '~/services/platform-terms.service'
 
 const uniquePreserveOrder = <T>(items: readonly T[]): T[] => {
 	const seen = new Set<T>()
@@ -373,6 +375,8 @@ const respondToJobOffer = async (freelancerUserId: string, offerId: string, payl
                                 include: jobOfferInclude
                         })
 
+                        const activeTerms = await platformTermsService.ensureLatestActiveTermsRecord(tx)
+
                         const contract = await tx.contract.create({
                                 data: {
                                         clientId: offer.clientId,
@@ -381,7 +385,12 @@ const respondToJobOffer = async (freelancerUserId: string, offerId: string, payl
                                         proposalId: offer.proposalId ?? null,
                                         offerId: offer.id,
                                         title: offer.title,
-                                        currency: offer.currency
+                                        currency: offer.currency,
+                                        status: ContractStatus.DRAFT,
+                                        platformTermsId: activeTerms.id,
+                                        platformTermsVersion: activeTerms.version,
+                                        platformTermsSnapshot:
+                                                activeTerms.body === null ? Prisma.JsonNull : activeTerms.body
                                 }
                         })
 
@@ -392,9 +401,9 @@ const respondToJobOffer = async (freelancerUserId: string, offerId: string, payl
                         await chatThreadService.ensureProjectThreadForProposal({
                                 jobPostId: offer.jobId,
                                 proposalId: offer.proposalId,
-				clientId: offer.clientId,
-				freelancerId: offer.freelancerId,
-				jobTitle: offer.job?.title ?? offer.title,
+                                clientId: offer.clientId,
+                                freelancerId: offer.freelancerId,
+                                jobTitle: offer.job?.title ?? offer.title,
                                 contractId: result.contract.id
                         })
                 }

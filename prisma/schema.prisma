@@ -27,6 +27,19 @@ enum ContractParticipantRole {
   SYSTEM
 }
 
+enum ContractSignatureProvider {
+  DOCUSIGN
+}
+
+enum ContractSignatureStatus {
+  DRAFT
+  SENT
+  COMPLETED
+  DECLINED
+  VOIDED
+  ERROR
+}
+
 enum ArbitrationDossierStatus {
   DRAFT
   LOCKED
@@ -77,11 +90,15 @@ model User {
   arbitrationEvidenceSubmissions ArbitrationEvidenceSubmission[] @relation("ArbitrationEvidenceSubmittedBy")
   paymentsAsPayer              Payment[]            @relation("PaymentPayer")
   contractsClosed              Contract[]           @relation("ContractClosedBy")
+  contractTermsAccepted        Contract[]           @relation("ContractTermsAcceptedBy")
+  contractTermsApproved        Contract[]           @relation("ContractClientAcceptedBy")
   contractFeedbackAuthored     ContractFeedback[]   @relation("ContractFeedbackReviewer")
   contractFeedbackReceived     ContractFeedback[]   @relation("ContractFeedbackReviewee")
   bans                         UserBan[]            @relation("UserBanUser")
   bansAuthored                 UserBan[]            @relation("UserBanAdmin")
   bansLifted                   UserBan[]            @relation("UserBanLiftedBy")
+  platformTermsAuthored        PlatformTerms[]      @relation("PlatformTermsCreatedBy")
+  contractAcceptanceLogs       ContractAcceptanceLog[] @relation("ContractAcceptanceActor")
 
   @@index([email])
   @@map("user")
@@ -965,6 +982,18 @@ enum ContractStatus {
   CANCELLED
 }
 
+enum PlatformTermsStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum ContractAcceptanceAction {
+  ACCEPTED
+  DECLINED
+  REVOKED
+}
+
 enum ContractClosureType {
   COMPLETED
   CANCELLED
@@ -1021,6 +1050,29 @@ model Contract {
   closureReason String?              @map("closure_reason") @db.MediumText
   endedAt      DateTime?            @map("ended_at")
   closedById   String?              @map("closed_by_id")
+  platformTermsId        String?   @map("platform_terms_id")
+  platformTermsVersion   String?   @map("platform_terms_version") @db.VarChar(191)
+  platformTermsSnapshot  Json?     @map("platform_terms_snapshot")
+  termsAcceptedAt        DateTime? @map("terms_accepted_at")
+  termsAcceptedById      String?   @map("terms_accepted_by_id")
+  termsAcceptedIp        String?   @map("terms_accepted_ip") @db.VarChar(255)
+  termsAcceptedUserAgent String?   @map("terms_accepted_user_agent") @db.VarChar(500)
+  clientAcceptedAt        DateTime? @map("client_accepted_at")
+  clientAcceptedById      String?   @map("client_accepted_by_id")
+  clientAcceptedIp        String?   @map("client_accepted_ip") @db.VarChar(255)
+  clientAcceptedUserAgent String?   @map("client_accepted_user_agent") @db.VarChar(500)
+  signatureProvider       ContractSignatureProvider? @map("signature_provider")
+  signatureEnvelopeId     String?   @unique @map("signature_envelope_id") @db.VarChar(191)
+  signatureStatus         ContractSignatureStatus?   @map("signature_status")
+  signatureRecipients     Json?     @map("signature_recipients")
+  signatureEnvelopeSummary Json?    @map("signature_envelope_summary")
+  signatureDocumentsUri   String?   @map("signature_documents_uri") @db.VarChar(2048)
+  signatureCertificateUri String?   @map("signature_certificate_uri") @db.VarChar(2048)
+  signatureSentAt         DateTime? @map("signature_sent_at")
+  signatureCompletedAt    DateTime? @map("signature_completed_at")
+  signatureDeclinedAt     DateTime? @map("signature_declined_at")
+  signatureVoidedAt       DateTime? @map("signature_voided_at")
+  signatureLastError      String?   @map("signature_last_error") @db.VarChar(1000)
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
@@ -1030,12 +1082,58 @@ model Contract {
   proposal    JobProposal? @relation("ContractProposal", fields: [proposalId], references: [id], onDelete: SetNull)
   offer       JobOffer?    @relation("OfferContract", fields: [offerId], references: [id], onDelete: SetNull)
   closedBy    User?        @relation("ContractClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  platformTerms PlatformTerms? @relation(fields: [platformTermsId], references: [id], onDelete: SetNull)
+  termsAcceptedBy User?        @relation("ContractTermsAcceptedBy", fields: [termsAcceptedById], references: [id], onDelete: SetNull)
+  clientAcceptedBy User?       @relation("ContractClientAcceptedBy", fields: [clientAcceptedById], references: [id], onDelete: SetNull)
   milestones  Milestone[]
   chatThreads ChatThread[]
   feedbacks   ContractFeedback[]
+  acceptanceLogs ContractAcceptanceLog[]
 
   @@index([jobPostId])
   @@index([closedById])
+  @@index([platformTermsId], name: "idx_contract_platform_terms")
+  @@index([termsAcceptedById], name: "idx_contract_terms_accepted_by")
+  @@index([clientAcceptedById], name: "idx_contract_client_accepted_by")
+  @@index([signatureStatus], name: "idx_contract_signature_status")
+}
+
+model PlatformTerms {
+  id            String               @id @default(cuid())
+  version       String               @unique
+  title         String
+  body          Json
+  status        PlatformTermsStatus  @default(DRAFT)
+  effectiveFrom DateTime?            @map("effective_from")
+  effectiveTo   DateTime?            @map("effective_to")
+  createdById   String?              @map("created_by_id")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  createdBy User?     @relation("PlatformTermsCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  contracts Contract[]
+
+  @@index([status, effectiveFrom], name: "idx_platform_terms_status_effective")
+  @@map("platform_terms")
+}
+
+model ContractAcceptanceLog {
+  id           String                   @id @default(cuid())
+  contractId   String                   @map("contract_id")
+  actorId      String                   @map("actor_id")
+  action       ContractAcceptanceAction @default(ACCEPTED)
+  termsVersion String                   @map("terms_version")
+  termsSnapshot Json?                   @map("terms_snapshot")
+  ipAddress    String?                  @map("ip_address") @db.VarChar(255)
+  userAgent    String?                  @map("user_agent") @db.VarChar(500)
+  createdAt    DateTime                 @default(now()) @map("created_at")
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  actor    User     @relation("ContractAcceptanceActor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([contractId], name: "idx_contract_acceptance_contract")
+  @@index([actorId], name: "idx_contract_acceptance_actor")
+  @@map("contract_acceptance_log")
 }
 
 model ContractFeedback {

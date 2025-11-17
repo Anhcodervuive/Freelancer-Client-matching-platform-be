@@ -210,6 +210,27 @@ export const EndContractSchema = z.object({
 
 export type EndContractInput = z.infer<typeof EndContractSchema>
 
+export const AcceptContractTermsSchema = z
+        .object({
+                termsVersion: z.string().trim().min(1, 'Thiếu phiên bản điều khoản'),
+                userAgent: z.string().trim().min(1).max(500).optional()
+        })
+        .strict()
+
+export type AcceptContractTermsInput = z.infer<typeof AcceptContractTermsSchema>
+
+export const TriggerDocuSignEnvelopeSchema = z
+        .object({
+                forceResend: z.boolean().optional(),
+                resendReason: z.string().trim().max(500).optional()
+        })
+        .refine(data => !data.resendReason || data.forceResend, {
+                message: 'Cần bật forceResend khi cung cấp lý do gửi lại',
+                path: ['resendReason']
+        })
+
+export type TriggerDocuSignEnvelopeInput = z.infer<typeof TriggerDocuSignEnvelopeSchema>
+
 export const SubmitContractFeedbackSchema = z.object({
         rating: ReviewRatingSchema,
         comment: z.string().trim().max(5000, 'Nhận xét tối đa 5000 ký tự').optional(),

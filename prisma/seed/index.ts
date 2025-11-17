@@ -1,6 +1,6 @@
 import { prisma } from './_utils'
 import { seedTaxonomy } from './taxonomy'
-import { seedArbitrators } from './arbitrator'
+import { seedPlatformTerms } from './platform-terms'
 
 /**
  * Cho phép chạy 1 phần:  `npm run seed -- taxonomy`
@@ -8,9 +8,14 @@ import { seedArbitrators } from './arbitrator'
  */
 const only = new Set(process.argv.slice(2).map(s => s.toLowerCase()))
 
+function shouldRun(...keys: string[]) {
+        if (!only.size) return true
+        return keys.some(key => only.has(key))
+}
+
 async function main() {
-        if (!only.size || only.has('taxonomy')) await seedTaxonomy()
-        if (!only.size || only.has('arbitrator') || only.has('arbitrators')) await seedArbitrators()
+        if (shouldRun('taxonomy')) await seedTaxonomy()
+        if (shouldRun('platform-terms', 'platformterms', 'terms')) await seedPlatformTerms()
 }
 
 main()

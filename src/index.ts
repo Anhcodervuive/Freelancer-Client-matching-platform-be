@@ -1,4 +1,5 @@
 import express from 'express'
+import type { Request, Response } from 'express'
 import morgan from 'morgan'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
@@ -14,9 +15,15 @@ import { corsOptions } from './config/cors'
 import '~/config/passport'
 import { registerRealtime } from './realtime'
 
+const captureRawBody = (req: Request & { rawBody?: Buffer }, _res: Response, buffer: Buffer) => {
+        if (buffer && buffer.length > 0) {
+                req.rawBody = Buffer.from(buffer)
+        }
+}
+
 async function START_SERVIER() {
-	try {
-		await prismaClient.$connect()
+        try {
+                await prismaClient.$connect()
 		await redisClient.on('connect', () => console.log('Connected to Redis'))
 		console.log('✅ Connected to Mysql!')
 
@@ -29,9 +36,10 @@ async function START_SERVIER() {
 			next()
 		})
 
-		app.use(express.json())
-		app.use(cookieParser())
-		app.use(cors(corsOptions))
+                app.use(express.json({ verify: captureRawBody }))
+                app.use(express.urlencoded({ verify: captureRawBody, extended: true }))
+                app.use(cookieParser())
+                app.use(cors(corsOptions))
 
 		app.use(morgan('combined'))
 

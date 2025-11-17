@@ -521,13 +521,76 @@ CREATE TABLE `Contract` (
     `closure_reason` MEDIUMTEXT NULL,
     `ended_at` DATETIME(3) NULL,
     `closed_by_id` VARCHAR(191) NULL,
+    `platform_terms_id` VARCHAR(191) NULL,
+    `platform_terms_version` VARCHAR(191) NULL,
+    `platform_terms_snapshot` JSON NULL,
+    `terms_accepted_at` DATETIME(3) NULL,
+    `terms_accepted_by_id` VARCHAR(191) NULL,
+    `terms_accepted_ip` VARCHAR(255) NULL,
+    `terms_accepted_user_agent` VARCHAR(500) NULL,
+    `client_accepted_at` DATETIME(3) NULL,
+    `client_accepted_by_id` VARCHAR(191) NULL,
+    `client_accepted_ip` VARCHAR(255) NULL,
+    `client_accepted_user_agent` VARCHAR(500) NULL,
+    `signature_provider` ENUM('DOCUSIGN') NULL,
+    `signature_envelope_id` VARCHAR(191) NULL,
+    `signature_status` ENUM('DRAFT', 'SENT', 'COMPLETED', 'DECLINED', 'VOIDED', 'ERROR') NULL,
+    `signature_recipients` JSON NULL,
+    `signature_envelope_summary` JSON NULL,
+    `signature_documents_uri` VARCHAR(2048) NULL,
+    `signature_certificate_uri` VARCHAR(2048) NULL,
+    `signature_sent_at` DATETIME(3) NULL,
+    `signature_completed_at` DATETIME(3) NULL,
+    `signature_declined_at` DATETIME(3) NULL,
+    `signature_voided_at` DATETIME(3) NULL,
+    `signature_last_error` VARCHAR(1000) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `Contract_proposal_id_key`(`proposal_id`),
     UNIQUE INDEX `Contract_offer_id_key`(`offer_id`),
+    UNIQUE INDEX `Contract_signature_envelope_id_key`(`signature_envelope_id`),
     INDEX `Contract_job_post_id_idx`(`job_post_id`),
     INDEX `Contract_closed_by_id_idx`(`closed_by_id`),
+    INDEX `idx_contract_platform_terms`(`platform_terms_id`),
+    INDEX `idx_contract_terms_accepted_by`(`terms_accepted_by_id`),
+    INDEX `idx_contract_client_accepted_by`(`client_accepted_by_id`),
+    INDEX `idx_contract_signature_status`(`signature_status`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `platform_terms` (
+    `id` VARCHAR(191) NOT NULL,
+    `version` VARCHAR(191) NOT NULL,
+    `title` VARCHAR(191) NOT NULL,
+    `body` JSON NOT NULL,
+    `status` ENUM('DRAFT', 'ACTIVE', 'RETIRED') NOT NULL DEFAULT 'DRAFT',
+    `effective_from` DATETIME(3) NULL,
+    `effective_to` DATETIME(3) NULL,
+    `created_by_id` VARCHAR(191) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `platform_terms_version_key`(`version`),
+    INDEX `idx_platform_terms_status_effective`(`status`, `effective_from`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `contract_acceptance_log` (
+    `id` VARCHAR(191) NOT NULL,
+    `contract_id` VARCHAR(191) NOT NULL,
+    `actor_id` VARCHAR(191) NOT NULL,
+    `action` ENUM('ACCEPTED', 'DECLINED', 'REVOKED') NOT NULL DEFAULT 'ACCEPTED',
+    `terms_version` VARCHAR(191) NOT NULL,
+    `terms_snapshot` JSON NULL,
+    `ip_address` VARCHAR(255) NULL,
+    `user_agent` VARCHAR(500) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `idx_contract_acceptance_contract`(`contract_id`),
+    INDEX `idx_contract_acceptance_actor`(`actor_id`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -1290,6 +1353,24 @@ ALTER TABLE `Contract` ADD CONSTRAINT `Contract_offer_id_fkey` FOREIGN KEY (`off
 
 -- AddForeignKey
 ALTER TABLE `Contract` ADD CONSTRAINT `Contract_closed_by_id_fkey` FOREIGN KEY (`closed_by_id`) REFERENCES `user`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Contract` ADD CONSTRAINT `Contract_platform_terms_id_fkey` FOREIGN KEY (`platform_terms_id`) REFERENCES `platform_terms`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Contract` ADD CONSTRAINT `Contract_terms_accepted_by_id_fkey` FOREIGN KEY (`terms_accepted_by_id`) REFERENCES `user`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Contract` ADD CONSTRAINT `Contract_client_accepted_by_id_fkey` FOREIGN KEY (`client_accepted_by_id`) REFERENCES `user`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `platform_terms` ADD CONSTRAINT `platform_terms_created_by_id_fkey` FOREIGN KEY (`created_by_id`) REFERENCES `user`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `contract_acceptance_log` ADD CONSTRAINT `contract_acceptance_log_contract_id_fkey` FOREIGN KEY (`contract_id`) REFERENCES `Contract`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `contract_acceptance_log` ADD CONSTRAINT `contract_acceptance_log_actor_id_fkey` FOREIGN KEY (`actor_id`) REFERENCES `user`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `contract_feedback` ADD CONSTRAINT `contract_feedback_contract_id_fkey` FOREIGN KEY (`contract_id`) REFERENCES `Contract`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
