@@ -63,6 +63,7 @@ import { InternalServerException } from '~/exceptions/internal-server'
 import notificationService from '~/services/notification.service'
 import { emailQueue } from '~/queues/email.queue'
 import { SubmitFinalEvidenceInput } from '~/schema/dispute.schema'
+import contractSignatureService from '~/services/contract-signature.service'
 
 type ContractAuthUser = { id: string; role: Role | null }
 
@@ -1040,6 +1041,39 @@ const serializeContractSignature = (
                 recipients: contract.signatureRecipients ?? null,
                 envelopeSummary: contract.signatureEnvelopeSummary ?? null,
                 lastError: contract.signatureLastError ?? null
+        }
+}
+
+const shouldAutoTriggerDocuSignEnvelope = (contract: ContractDetailPayload) => {
+        if (!contractSignatureService.isDocuSignEnabled()) {
+                return false
+        }
+
+        if (contract.signatureEnvelopeId || contract.signatureProvider) {
+                return false
+        }
+
+        if (!contract.platformTermsSnapshot) {
+                return false
+        }
+
+        const freelancerAccepted = Boolean(contract.termsAcceptedAt)
+        const clientAccepted = Boolean(contract.clientAcceptedAt)
+
+        return freelancerAccepted && clientAccepted
+}
+
+const autoTriggerDocuSignEnvelopeIfNeeded = async (contract: ContractDetailPayload) => {
+        if (!shouldAutoTriggerDocuSignEnvelope(contract)) {
+                return
+        }
+
+        try {
+                await contractSignatureService.triggerDocuSignEnvelope(contract.id, null, undefined, {
+                        skipAuthorization: true
+                })
+        } catch (error) {
+                console.error('Không thể gửi envelope DocuSign tự động sau khi chấp thuận terms', error)
         }
 }
 
@@ -2049,6 +2083,8 @@ const acceptContractTerms = async (
         if (!updated) {
                 throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
         }
+
+        await autoTriggerDocuSignEnvelopeIfNeeded(updated)
 
         return serializeContractDetail(updated, {
                 viewer: { id: user.id, role: viewerRole }
