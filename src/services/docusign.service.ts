@@ -42,7 +42,7 @@ const buildJwtAssertion = () => {
         return jwt.sign(payload, DOCUSIGN.PRIVATE_KEY!, { algorithm: 'RS256', expiresIn: '10m' })
 }
 
-const buildConsentUrl = () => {
+export const buildDocuSignConsentUrl = () => {
         const base = trimTrailingSlashes(DOCUSIGN.AUTH_SERVER)
         const params = new URLSearchParams({
                 response_type: 'code',
@@ -76,13 +76,14 @@ const fetchAccessToken = async (): Promise<string> => {
 		let description = body
 		try {
 			const parsed = JSON.parse(body) as { error?: string; error_description?: string }
-			if (parsed.error === 'consent_required') {
-				const consentUrl = buildConsentUrl()
-				throw new Error(
-					'DocuSign yêu cầu cấp quyền (consent) cho ứng dụng JWT. ' +
-						`Đăng nhập tài khoản DocuSign sandbox và mở URL sau để chấp thuận: ${consentUrl}`
-				)
-			}
+                        if (parsed.error === 'consent_required') {
+                                const consentUrl = buildDocuSignConsentUrl()
+                                throw new Error(
+                                        'DocuSign yêu cầu cấp quyền (consent) cho ứng dụng JWT. ' +
+                                                `Đăng nhập bằng user ${DOCUSIGN.USER_ID} trên DocuSign sandbox và mở URL sau để chấp thuận: ${consentUrl}. ` +
+                                                'Bạn có thể copy URL nhanh bằng lệnh "npm run docusign:consent-url"'
+                                )
+                        }
 			if (parsed.error_description) {
 				description = parsed.error_description
 			}

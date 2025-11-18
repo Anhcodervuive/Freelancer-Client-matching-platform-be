@@ -5,6 +5,7 @@
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
                 "dev": "node scripts/dev.js",
+                "docusign:consent-url": "ts-node -r tsconfig-paths/register src/scripts/docusign-consent-url.ts",
                 "worker:email": "ts-node -r tsconfig-paths/register src/queues/email.worker.ts",
                 "worker:match-interaction": "ts-node -r tsconfig-paths/register src/queues/match-interaction.worker.ts",
                 "worker:job-moderation": "ts-node -r tsconfig-paths/register src/queues/job-moderation.worker.ts"

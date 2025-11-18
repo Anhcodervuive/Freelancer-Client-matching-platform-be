@@ -40,6 +40,16 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 > * `<INTEGRATION_KEY>` là giá trị `DOCUSIGN_INTEGRATION_KEY`.
 > * `<ENCODED_REDIRECT_URI>` mặc định là `https://developers.docusign.com/platform/auth/consent` (hoặc bất kỳ URL nào bạn cấu hình qua `DOCUSIGN_CONSENT_REDIRECT_URI`).
 > * Sau khi DocuSign báo **Consent Successful**, có thể đóng tab; backend sẽ gọi được OAuth JWT mà không gặp lỗi `consent_required` nữa.
+>
+> **Mẹo lấy URL sẵn:** chạy `npm run docusign:consent-url` sau khi điền `.env`. Script sẽ in đúng URL consent dựa trên `DOCUSIGN_AUTH_SERVER`, `DOCUSIGN_INTEGRATION_KEY` và `DOCUSIGN_CONSENT_REDIRECT_URI`.
+>
+> **Quyền admin cần thiết**
+>
+> 1. Đăng nhập DocuSign sandbox (https://account-d.docusign.com) bằng chính user có GUID `DOCUSIGN_USER_ID` – đây phải là user admin hoặc ít nhất đã được bật quyền **API and Keys**.
+> 2. Giữ nguyên trạng thái đăng nhập (đừng mở cửa sổ ẩn danh), copy URL do script ở trên in ra (hoặc tự build theo công thức) vào thanh địa chỉ.
+> 3. DocuSign sẽ hỏi xác nhận ứng dụng `<Integration Key>` muốn thay mặt user gọi API với scope `signature impersonation`. Chọn **Accept**.
+> 4. Khi màn hình báo *Consent Successful* (DocuSign có thể redirect về trang `developers.docusign.com` hoặc URL bạn cấu hình), quá trình cấp quyền đã hoàn tất – không cần là owner của cả account, chỉ cần user này đã được admin cấp quyền API.
+> 5. Quay lại backend và thử gọi lại flow JWT; lỗi `consent_required` sẽ biến mất. Nếu chuyển sang user khác, bạn cần lặp lại các bước trên cho user mới.
 
 ## 2. Dữ Liệu Hợp Đồng Chuẩn Bị Ở Backend
 
