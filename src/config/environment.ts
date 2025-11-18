@@ -367,6 +367,9 @@ const docuSignAuthServer = optionalEnv(process.env.DOCUSIGN_AUTH_SERVER) ?? 'htt
 const docuSignWebhookSecret = optionalEnv(process.env.DOCUSIGN_WEBHOOK_SECRET)
 const docuSignPlatformSignerEmail = optionalEnv(process.env.DOCUSIGN_PLATFORM_SIGNER_EMAIL)
 const docuSignPlatformSignerName = optionalEnv(process.env.DOCUSIGN_PLATFORM_SIGNER_NAME)
+const docuSignConsentRedirectUri =
+        optionalEnv(process.env.DOCUSIGN_CONSENT_REDIRECT_URI) ??
+        'https://developers.docusign.com/platform/auth/consent'
 
 const docuSignEnabled = Boolean(
         docuSignIntegrationKey && docuSignUserId && docuSignAccountId && docuSignPrivateKey
@@ -382,6 +385,7 @@ export const DOCUSIGN = {
         BASE_URL: normaliseBaseUrl(docuSignBaseUrl),
         AUTH_SERVER: normaliseBaseUrl(docuSignAuthServer),
         PRIVATE_KEY: docuSignPrivateKey,
+        CONSENT_REDIRECT_URI: docuSignConsentRedirectUri,
         WEBHOOK_SECRET: docuSignWebhookSecret,
         EMAIL_SUBJECT:
                 optionalEnv(process.env.DOCUSIGN_EMAIL_SUBJECT) ?? 'Nền tảng - Yêu cầu ký hợp đồng',

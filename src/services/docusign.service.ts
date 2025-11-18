@@ -42,6 +42,18 @@ const buildJwtAssertion = () => {
         return jwt.sign(payload, DOCUSIGN.PRIVATE_KEY!, { algorithm: 'RS256', expiresIn: '10m' })
 }
 
+const buildConsentUrl = () => {
+        const base = trimTrailingSlashes(DOCUSIGN.AUTH_SERVER)
+        const params = new URLSearchParams({
+                response_type: 'code',
+                scope: DOCUSIGN_SCOPE,
+                client_id: DOCUSIGN.INTEGRATION_KEY!,
+                redirect_uri: DOCUSIGN.CONSENT_REDIRECT_URI
+        })
+
+        return `${base}/oauth/auth?${params.toString()}`
+}
+
 const fetchAccessToken = async (): Promise<string> => {
         const now = Date.now()
         if (cachedToken && cachedToken.expiresAt - 60_000 > now) {
@@ -59,10 +71,33 @@ const fetchAccessToken = async (): Promise<string> => {
                 })
         })
 
-        const body = await response.text()
-        if (!response.ok) {
-                throw new Error(`DocuSign token request failed: ${response.status} ${body}`)
-        }
+	const body = await response.text()
+	if (!response.ok) {
+		let description = body
+		try {
+			const parsed = JSON.parse(body) as { error?: string; error_description?: string }
+			if (parsed.error === 'consent_required') {
+				const consentUrl = buildConsentUrl()
+				throw new Error(
+					'DocuSign yêu cầu cấp quyền (consent) cho ứng dụng JWT. ' +
+						`Đăng nhập tài khoản DocuSign sandbox và mở URL sau để chấp thuận: ${consentUrl}`
+				)
+			}
+			if (parsed.error_description) {
+				description = parsed.error_description
+			}
+			if (parsed.error) {
+				description = `${parsed.error}: ${description}`
+			}
+		} catch (error) {
+			if (error instanceof Error && error.message.startsWith('DocuSign yêu cầu cấp quyền')) {
+				throw error
+			}
+			// ignore JSON parse failure; fall back to body text
+		}
+
+		throw new Error(`DocuSign token request failed: ${response.status} ${description}`)
+	}
 
         const parsed = body ? (JSON.parse(body) as { access_token: string; expires_in: number }) : null
 

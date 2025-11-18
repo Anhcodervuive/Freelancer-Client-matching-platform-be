@@ -24,6 +24,7 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 | `DOCUSIGN_PLATFORM_SIGNER_EMAIL` / `NAME` | Email/nickname của đại diện nền tảng (có thể là tài khoản DocuSign bất kỳ) | Được thêm vào danh sách recipients để counter-sign hoặc nhận bản sao. |
 | `DOCUSIGN_PLATFORM_SIGNER_USER_ID` (tuỳ chọn) | Nếu dùng user cụ thể trong DocuSign | Cho phép định tuyến chính xác hoặc tạo đại diện trong audit log. |
 | `DOCUSIGN_BASE_PATH` | Hiển thị trong Apps and Keys (ví dụ `https://demo.docusign.net/restapi`) | Dùng để cấu hình SDK/client HTTP. |
+| `DOCUSIGN_CONSENT_REDIRECT_URI` (tuỳ chọn) | URL DocuSign sẽ redirect sau khi admin cấp quyền (mặc định sử dụng trang consent của DocuSign) | Đặt nếu bạn muốn nhận callback ở domain riêng để log lại việc cấp quyền. |
 
 > **Mẹo:** đưa các biến này vào `.env` và tham chiếu qua `src/config/environment.ts`. Khi chuyển sang production, chỉ cần cập nhật giá trị tương ứng từ tài khoản DocuSign live.
 
@@ -31,6 +32,14 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 >
 > * Nếu copy nguyên key nhiều dòng vào `.env`, hãy bọc giá trị trong dấu ngoặc kép và thay newline bằng ký tự `\n`, ví dụ `DOCUSIGN_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----"`.
 > * Cách an toàn hơn là lưu key ở file `.pem` riêng rồi trỏ `DOCUSIGN_PRIVATE_KEY_FILE=./secrets/docusign_private_key.pem` (có thể thêm tiền tố `@` để chỉ rõ path). Bạn cũng có thể gán trực tiếp `DOCUSIGN_PRIVATE_KEY=@./secrets/docusign_private_key.pem`; backend sẽ tự đọc nội dung file.
+
+> **Cấp quyền (Admin Consent):** Nếu backend trả về lỗi `DocuSign token request failed ... consent_required`, hãy đăng nhập DocuSign bằng user tương ứng `DOCUSIGN_USER_ID`, sau đó mở URL:
+>
+> `https://account-d.docusign.com/oauth/auth?response_type=code&scope=signature%20impersonation&client_id=<INTEGRATION_KEY>&redirect_uri=<ENCODED_REDIRECT_URI>`
+>
+> * `<INTEGRATION_KEY>` là giá trị `DOCUSIGN_INTEGRATION_KEY`.
+> * `<ENCODED_REDIRECT_URI>` mặc định là `https://developers.docusign.com/platform/auth/consent` (hoặc bất kỳ URL nào bạn cấu hình qua `DOCUSIGN_CONSENT_REDIRECT_URI`).
+> * Sau khi DocuSign báo **Consent Successful**, có thể đóng tab; backend sẽ gọi được OAuth JWT mà không gặp lỗi `consent_required` nữa.
 
 ## 2. Dữ Liệu Hợp Đồng Chuẩn Bị Ở Backend
 
