@@ -43,6 +43,13 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 >
 > **Mẹo lấy URL sẵn:** chạy `npm run docusign:consent-url` sau khi điền `.env`. Script sẽ in đúng URL consent dựa trên `DOCUSIGN_AUTH_SERVER`, `DOCUSIGN_INTEGRATION_KEY` và `DOCUSIGN_CONSENT_REDIRECT_URI`.
 >
+> **Nếu DocuSign báo “The redirect URI is not registered properly”:**
+>
+> 1. Mở **Apps & Keys → [Integration Key của bạn] → Authentication**.
+> 2. Trong phần **Redirect URIs**, bấm **Add URI**.
+> 3. Dán chính xác URL bạn dùng cho `DOCUSIGN_CONSENT_REDIRECT_URI` (ví dụ `https://developers.docusign.com/platform/auth/consent` hoặc domain nội bộ của bạn) và lưu lại.
+> 4. Đợi ~1 phút để DocuSign cập nhật cấu hình rồi tải lại URL consent. DocuSign sẽ chỉ chấp nhận những redirect đã nằm trong danh sách này, vì vậy bất kỳ URL nào cũng dùng được miễn là bạn thêm vào bảng Redirect URIs trước.
+>
 > **Quyền admin cần thiết**
 >
 > 1. Đăng nhập DocuSign sandbox (https://account-d.docusign.com) bằng chính user có GUID `DOCUSIGN_USER_ID` – đây phải là user admin hoặc ít nhất đã được bật quyền **API and Keys**.

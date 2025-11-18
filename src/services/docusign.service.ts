@@ -81,7 +81,8 @@ const fetchAccessToken = async (): Promise<string> => {
                                 throw new Error(
                                         'DocuSign yêu cầu cấp quyền (consent) cho ứng dụng JWT. ' +
                                                 `Đăng nhập bằng user ${DOCUSIGN.USER_ID} trên DocuSign sandbox và mở URL sau để chấp thuận: ${consentUrl}. ` +
-                                                'Bạn có thể copy URL nhanh bằng lệnh "npm run docusign:consent-url"'
+                                                'Bạn có thể copy URL nhanh bằng lệnh "npm run docusign:consent-url". ' +
+                                                'Nếu DocuSign báo redirect URI chưa đăng ký, hãy vào Apps & Keys → Integration Key → Authentication → Redirect URIs để thêm giá trị DOCUSIGN_CONSENT_REDIRECT_URI rồi thử lại.'
                                 )
                         }
 			if (parsed.error_description) {

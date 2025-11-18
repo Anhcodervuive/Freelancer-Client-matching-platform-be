@@ -21,5 +21,6 @@ if (missing.length > 0) {
                 `1. Đăng nhập tài khoản DocuSign sandbox bằng user có GUID ${DOCUSIGN.USER_ID}. (User này phải có quyền admin hoặc được cấp quyền truy cập API.)`
         )
         console.log('2. Mở URL ở trên trong cùng trình duyệt đã đăng nhập và chấp thuận.')
-        console.log('3. Sau khi DocuSign báo "Consent Successful" bạn có thể quay lại backend và thử lại.')
+        console.log('3. Nếu DocuSign cảnh báo redirect URI chưa được đăng ký, vào Apps & Keys → Integration Key → Authentication → Redirect URIs và thêm URL trong biến DOCUSIGN_CONSENT_REDIRECT_URI, sau đó thử lại.')
+        console.log('4. Sau khi DocuSign báo "Consent Successful" bạn có thể quay lại backend và thử lại.')
 }
