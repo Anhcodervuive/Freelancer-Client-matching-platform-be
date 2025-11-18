@@ -41,7 +41,9 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 > * `<ENCODED_REDIRECT_URI>` mặc định là `https://developers.docusign.com/platform/auth/consent` (hoặc bất kỳ URL nào bạn cấu hình qua `DOCUSIGN_CONSENT_REDIRECT_URI`).
 > * Sau khi DocuSign báo **Consent Successful**, có thể đóng tab; backend sẽ gọi được OAuth JWT mà không gặp lỗi `consent_required` nữa.
 >
-> **Mẹo lấy URL sẵn:** chạy `npm run docusign:consent-url` sau khi điền `.env`. Script sẽ in đúng URL consent dựa trên `DOCUSIGN_AUTH_SERVER`, `DOCUSIGN_INTEGRATION_KEY` và `DOCUSIGN_CONSENT_REDIRECT_URI`.
+> **Mẹo kiểm tra cấu hình:** chạy `npm run docusign:check` để kiểm tra nhanh các biến bắt buộc (`DOCUSIGN_INTEGRATION_KEY`, `DOCUSIGN_USER_ID`, `DOCUSIGN_ACCOUNT_ID`, `DOCUSIGN_PRIVATE_KEY`, `DOCUSIGN_CONSENT_REDIRECT_URI`). Script sẽ hiển thị trạng thái từng biến, URL consent cuối cùng và checklist chi tiết cách cấp quyền.
+>
+> Nếu bạn chỉ cần copy URL consent sau khi đã chắc chắn cấu hình hợp lệ, có thể dùng `npm run docusign:consent-url`. Cả hai lệnh đều dựa trên `DOCUSIGN_AUTH_SERVER`, `DOCUSIGN_INTEGRATION_KEY` và `DOCUSIGN_CONSENT_REDIRECT_URI`.
 >
 > **Ví dụ thực tế:** Với cấu hình mặc định trong repo (`DOCUSIGN_AUTH_SERVER=https://account-d.docusign.com` và không override `DOCUSIGN_CONSENT_REDIRECT_URI`), lệnh `npm run docusign:consent-url` sẽ in ra:
 >
