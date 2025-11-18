@@ -27,6 +27,8 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 
 > **Mẹo:** đưa các biến này vào `.env` và tham chiếu qua `src/config/environment.ts`. Khi chuyển sang production, chỉ cần cập nhật giá trị tương ứng từ tài khoản DocuSign live.
 
+> **Lưu ý về private key:** Biến `DOCUSIGN_PRIVATE_KEY` có thể chứa nguyên file PEM (bao gồm dòng `-----BEGIN RSA PRIVATE KEY-----`) hoặc chỉ chuỗi base64 của phần thân key. Backend sẽ tự chuẩn hoá và thêm header/footer nếu thiếu, miễn là nội dung vẫn là private key RSA hợp lệ.
+
 ## 2. Dữ Liệu Hợp Đồng Chuẩn Bị Ở Backend
 
 1. **Snapshot điều khoản**: Lấy `platformTermsSnapshot` và thông tin hợp đồng (title, giá trị, các bên tham gia).

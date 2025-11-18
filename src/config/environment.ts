@@ -34,6 +34,27 @@ const stripWrappingQuotes = (value: string | undefined) => {
         return trimmed
 }
 
+const hasPemWrapping = (value: string) => /-----BEGIN [^-]+-----/.test(value)
+
+const wrapRsaKeyIfNeeded = (value: string | undefined) => {
+        if (!value) return undefined
+
+        const trimmed = value.trim()
+        if (trimmed.length === 0) return undefined
+
+        if (hasPemWrapping(trimmed)) {
+                return trimmed
+        }
+
+        const compact = trimmed.replace(/\s+/g, '')
+        if (compact.length === 0) {
+                return undefined
+        }
+
+        const chunked = compact.match(/.{1,64}/g)?.join('\n') ?? compact
+        return `-----BEGIN RSA PRIVATE KEY-----\n${chunked}\n-----END RSA PRIVATE KEY-----`
+}
+
 const optionalEnv = (value: string | undefined) => {
         const trimmed = stripWrappingQuotes(value)
         return trimmed ? trimmed : undefined
@@ -316,7 +337,7 @@ const resolveDocuSignPrivateKey = () => {
         return undefined
 }
 
-const docuSignPrivateKey = resolveDocuSignPrivateKey()
+const docuSignPrivateKey = wrapRsaKeyIfNeeded(resolveDocuSignPrivateKey())
 const docuSignIntegrationKey = optionalEnv(process.env.DOCUSIGN_INTEGRATION_KEY)
 const docuSignUserId = optionalEnv(process.env.DOCUSIGN_USER_ID)
 const docuSignAccountId = optionalEnv(process.env.DOCUSIGN_ACCOUNT_ID)
