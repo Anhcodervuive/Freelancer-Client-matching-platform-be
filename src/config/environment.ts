@@ -36,6 +36,17 @@ const stripWrappingQuotes = (value: string | undefined) => {
 
 const hasPemWrapping = (value: string) => /-----BEGIN [^-]+-----/.test(value)
 
+const expandEscapedNewlines = (value: string) => {
+        if (!value.includes('\\n') && !value.includes('\\r')) {
+                return value
+        }
+
+        return value
+                .replace(/\\r\\n/g, '\n')
+                .replace(/\\n/g, '\n')
+                .replace(/\\r/g, '\r')
+}
+
 const wrapRsaKeyIfNeeded = (value: string | undefined) => {
         if (!value) return undefined
 
@@ -330,8 +341,18 @@ const resolveDocuSignPrivateKey = () => {
         }
 
         const inline = stripWrappingQuotes(process.env.DOCUSIGN_PRIVATE_KEY)
-        if (inline && inline.trim().length > 0) {
-                return inline
+        if (!inline) {
+                return undefined
+        }
+
+        const inlineFile = readOptionalFile(inline)
+        if (inlineFile && inlineFile.trim().length > 0) {
+                return inlineFile
+        }
+
+        const expanded = expandEscapedNewlines(inline)
+        if (expanded.trim().length > 0) {
+                return expanded
         }
 
         return undefined
