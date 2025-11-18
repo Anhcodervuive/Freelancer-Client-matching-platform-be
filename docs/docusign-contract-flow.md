@@ -45,8 +45,8 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 >
 > **Nếu DocuSign báo “The redirect URI is not registered properly”:**
 >
-> 1. Mở **Apps & Keys → [Integration Key của bạn] → Authentication**.
-> 2. Trong phần **Redirect URIs**, bấm **Add URI**.
+> 1. Mở **Apps & Keys → [Integration Key của bạn]**. Ở cuối trang sẽ có khối **Additional settings** (không nằm trong phần Authentication).
+> 2. Trong bảng **Redirect URIs** của khối này, bấm **Add URI** (DocuSign sẽ hiển thị nút nằm cạnh danh sách các URL hiện có như hình chụp màn hình trong Apps & Keys).
 > 3. Dán chính xác URL bạn dùng cho `DOCUSIGN_CONSENT_REDIRECT_URI` (ví dụ `https://developers.docusign.com/platform/auth/consent` hoặc domain nội bộ của bạn) và lưu lại.
 > 4. Đợi ~1 phút để DocuSign cập nhật cấu hình rồi tải lại URL consent. DocuSign sẽ chỉ chấp nhận những redirect đã nằm trong danh sách này, vì vậy bất kỳ URL nào cũng dùng được miễn là bạn thêm vào bảng Redirect URIs trước.
 >
