@@ -35,14 +35,26 @@ const escapeHtml = (value: string) =>
 
 const formatJsonSnapshot = (value: Prisma.JsonValue | null | undefined) => {
         if (value === null || value === undefined) {
-                return '<em>Không có snapshot điều khoản</em>'
+                return '<p class="empty">Không có snapshot điều khoản</p>'
         }
 
         if (typeof value === 'string') {
-                return `<pre>${escapeHtml(value)}</pre>`
+                return `<div class="json-block"><pre>${escapeHtml(value)}</pre></div>`
         }
 
-        return `<pre>${escapeHtml(JSON.stringify(value, null, 2))}</pre>`
+        return `<div class="json-block"><pre>${escapeHtml(JSON.stringify(value, null, 2))}</pre></div>`
+}
+
+const formatDisplayDateTime = (value: Date) => {
+        try {
+                return new Intl.DateTimeFormat('vi-VN', {
+                        dateStyle: 'long',
+                        timeStyle: 'short',
+                        timeZone: 'Asia/Ho_Chi_Minh'
+                }).format(value)
+        } catch {
+                return value.toISOString()
+        }
 }
 
 const renderContractHtmlDocument = (contract: {
@@ -63,36 +75,170 @@ const renderContractHtmlDocument = (contract: {
         const title = escapeHtml(contract.title)
         const jobTitle = contract.jobTitle ? escapeHtml(contract.jobTitle) : 'Không xác định'
         const termsVersion = escapeHtml(contract.platformTermsVersion ?? 'Chưa xác định')
-        const createdAt = contract.createdAt.toISOString()
+        const createdAt = formatDisplayDateTime(contract.createdAt)
 
         return `<!DOCTYPE html>
 <html lang="vi">
         <head>
                 <meta charset="utf-8" />
-                <title>Contract ${escapeHtml(contract.id)}</title>
+                <title>Hợp đồng ${escapeHtml(contract.id)}</title>
+                <style>
+                        :root {
+                                color-scheme: light dark;
+                        }
+                        body {
+                                font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+                                margin: 0;
+                                padding: 32px;
+                                background: #f5f5f7;
+                                color: #1f1f1f;
+                        }
+                        .doc {
+                                max-width: 900px;
+                                margin: 0 auto;
+                                background: #fff;
+                                border-radius: 16px;
+                                box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
+                                overflow: hidden;
+                        }
+                        header {
+                                background: linear-gradient(135deg, #4c6ef5, #7950f2);
+                                color: #fff;
+                                padding: 32px;
+                        }
+                        header h1 {
+                                margin: 0 0 8px 0;
+                                font-size: 28px;
+                        }
+                        header p {
+                                margin: 0;
+                                font-size: 16px;
+                        }
+                        section {
+                                padding: 32px;
+                                border-bottom: 1px solid #f0f0f0;
+                        }
+                        section:last-of-type {
+                                border-bottom: none;
+                        }
+                        h2 {
+                                margin-top: 0;
+                                font-size: 20px;
+                                color: #343a40;
+                        }
+                        dl {
+                                display: grid;
+                                grid-template-columns: 200px 1fr;
+                                row-gap: 12px;
+                                column-gap: 16px;
+                                margin: 0;
+                        }
+                        dt {
+                                font-weight: 600;
+                                color: #495057;
+                        }
+                        dd {
+                                margin: 0;
+                        }
+                        .json-block {
+                                background: #0f172a;
+                                color: #e1e8ff;
+                                border-radius: 12px;
+                                padding: 16px;
+                                margin-top: 16px;
+                                font-family: 'Fira Code', 'SFMono-Regular', Consolas, monospace;
+                                overflow-x: auto;
+                                font-size: 13px;
+                        }
+                        .json-block pre {
+                                margin: 0;
+                                white-space: pre-wrap;
+                        }
+                        .empty {
+                                color: #868e96;
+                                font-style: italic;
+                        }
+                        .signer-grid {
+                                display: grid;
+                                gap: 16px;
+                                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                        }
+                        .signer-card {
+                                border: 1px solid #e9ecef;
+                                border-radius: 12px;
+                                padding: 16px;
+                                background: #fdfdff;
+                        }
+                        .signer-card h3 {
+                                margin-top: 0;
+                        }
+                        .tab-placeholder {
+                                display: inline-flex;
+                                align-items: center;
+                                padding: 4px 10px;
+                                border-radius: 999px;
+                                background: #edf2ff;
+                                color: #364fc7;
+                                font-weight: 600;
+                                font-size: 13px;
+                                margin: 4px 0;
+                        }
+                </style>
         </head>
         <body>
-                <h1>Hợp đồng #${escapeHtml(contract.id)}</h1>
-                <p><strong>Tiêu đề:</strong> ${title}</p>
-                <p><strong>Công việc:</strong> ${jobTitle}</p>
-                <p><strong>Ngày tạo:</strong> ${createdAt}</p>
-                <p><strong>Client:</strong> ${escapeHtml(contract.clientName)} (${escapeHtml(contract.clientEmail)})</p>
-                <p><strong>Freelancer:</strong> ${escapeHtml(contract.freelancerName)} (${escapeHtml(contract.freelancerEmail)})</p>
-                <h2>Điều khoản nền tảng (Phiên bản ${termsVersion})</h2>
-                ${formatJsonSnapshot(contract.platformTermsSnapshot)}
-                <h3>Freelancer xác nhận</h3>
-                <p>Checkbox xác nhận: /freelancer_terms_checkbox/</p>
-                <p>Ký tại: /freelancer_sign_here/</p>
-                <h3>Client xác nhận</h3>
-                <p>Checkbox xác nhận: /client_terms_checkbox/</p>
-                <p>Ký tại: /client_sign_here/</p>
-                ${
-                        contract.platformSignerEmail
-                                ? `<h3>Đại diện nền tảng</h3>
-                <p>Email: ${escapeHtml(contract.platformSignerEmail)}</p>
-                <p>Ký tại: /platform_sign_here/</p>`
-                                : ''
-                }
+                <article class="doc">
+                        <header>
+                                <h1>Hợp đồng #${escapeHtml(contract.id)}</h1>
+                                <p>Được tạo ngày ${createdAt}</p>
+                        </header>
+
+                        <section>
+                                <h2>Thông tin tổng quan</h2>
+                                <dl>
+                                        <dt>Tiêu đề</dt>
+                                        <dd>${title}</dd>
+                                        <dt>Công việc</dt>
+                                        <dd>${jobTitle}</dd>
+                                        <dt>Client</dt>
+                                        <dd>${escapeHtml(contract.clientName)} (${escapeHtml(contract.clientEmail)})</dd>
+                                        <dt>Freelancer</dt>
+                                        <dd>${escapeHtml(contract.freelancerName)} (${escapeHtml(contract.freelancerEmail)})</dd>
+                                        <dt>Phiên bản điều khoản</dt>
+                                        <dd>${termsVersion}</dd>
+                                </dl>
+                        </section>
+
+                        <section>
+                                <h2>Điều khoản nền tảng</h2>
+                                <p>Snapshot được lưu tại thời điểm ký kết:</p>
+                                ${formatJsonSnapshot(contract.platformTermsSnapshot)}
+                        </section>
+
+                        <section>
+                                <h2>Thông tin ký</h2>
+                                <div class="signer-grid">
+                                        <div class="signer-card">
+                                                <h3>Freelancer</h3>
+                                                <p><span class="tab-placeholder">/freelancer_terms_checkbox/</span> Checkbox xác nhận</p>
+                                                <p><span class="tab-placeholder">/freelancer_sign_here/</span> Ký tại đây</p>
+                                        </div>
+                                        <div class="signer-card">
+                                                <h3>Client</h3>
+                                                <p><span class="tab-placeholder">/client_terms_checkbox/</span> Checkbox xác nhận</p>
+                                                <p><span class="tab-placeholder">/client_sign_here/</span> Ký tại đây</p>
+                                        </div>
+                                        ${
+                                                contract.platformSignerEmail
+                                                        ? `<div class="signer-card">
+                                                <h3>Đại diện nền tảng</h3>
+                                                <p>Email: ${escapeHtml(contract.platformSignerEmail)}</p>
+                                                <p><span class="tab-placeholder">/platform_sign_here/</span> Ký tại đây</p>
+                                        </div>`
+                                                        : ''
+                                        }
+                                </div>
+                        </section>
+                </article>
         </body>
 </html>`
 }
