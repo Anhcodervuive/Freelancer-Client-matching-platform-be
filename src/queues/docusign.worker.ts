@@ -6,6 +6,11 @@ import contractSignatureService from '~/services/contract-signature.service'
 import { connection } from './redis'
 import type { DocuSignEnvelopeJobData } from './docusign.queue'
 
+if (!DOCUSIGN.QUEUE.ENABLED) {
+        console.warn('DOCUSIGN_QUEUE_ENABLED đang = false, worker sẽ thoát vì hàng đợi bị tắt')
+        process.exit(0)
+}
+
 const worker = new Worker<DocuSignEnvelopeJobData>(
         'docusign-envelope',
         async job => {

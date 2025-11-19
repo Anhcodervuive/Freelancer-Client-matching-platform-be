@@ -384,6 +384,8 @@ const docuSignConsentRedirectUri =
         optionalEnv(process.env.DOCUSIGN_CONSENT_REDIRECT_URI) ??
         'https://developers.docusign.com/platform/auth/consent'
 
+const docuSignQueueEnabled = parseBoolean(process.env.DOCUSIGN_QUEUE_ENABLED, false)
+
 const docuSignQueueRetryAttempts = clamp(
         Math.round(parseNumber(process.env.DOCUSIGN_QUEUE_RETRY_ATTEMPTS, 5)),
         1,
@@ -429,6 +431,7 @@ export const DOCUSIGN = {
                   }
                 : null,
         QUEUE: {
+                ENABLED: docuSignQueueEnabled,
                 RETRY_ATTEMPTS: docuSignQueueRetryAttempts,
                 RETRY_DELAY_MS: docuSignQueueRetryDelayMs,
                 WORKER_CONCURRENCY: docuSignQueueWorkerConcurrency

@@ -825,6 +825,17 @@ const enqueueDocuSignEnvelope = async (
 
         const actorPayload = actor ? { id: actor.id, role: actor.role ?? null } : null
 
+        if (!DOCUSIGN.QUEUE.ENABLED) {
+                console.info('DocuSign queue đang tắt, gửi envelope ngay trong request', {
+                        contractId,
+                        actorId: actorPayload?.id ?? null,
+                        skipAuthorization: options?.skipAuthorization ?? false
+                })
+
+                await triggerDocuSignEnvelope(contractId, actor, payload, options)
+                return
+        }
+
         const jobData: DocuSignEnvelopeJobData = {
                 contractId,
                 actor: actorPayload
