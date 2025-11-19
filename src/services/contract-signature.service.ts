@@ -34,9 +34,165 @@ const escapeHtml = (value: string) =>
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;')
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+        typeof value === 'object' && value !== null && !Array.isArray(value)
+
+type TermsSectionSnapshot = {
+        title: string | null
+        body: string | null
+        code: string | null
+        version: string | null
+        metadata: Record<string, unknown> | null
+}
+
+const describeMetadataValue = (raw: unknown): string => {
+        if (raw === null || raw === undefined) {
+                return '—'
+        }
+
+        if (typeof raw === 'string') {
+                return raw
+        }
+
+        if (typeof raw === 'number' || typeof raw === 'boolean') {
+                return String(raw)
+        }
+
+        if (Array.isArray(raw)) {
+                const values = raw.map(item => describeMetadataValue(item)).filter(Boolean)
+                return values.length > 0 ? values.join(', ') : '—'
+        }
+
+        if (isPlainObject(raw)) {
+                try {
+                        return JSON.stringify(raw)
+                } catch {
+                        return '[object]'
+                }
+        }
+
+        return String(raw)
+}
+
+const renderBodyParagraphs = (body: string | null) => {
+        if (!body) {
+                return ''
+        }
+
+        const paragraphs = body
+                .split(/\n{2,}/)
+                .map(paragraph => paragraph.trim())
+                .filter(paragraph => paragraph.length > 0)
+
+        if (paragraphs.length === 0) {
+                return ''
+        }
+
+        return `<div class="section-body">${paragraphs
+                .map(paragraph => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br />')}</p>`)
+                .join('')}</div>`
+}
+
+const renderSectionMetadata = (metadata: Record<string, unknown> | null) => {
+        if (!metadata) {
+                return ''
+        }
+
+        const entries = Object.entries(metadata).filter(([key]) => key.trim().length > 0)
+
+        if (entries.length === 0) {
+                return ''
+        }
+
+        return `<dl class="section-meta">${entries
+                .map(([key, raw]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(describeMetadataValue(raw))}</dd>`)
+                .join('')}</dl>`
+}
+
+const normaliseSection = (candidate: unknown): TermsSectionSnapshot | null => {
+        if (!isPlainObject(candidate)) {
+                return null
+        }
+
+        const metadataEntries: Record<string, unknown> = {}
+
+        if (isPlainObject(candidate.metadata)) {
+                Object.assign(metadataEntries, candidate.metadata)
+        }
+
+        Object.entries(candidate)
+                .filter(([key]) => !['title', 'body', 'code', 'version', 'metadata'].includes(key))
+                .forEach(([key, raw]) => {
+                        metadataEntries[key] = raw
+                })
+
+        const metadata = Object.keys(metadataEntries).length > 0 ? metadataEntries : null
+
+        const title = typeof candidate.title === 'string' ? candidate.title : null
+        const body = typeof candidate.body === 'string' ? candidate.body : null
+        const code = typeof candidate.code === 'string' ? candidate.code : null
+        const version = typeof candidate.version === 'string' ? candidate.version : null
+
+        if (!title && !body && !code && !version && !metadata) {
+                return null
+        }
+
+        return { title, body, code, version, metadata }
+}
+
+const extractStructuredSections = (snapshot: Prisma.JsonValue | null | undefined): TermsSectionSnapshot[] | null => {
+        if (!snapshot) {
+                return null
+        }
+
+        if (isPlainObject(snapshot) && Array.isArray(snapshot.sections)) {
+                const sections = snapshot.sections.map(normaliseSection).filter((section): section is TermsSectionSnapshot => Boolean(section))
+                if (sections.length > 0) {
+                        return sections
+                }
+        }
+
+        if (Array.isArray(snapshot)) {
+                const sections = snapshot.map(normaliseSection).filter((section): section is TermsSectionSnapshot => Boolean(section))
+                if (sections.length > 0) {
+                        return sections
+                }
+        }
+
+        const singleSection = normaliseSection(snapshot)
+        return singleSection ? [singleSection] : null
+}
+
+const renderStructuredSnapshot = (sections: TermsSectionSnapshot[]) =>
+        `<div class="terms-sections">${sections
+                .map((section, index) => {
+                        const badges = [
+                                section.code ? `<span class="section-badge">${escapeHtml(section.code)}</span>` : '',
+                                section.version ? `<span class="section-badge">v${escapeHtml(section.version)}</span>` : ''
+                        ]
+                                .filter(Boolean)
+                                .join('')
+
+                        return `<div class="terms-section">
+                                <div class="section-heading">
+                                        <span>Điều ${index + 1}</span>
+                                        ${badges}
+                                </div>
+                                ${section.title ? `<h3>${escapeHtml(section.title)}</h3>` : ''}
+                                ${renderBodyParagraphs(section.body)}
+                                ${renderSectionMetadata(section.metadata)}
+                        </div>`
+                })
+                .join('')}</div>`
+
 const formatJsonSnapshot = (value: Prisma.JsonValue | null | undefined) => {
         if (value === null || value === undefined) {
                 return '<p class="empty">Không có snapshot điều khoản</p>'
+        }
+
+        const structuredSections = extractStructuredSections(value)
+        if (structuredSections) {
+                return renderStructuredSnapshot(structuredSections)
         }
 
         if (typeof value === 'string') {
@@ -183,6 +339,66 @@ const renderContractHtmlDocument = (contract: {
                                 font-weight: 600;
                                 font-size: 13px;
                                 margin: 4px 0;
+                        }
+                        .terms-sections {
+                                display: flex;
+                                flex-direction: column;
+                                gap: 24px;
+                                margin-top: 16px;
+                        }
+                        .terms-section {
+                                background: #f8f9ff;
+                                border: 1px solid #dee2ff;
+                                border-radius: 12px;
+                                padding: 20px;
+                                box-shadow: 0 10px 30px rgba(76, 110, 245, 0.08);
+                        }
+                        .section-heading {
+                                display: flex;
+                                flex-wrap: wrap;
+                                gap: 8px;
+                                align-items: center;
+                                font-size: 13px;
+                                text-transform: uppercase;
+                                letter-spacing: 0.08em;
+                                color: #5c7cfa;
+                                font-weight: 600;
+                                margin-bottom: 8px;
+                        }
+                        .section-badge {
+                                background: #edf2ff;
+                                color: #364fc7;
+                                border-radius: 999px;
+                                padding: 2px 10px;
+                        }
+                        .terms-section h3 {
+                                margin: 0 0 12px 0;
+                                font-size: 18px;
+                                color: #212529;
+                        }
+                        .section-body p {
+                                margin: 0 0 12px 0;
+                                line-height: 1.6;
+                                color: #343a40;
+                        }
+                        .section-body p:last-child {
+                                margin-bottom: 0;
+                        }
+                        .section-meta {
+                                margin: 16px 0 0 0;
+                                display: grid;
+                                grid-template-columns: 160px 1fr;
+                                row-gap: 8px;
+                                column-gap: 12px;
+                                font-size: 14px;
+                        }
+                        .section-meta dt {
+                                font-weight: 600;
+                                color: #495057;
+                        }
+                        .section-meta dd {
+                                margin: 0;
+                                color: #212529;
                         }
                 </style>
         </head>
