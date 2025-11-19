@@ -362,7 +362,20 @@ const docuSignPrivateKey = wrapRsaKeyIfNeeded(resolveDocuSignPrivateKey())
 const docuSignIntegrationKey = optionalEnv(process.env.DOCUSIGN_INTEGRATION_KEY)
 const docuSignUserId = optionalEnv(process.env.DOCUSIGN_USER_ID)
 const docuSignAccountId = optionalEnv(process.env.DOCUSIGN_ACCOUNT_ID)
-const docuSignBaseUrl = optionalEnv(process.env.DOCUSIGN_BASE_URL) ?? 'https://demo.docusign.net/restapi'
+const docuSignBaseUrlRaw = optionalEnv(process.env.DOCUSIGN_BASE_URL)
+const docuSignBaseUrlWarnings: string[] = []
+const ensureDocuSignRestApiPath = (value: string) => {
+        const trimmed = value.trim().replace(/\/+$/, '')
+        if (/\/restapi$/i.test(trimmed)) {
+                return trimmed
+        }
+        docuSignBaseUrlWarnings.push(
+                'DOCUSIGN_BASE_URL thiếu hậu tố /restapi nên đã được backend tự động bổ sung. ' +
+                        'Hãy cập nhật lại .env (ví dụ https://demo.docusign.net/restapi) để tránh lỗi 404 từ DocuSign.'
+        )
+        return `${trimmed}/restapi`
+}
+const docuSignBaseUrl = ensureDocuSignRestApiPath(docuSignBaseUrlRaw ?? 'https://demo.docusign.net/restapi')
 const docuSignAuthServer = optionalEnv(process.env.DOCUSIGN_AUTH_SERVER) ?? 'https://account-d.docusign.com'
 const docuSignWebhookSecret = optionalEnv(process.env.DOCUSIGN_WEBHOOK_SECRET)
 const docuSignPlatformSignerEmail = optionalEnv(process.env.DOCUSIGN_PLATFORM_SIGNER_EMAIL)
@@ -382,7 +395,8 @@ export const DOCUSIGN = {
         INTEGRATION_KEY: docuSignIntegrationKey,
         USER_ID: docuSignUserId,
         ACCOUNT_ID: docuSignAccountId,
-        BASE_URL: normaliseBaseUrl(docuSignBaseUrl),
+        BASE_URL: docuSignBaseUrl,
+        BASE_URL_WARNINGS: docuSignBaseUrlWarnings,
         AUTH_SERVER: normaliseBaseUrl(docuSignAuthServer),
         PRIVATE_KEY: docuSignPrivateKey,
         CONSENT_REDIRECT_URI: docuSignConsentRedirectUri,

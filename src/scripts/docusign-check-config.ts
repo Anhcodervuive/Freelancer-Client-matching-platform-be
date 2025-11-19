@@ -55,6 +55,11 @@ if (!DOCUSIGN.CONSENT_REDIRECT_URI) {
 console.log('\nThông tin bổ sung:')
 console.log(`- AUTH SERVER: ${DOCUSIGN.AUTH_SERVER}`)
 console.log(`- BASE URL: ${DOCUSIGN.BASE_URL}`)
+if (DOCUSIGN.BASE_URL_WARNINGS && DOCUSIGN.BASE_URL_WARNINGS.length > 0) {
+        for (const warning of DOCUSIGN.BASE_URL_WARNINGS) {
+                console.log(yellow(`   ↳ ${warning}`))
+        }
+}
 console.log(`- WEBHOOK SECRET: ${DOCUSIGN.WEBHOOK_SECRET ? 'đã cấu hình' : 'chưa thiết lập (optional)'}`)
 
 if (DOCUSIGN.PLATFORM_SIGNER) {

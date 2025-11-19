@@ -23,10 +23,12 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 | `DOCUSIGN_WEBHOOK_SECRET` | Trường **HMAC Key** khi bạn cấu hình Connect | Middleware webhook dùng để verify chữ ký `X-DocuSign-Signature-1`. |
 | `DOCUSIGN_PLATFORM_SIGNER_EMAIL` / `NAME` | Email/nickname của đại diện nền tảng (có thể là tài khoản DocuSign bất kỳ) | Được thêm vào danh sách recipients để counter-sign hoặc nhận bản sao. |
 | `DOCUSIGN_PLATFORM_SIGNER_USER_ID` (tuỳ chọn) | Nếu dùng user cụ thể trong DocuSign | Cho phép định tuyến chính xác hoặc tạo đại diện trong audit log. |
-| `DOCUSIGN_BASE_PATH` | Hiển thị trong Apps and Keys (ví dụ `https://demo.docusign.net/restapi`) | Dùng để cấu hình SDK/client HTTP. |
+| `DOCUSIGN_BASE_URL` | Hiển thị trong Apps and Keys (ví dụ `https://demo.docusign.net/restapi`) | Dùng để cấu hình SDK/client HTTP. |
 | `DOCUSIGN_CONSENT_REDIRECT_URI` (tuỳ chọn) | URL DocuSign sẽ redirect sau khi admin cấp quyền (mặc định sử dụng trang consent của DocuSign) | Đặt nếu bạn muốn nhận callback ở domain riêng để log lại việc cấp quyền. |
 
 > **Mẹo:** đưa các biến này vào `.env` và tham chiếu qua `src/config/environment.ts`. Khi chuyển sang production, chỉ cần cập nhật giá trị tương ứng từ tài khoản DocuSign live.
+
+> **Lưu ý về `DOCUSIGN_BASE_URL`:** DocuSign yêu cầu tất cả request REST phải đi qua endpoint kết thúc bằng `/restapi` (ví dụ `https://demo.docusign.net/restapi`). Nếu bạn chỉ copy `https://demo.docusign.net`, mọi request `POST /v2.1/...` sẽ trả về HTML 404 của IIS. Backend hiện tự động thêm `/restapi`, nhưng bạn nên sửa lại `.env` để khớp giá trị chính xác trong Apps & Keys nhằm tránh lỗi sau này.
 
 > **Lưu ý về private key:** Biến `DOCUSIGN_PRIVATE_KEY` có thể chứa nguyên file PEM (bao gồm dòng `-----BEGIN RSA PRIVATE KEY-----`) hoặc chỉ chuỗi base64 của phần thân key. Backend sẽ tự chuẩn hoá và thêm header/footer nếu thiếu, miễn là nội dung vẫn là private key RSA hợp lệ.
 >
