@@ -63,6 +63,29 @@ if (DOCUSIGN.PLATFORM_SIGNER) {
         console.log('- PLATFORM SIGNER: chưa cấu hình (optional)')
 }
 
+try {
+        const redirectUrl = new URL(DOCUSIGN.CONSENT_REDIRECT_URI)
+        const authUrl = new URL(DOCUSIGN.AUTH_SERVER)
+        const looksLikeConsentUrl =
+                redirectUrl.host === authUrl.host && redirectUrl.pathname.startsWith('/oauth/auth')
+
+        if (looksLikeConsentUrl) {
+                console.log(
+                        yellow(
+                                '\n⚠️  DOCUSIGN_CONSENT_REDIRECT_URI đang trỏ trực tiếp tới URL consent của DocuSign. ' +
+                                        'Trường này phải là trang đích (ví dụ https://developers.docusign.com/platform/auth/consent) và cũng là giá trị bạn thêm ở Apps & Keys → Additional settings → Redirect URIs.'
+                        )
+                )
+                console.log(
+                        yellow(
+                                '    → Hãy nhập lại giá trị DOCUSIGN_CONSENT_REDIRECT_URI, sau đó chạy lại script và dán đúng URL vào bảng Redirect URIs (không bao gồm /oauth/auth hay query string).'
+                        )
+                )
+        }
+} catch {
+        // ignore invalid URLs; đã được bắt ở bước kiểm tra bắt buộc
+}
+
 if (hasError) {
         console.log(
                 red('\nThiếu cấu hình DocuSign. Kiểm tra các biến ở trên rồi chạy lại `npm run docusign:check`.')

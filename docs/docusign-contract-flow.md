@@ -60,6 +60,7 @@ Tài liệu này mô tả chi tiết cách nền tảng tích hợp DocuSign đ�
 > 2. Trong bảng **Redirect URIs** của khối này, bấm **Add URI** (DocuSign sẽ hiển thị nút nằm cạnh danh sách các URL hiện có như hình chụp màn hình trong Apps & Keys).
 > 3. Dán chính xác URL bạn dùng cho `DOCUSIGN_CONSENT_REDIRECT_URI` (ví dụ `https://developers.docusign.com/platform/auth/consent` hoặc domain nội bộ của bạn) và lưu lại.
 > 4. Đợi ~1 phút để DocuSign cập nhật cấu hình rồi tải lại URL consent. DocuSign sẽ chỉ chấp nhận những redirect đã nằm trong danh sách này, vì vậy bất kỳ URL nào cũng dùng được miễn là bạn thêm vào bảng Redirect URIs trước.
+> 5. ⚠️ **Đừng** dán toàn bộ URL consent (ví dụ `https://account-d.docusign.com/oauth/auth?...`). DocuSign chỉ cần URL đích mà bạn muốn redirect tới (`DOCUSIGN_CONSENT_REDIRECT_URI`). Nếu bạn dán nhầm toàn bộ link consent, DocuSign sẽ vẫn báo lỗi `consent_required` vì redirect URI không khớp.
 >
 > **Quyền admin cần thiết**
 >
