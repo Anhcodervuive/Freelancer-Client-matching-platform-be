@@ -893,7 +893,7 @@ type DocuSignConnectRecipient = {
 }
 
 type DocuSignConnectEnvelope = {
-        envelopeId?: string
+        envelopeId: string
         status?: string
         statusDateTime?: string
         documentsUri?: string
@@ -906,28 +906,131 @@ type DocuSignConnectEnvelope = {
         }
 }
 
+const normaliseEnvelopeDetails = (
+        fallbackEnvelopeId: string,
+        details?: DocuSignEnvelopeDetails | null
+): DocuSignConnectEnvelope => {
+        const normalized: DocuSignConnectEnvelope = {
+                envelopeId: details?.envelopeId ?? fallbackEnvelopeId
+        }
+
+        if (details?.status !== undefined) {
+                normalized.status = details.status
+        }
+
+        const statusDateTime =
+                details?.completedDateTime ??
+                details?.statusDateTime ??
+                details?.deliveredDateTime ??
+                details?.sentDateTime
+        if (statusDateTime) {
+                normalized.statusDateTime = statusDateTime
+        }
+
+        if (details?.documentsUri !== undefined) {
+                normalized.documentsUri = details.documentsUri
+        }
+
+        if (details?.certificateUri !== undefined) {
+                normalized.certificateUri = details.certificateUri
+        }
+
+        if (details?.recipients !== undefined) {
+                normalized.recipients = details.recipients
+        }
+
+        if (details?.customFields !== undefined) {
+                        normalized.customFields = details.customFields
+        }
+
+        return normalized
+}
+
+const mergeEnvelopePayload = (
+        base: DocuSignConnectEnvelope,
+        overrides?: DocuSignConnectEnvelope | null
+): DocuSignConnectEnvelope => {
+        const merged: DocuSignConnectEnvelope = {
+                envelopeId: base.envelopeId
+        }
+
+        if (base.status !== undefined) {
+                merged.status = base.status
+        }
+        if (base.statusDateTime !== undefined) {
+                merged.statusDateTime = base.statusDateTime
+        }
+        if (base.documentsUri !== undefined) {
+                merged.documentsUri = base.documentsUri
+        }
+        if (base.certificateUri !== undefined) {
+                merged.certificateUri = base.certificateUri
+        }
+        if (base.recipients !== undefined) {
+                merged.recipients = base.recipients
+        }
+        if (base.customFields !== undefined) {
+                merged.customFields = base.customFields
+        }
+
+        if (!overrides) {
+                return merged
+        }
+
+        merged.envelopeId = overrides.envelopeId ?? merged.envelopeId
+        if (overrides.status !== undefined) {
+                merged.status = overrides.status
+        }
+        if (overrides.statusDateTime !== undefined) {
+                merged.statusDateTime = overrides.statusDateTime
+        }
+        if (overrides.documentsUri !== undefined) {
+                merged.documentsUri = overrides.documentsUri
+        }
+        if (overrides.certificateUri !== undefined) {
+                merged.certificateUri = overrides.certificateUri
+        }
+        if (overrides.recipients !== undefined) {
+                merged.recipients = overrides.recipients
+        }
+        if (overrides.customFields !== undefined) {
+                merged.customFields = overrides.customFields
+        }
+
+        return merged
+}
+
+const toConnectEnvelope = (candidate: unknown): DocuSignConnectEnvelope | null => {
+        if (!candidate || typeof candidate !== 'object') {
+                return null
+        }
+
+        const record = candidate as Record<string, unknown>
+        const envelopeId = typeof record.envelopeId === 'string' ? record.envelopeId.trim() : ''
+        if (!envelopeId) {
+                return null
+        }
+
+        return { ...(candidate as DocuSignConnectEnvelope), envelopeId }
+}
+
 const extractEnvelopePayload = (payload: unknown): DocuSignConnectEnvelope | null => {
         if (!payload || typeof payload !== 'object') {
                 return null
         }
         const record = payload as Record<string, unknown>
 
-        if (record.envelopeStatus && typeof record.envelopeStatus === 'object') {
-                return record.envelopeStatus as DocuSignConnectEnvelope
+        const statusEnvelope = toConnectEnvelope(record.envelopeStatus)
+        if (statusEnvelope) {
+                return statusEnvelope
         }
 
-        if (record.data && typeof record.data === 'object') {
-                const data = record.data as Record<string, unknown>
-                if (typeof data.envelopeId === 'string') {
-                        return data as DocuSignConnectEnvelope
-                }
+        const dataEnvelope = toConnectEnvelope(record.data)
+        if (dataEnvelope) {
+                return dataEnvelope
         }
 
-        if (typeof record.envelopeId === 'string') {
-                return record as DocuSignConnectEnvelope
-        }
-
-        return null
+        return toConnectEnvelope(record)
 }
 
 const findContractForEnvelope = async (
@@ -1026,11 +1129,13 @@ const handleDocuSignConnectEvent = async (payload: unknown) => {
         }
 
         const webhookLogId = await persistDocuSignWebhookLog(payload)
-        const envelope = extractEnvelopePayload(payload)
-        if (!envelope?.envelopeId) {
+        const extractedEnvelope = extractEnvelopePayload(payload)
+        if (!extractedEnvelope) {
                 console.warn('DocuSign webhook không có envelopeId', { eventId: webhookLogId })
                 return false
         }
+
+        let envelope: DocuSignConnectEnvelope = extractedEnvelope
 
         console.info('Đã nhận webhook DocuSign', {
                 eventId: webhookLogId,
@@ -1038,7 +1143,49 @@ const handleDocuSignConnectEvent = async (payload: unknown) => {
                 status: envelope.status ?? null
         })
 
-        const contractId = await findContractForEnvelope(envelope.envelopeId, envelope.customFields)
+        let hydratedEnvelope: DocuSignConnectEnvelope | null = null
+        let attemptedHydration = false
+        const hydrateEnvelope = async (reason: string) => {
+                if (attemptedHydration) {
+                        if (hydratedEnvelope) {
+                                envelope = mergeEnvelopePayload(envelope, hydratedEnvelope)
+                        }
+                        return hydratedEnvelope
+                }
+
+                attemptedHydration = true
+                try {
+                        const details = await docusignService.getEnvelope(envelope.envelopeId, {
+                                include: ['recipients', 'custom_fields', 'documents']
+                        })
+                        hydratedEnvelope = normaliseEnvelopeDetails(envelope.envelopeId, details)
+                        envelope = mergeEnvelopePayload(envelope, hydratedEnvelope)
+                        console.info('Đã bổ sung dữ liệu DocuSign từ API để xử lý webhook', {
+                                eventId: webhookLogId,
+                                envelopeId: envelope.envelopeId,
+                                reason
+                        })
+                } catch (error) {
+                        console.error('Không thể bổ sung dữ liệu DocuSign từ API', {
+                                eventId: webhookLogId,
+                                envelopeId: envelope.envelopeId,
+                                reason,
+                                error
+                        })
+                        hydratedEnvelope = null
+                }
+
+                return hydratedEnvelope
+        }
+
+        let contractId = await findContractForEnvelope(envelope.envelopeId, envelope.customFields)
+        if (!contractId) {
+                const fallback = await hydrateEnvelope('resolve-contract')
+                if (fallback) {
+                        contractId = await findContractForEnvelope(fallback.envelopeId, fallback.customFields)
+                }
+        }
+
         if (!contractId) {
                 console.warn('DocuSign event không xác định được hợp đồng', {
                         eventId: webhookLogId,
@@ -1066,14 +1213,21 @@ const handleDocuSignConnectEvent = async (payload: unknown) => {
                 return false
         }
 
+        if (!envelope.status || !envelope.recipients?.signers || !envelope.customFields) {
+                await hydrateEnvelope('missing-fields')
+        }
+
         const mappedStatus = mapDocuSignStatus(envelope.status ?? null)
         const storedRecipients = parseStoredRecipients(contractRecord.signatureRecipients)
         const signerStatuses = envelope.recipients?.signers ?? []
         const now = new Date()
+        const normalizedContractPayload = {
+                envelopeStatus: envelope
+        } as Prisma.InputJsonValue
 
         await prismaClient.$transaction(async tx => {
                 const updateData: Prisma.ContractUpdateInput = {
-                        signatureEnvelopeSummary: payload as Prisma.InputJsonValue,
+                        signatureEnvelopeSummary: normalizedContractPayload,
                         signatureDocumentsUri: envelope.documentsUri ?? null,
                         signatureCertificateUri: envelope.certificateUri ?? null
                 }
@@ -1217,19 +1371,10 @@ const syncDocuSignEnvelopeStatus = async (
         }
 
         const normalizedPayload = {
-                envelopeStatus: {
-                        envelopeId: envelopeDetails?.envelopeId ?? contractRecord.signatureEnvelopeId,
-                        status: envelopeDetails?.status,
-                        statusDateTime:
-                                envelopeDetails?.completedDateTime ??
-                                envelopeDetails?.statusDateTime ??
-                                envelopeDetails?.deliveredDateTime ??
-                                envelopeDetails?.sentDateTime,
-                        documentsUri: envelopeDetails?.documentsUri,
-                        certificateUri: envelopeDetails?.certificateUri,
-                        recipients: envelopeDetails?.recipients,
-                        customFields: envelopeDetails?.customFields
-                }
+                envelopeStatus: normaliseEnvelopeDetails(
+                        contractRecord.signatureEnvelopeId,
+                        envelopeDetails
+                )
         }
 
         const handled = await handleDocuSignConnectEvent(normalizedPayload)
