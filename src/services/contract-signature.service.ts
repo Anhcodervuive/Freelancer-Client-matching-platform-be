@@ -14,6 +14,7 @@ import { NotFoundException } from '~/exceptions/not-found'
 import { ErrorCode } from '~/exceptions/root'
 import docusignService, {
         DocuSignEnvelopeDefinition,
+        DocuSignEnvelopeDetails,
         DocuSignSignerDefinition
 } from './docusign.service'
 import { TriggerDocuSignEnvelopeInput } from '~/schema/contract.schema'
@@ -828,10 +829,79 @@ const handleDocuSignConnectEvent = async (payload: unknown) => {
         return true
 }
 
+const syncDocuSignEnvelopeStatus = async (
+        contractId: string,
+        actor: ContractActor,
+        options?: { skipAuthorization?: boolean }
+) => {
+        ensureDocuSignEnabled()
+
+        const contractRecord = await prismaClient.contract.findUnique({
+                where: { id: contractId },
+                select: {
+                        id: true,
+                        clientId: true,
+                        freelancerId: true,
+                        signatureProvider: true,
+                        signatureEnvelopeId: true
+                }
+        })
+
+        if (!contractRecord) {
+                throw new NotFoundException('Không tìm thấy hợp đồng', ErrorCode.ITEM_NOT_FOUND)
+        }
+
+        ensureContractAccess(contractRecord, actor, options)
+
+        if (contractRecord.signatureProvider !== ContractSignatureProvider.DOCUSIGN) {
+                throw new BadRequestException('Hợp đồng này không dùng DocuSign', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        if (!contractRecord.signatureEnvelopeId) {
+                throw new BadRequestException('Hợp đồng chưa có envelope DocuSign', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        let envelopeDetails: DocuSignEnvelopeDetails | null = null
+
+        try {
+                envelopeDetails = await docusignService.getEnvelope(contractRecord.signatureEnvelopeId, {
+                        include: ['recipients', 'custom_fields', 'documents']
+                })
+        } catch (error) {
+                console.error('Không thể lấy thông tin envelope DocuSign', error)
+                throw new BadRequestException('Không thể đồng bộ trạng thái DocuSign. Vui lòng thử lại sau.', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        const normalizedPayload = {
+                envelopeStatus: {
+                        envelopeId: envelopeDetails?.envelopeId ?? contractRecord.signatureEnvelopeId,
+                        status: envelopeDetails?.status,
+                        statusDateTime:
+                                envelopeDetails?.completedDateTime ??
+                                envelopeDetails?.statusDateTime ??
+                                envelopeDetails?.deliveredDateTime ??
+                                envelopeDetails?.sentDateTime,
+                        documentsUri: envelopeDetails?.documentsUri,
+                        certificateUri: envelopeDetails?.certificateUri,
+                        recipients: envelopeDetails?.recipients,
+                        customFields: envelopeDetails?.customFields
+                }
+        }
+
+        const handled = await handleDocuSignConnectEvent(normalizedPayload)
+
+        if (!handled) {
+                throw new BadRequestException('Không thể cập nhật trạng thái DocuSign từ API', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        return true
+}
+
 const contractSignatureService = {
         isDocuSignEnabled: () => DOCUSIGN.ENABLED,
         triggerDocuSignEnvelope,
-        handleDocuSignConnectEvent
+        handleDocuSignConnectEvent,
+        syncDocuSignEnvelopeStatus
 }
 
 export default contractSignatureService

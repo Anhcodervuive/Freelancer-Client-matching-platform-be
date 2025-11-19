@@ -185,6 +185,32 @@ export type DocuSignEnvelopeSummary = {
         certificateUri?: string
 }
 
+export type DocuSignEnvelopeRecipient = {
+        recipientId?: string
+        email?: string
+        name?: string
+        roleName?: string
+        status?: string
+        signedDateTime?: string
+}
+
+export type DocuSignEnvelopeDetails = {
+        envelopeId?: string
+        status?: string
+        statusDateTime?: string
+        sentDateTime?: string
+        deliveredDateTime?: string
+        completedDateTime?: string
+        documentsUri?: string
+        certificateUri?: string
+        recipients?: {
+                signers?: DocuSignEnvelopeRecipient[]
+        }
+        customFields?: {
+                textCustomFields?: Array<{ name?: string; value?: string }>
+        }
+}
+
 const sendEnvelope = async (definition: DocuSignEnvelopeDefinition): Promise<DocuSignEnvelopeSummary> => {
         const payload = JSON.stringify({
                 ...definition,
@@ -212,10 +238,28 @@ const voidEnvelope = async (envelopeId: string, reason?: string) => {
         })
 }
 
-const getEnvelope = async (envelopeId: string) => {
-        return requestDocuSign(`/v2.1/accounts/${DOCUSIGN.ACCOUNT_ID}/envelopes/${envelopeId}`, {
-                method: 'GET'
-        })
+type GetEnvelopeOptions = {
+        include?: Array<'recipients' | 'documents' | 'attachments' | 'custom_fields'>
+}
+
+const buildIncludeQuery = (options?: GetEnvelopeOptions) => {
+        const include = options?.include?.filter(Boolean)
+        if (!include || include.length === 0) {
+                return ''
+        }
+
+        const unique = Array.from(new Set(include))
+        return `?include=${unique.join(',')}`
+}
+
+const getEnvelope = async (envelopeId: string, options?: GetEnvelopeOptions) => {
+        const query = buildIncludeQuery(options)
+        return requestDocuSign<DocuSignEnvelopeDetails>(
+                `/v2.1/accounts/${DOCUSIGN.ACCOUNT_ID}/envelopes/${envelopeId}${query}`,
+                {
+                        method: 'GET'
+                }
+        )
 }
 
 const docusignService = {

@@ -14,6 +14,7 @@ import {
         getContractDetail,
         acceptContractTerms,
         sendContractSignatureEnvelope,
+        syncContractSignatureEnvelope,
         endContract,
         listMilestoneResources,
         listContractMilestones,
@@ -46,6 +47,11 @@ router.post(
         '/:contractId/signatures/docusign/send',
         authenticateMiddleware,
         errorHandler(sendContractSignatureEnvelope)
+)
+router.post(
+        '/:contractId/signatures/docusign/sync',
+        authenticateMiddleware,
+        errorHandler(syncContractSignatureEnvelope)
 )
 router.post('/:contractId/end', authenticateMiddleware, errorHandler(endContract))
 router.get('/:contractId/feedback', authenticateMiddleware, errorHandler(listContractFeedbacks))

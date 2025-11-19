@@ -142,9 +142,9 @@ export const acceptContractTerms = async (req: Request, res: Response) => {
 }
 
 export const sendContractSignatureEnvelope = async (req: Request, res: Response): Promise<Response> => {
-	const user = req.user
-	const userId = user?.id
-	const { contractId } = req.params
+        const user = req.user
+        const userId = user?.id
+        const { contractId } = req.params
 
 	if (!userId) {
 		throw new UnauthorizedException('Bạn cần đăng nhập để gửi yêu cầu ký', ErrorCode.UNAUTHORIED)
@@ -160,7 +160,27 @@ export const sendContractSignatureEnvelope = async (req: Request, res: Response)
 
 	const contract = await contractService.getContractDetail({ id: userId, role: user?.role ?? null }, contractId)
 
-	return res.status(StatusCodes.OK).json(contract)
+        return res.status(StatusCodes.OK).json(contract)
+}
+
+export const syncContractSignatureEnvelope = async (req: Request, res: Response): Promise<Response> => {
+        const user = req.user
+        const userId = user?.id
+        const { contractId } = req.params
+
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để đồng bộ trạng thái ký', ErrorCode.UNAUTHORIED)
+        }
+
+        if (!contractId) {
+                throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+        }
+
+        await contractSignatureService.syncDocuSignEnvelopeStatus(contractId, { id: userId, role: user?.role ?? null })
+
+        const contract = await contractService.getContractDetail({ id: userId, role: user?.role ?? null }, contractId)
+
+        return res.status(StatusCodes.OK).json(contract)
 }
 
 export const endContract = async (req: Request, res: Response) => {
