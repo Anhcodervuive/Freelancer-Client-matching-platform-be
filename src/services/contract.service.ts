@@ -1069,7 +1069,7 @@ const autoTriggerDocuSignEnvelopeIfNeeded = async (contract: ContractDetailPaylo
         }
 
         try {
-                await contractSignatureService.triggerDocuSignEnvelope(contract.id, null, undefined, {
+                await contractSignatureService.enqueueDocuSignEnvelope(contract.id, null, undefined, {
                         skipAuthorization: true
                 })
         } catch (error) {

@@ -9,8 +9,9 @@
                 "docusign:check": "ts-node -r tsconfig-paths/register src/scripts/docusign-check-config.ts",
                 "worker:email": "ts-node -r tsconfig-paths/register src/queues/email.worker.ts",
                 "worker:match-interaction": "ts-node -r tsconfig-paths/register src/queues/match-interaction.worker.ts",
-                "worker:job-moderation": "ts-node -r tsconfig-paths/register src/queues/job-moderation.worker.ts"
-	},
+                "worker:job-moderation": "ts-node -r tsconfig-paths/register src/queues/job-moderation.worker.ts",
+                "worker:docusign": "ts-node -r tsconfig-paths/register src/queues/docusign.worker.ts"
+        },
 	"keywords": [],
 	"author": "",
 	"license": "ISC",

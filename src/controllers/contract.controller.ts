@@ -156,7 +156,7 @@ export const sendContractSignatureEnvelope = async (req: Request, res: Response)
 
 	const payload = TriggerDocuSignEnvelopeSchema.parse(req.body ?? {})
 
-	await contractSignatureService.triggerDocuSignEnvelope(contractId, { id: userId, role: user?.role ?? null }, payload)
+        await contractSignatureService.enqueueDocuSignEnvelope(contractId, { id: userId, role: user?.role ?? null }, payload)
 
 	const contract = await contractService.getContractDetail({ id: userId, role: user?.role ?? null }, contractId)
 

@@ -130,7 +130,7 @@ Vì vậy pipeline chuẩn là: mỗi bên vào trang hợp đồng → `POST /c
 2. **Freelancer đăng nhập và đồng ý điều khoản:** Frontend gọi `POST /contracts/:id/terms/accept` (payload chứa IP/UA). Service cập nhật `termsAcceptedAt` của freelancer và lưu log.
 3. **Client đồng ý điều khoản:** Client truy cập hợp đồng → gọi cùng endpoint. Nếu client chưa đồng ý, hệ thống chưa cho phép gửi DocuSign dù freelancer đã đồng ý.
 4. **Kiểm tra đủ chữ ký nội bộ:** Ngay sau khi service `acceptContractTerms` cập nhật hợp đồng, backend tải lại bản ghi. Nếu lúc này cả hai trường `termsAcceptedAt` và `clientAcceptedAt` đều có giá trị (hoặc một bên được cấu hình không bắt buộc), hệ thống sẽ tự động gọi logic tương đương `POST /contracts/:id/signatures/docusign/send` (thực tế là gọi thẳng `contractSignatureService.triggerDocuSignEnvelope`). Admin vẫn có thể dùng endpoint đó thủ công để gửi lại khi cần.
-5. **Gửi DocuSign:** Endpoint thứ hai dựng tài liệu từ snapshot vừa “khóa”, thêm danh sách signer (freelancer → client → platform) và gọi DocuSign để phát hành envelope.
+5. **Gửi DocuSign:** Endpoint thứ hai dựng tài liệu từ snapshot vừa “khóa”, thêm danh sách signer (freelancer → client → platform) và **đưa yêu cầu gửi vào hàng đợi BullMQ**. Worker chạy lệnh `npm run worker:docusign` sẽ gọi DocuSign API ở background nên người dùng không cần đợi HTTP block.
 6. **DocuSign xử lý chữ ký:** Email lần lượt được gửi cho từng bên; backend nhận webhook `POST /webhooks/docusign` để cập nhật trạng thái.
 7. **Hoàn tất:** Khi webhook báo `completed`, hợp đồng đổi sang `SIGNED/ACTIVE`. Nếu cần resend, chỉ gọi lại `signatures/docusign/send` với `forceResend` mà không đụng tới log chấp thuận terms.
 
@@ -165,10 +165,11 @@ Luồng này bảo đảm mỗi bản hợp đồng luôn tham chiếu tới đ�
 
 > ⚠️ **DocuSign Connect không chấp nhận URL `localhost`:** Ngay cả khi bạn dựng reverse proxy HTTPS (ví dụ `https://localhost:3443`), máy chủ DocuSign vẫn không thể truy cập domain nội bộ. Nhật ký Connect sẽ ghi lỗi kiểu `Connect Listener Url reference to internal DocuSign is not allowed` hoặc liên tục trả 404. Luôn dùng domain public (deploy tạm lên cloud) hoặc tạo tunnel (`ngrok`, `Cloudflare Tunnel`, `localtunnel`...) rồi dán URL đó vào trường **URL to Publish**.
 2. **Polling dự phòng**: nếu webhook thất bại, cron gọi `GET /v2.1/accounts/{accountId}/envelopes/{envelopeId}` để lấy trạng thái.
-3. **Cập nhật DB**:
+3. **Cập nhật DB & log sự kiện**:
    * Lưu timestamp ký của từng bên (`freelancerSignedAt`, `clientSignedAt`, `platformSignedAt`).
    * Lưu URL tài liệu hoàn tất (`GET .../documents/combined`).
    * Gắn hash SHA256 của file cuối cùng vào bảng `Contract` để phục vụ kiểm chứng.
+   * Mọi webhook đều được ghi vào bảng `webhook_event_log` (type `docusign.connect`) trước khi xử lý; trường `processed` giúp bạn biết callback nào đã áp dụng thành công vào DB. Có thể query bảng này hoặc tail log console để debug khi DocuSign báo gửi thành công nhưng trạng thái chưa đổi.
 4. **Kích hoạt nghiệp vụ**: khi cả hai bên ký xong → đánh dấu hợp đồng `ACTIVE`, cho phép mở milestone, release thanh toán, mở tranh chấp theo điều khoản mới ký.
 
 ### 5.1. Đồng Bộ Thủ Công (Fallback)

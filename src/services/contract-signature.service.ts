@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import { Prisma } from '~/generated/prisma'
 import {
         ContractAcceptanceAction,
@@ -18,6 +20,7 @@ import docusignService, {
         DocuSignSignerDefinition
 } from './docusign.service'
 import { TriggerDocuSignEnvelopeInput } from '~/schema/contract.schema'
+import { docusignEnvelopeQueue } from '~/queues/docusign.queue'
 
 const composeDisplayName = (profile?: { firstName: string | null; lastName: string | null } | null) => {
         const firstName = profile?.firstName?.trim() ?? ''
@@ -811,6 +814,30 @@ const triggerDocuSignEnvelope = async (
         })
 }
 
+const enqueueDocuSignEnvelope = async (
+        contractId: string,
+        actor: ContractActor,
+        payload?: TriggerDocuSignEnvelopeInput,
+        options?: { skipAuthorization?: boolean }
+) => {
+        ensureDocuSignEnabled()
+
+        const actorPayload = actor ? { id: actor.id, role: actor.role ?? null } : null
+
+        await docusignEnvelopeQueue.add('send-envelope', {
+                contractId,
+                actor: actorPayload,
+                payload,
+                options
+        })
+
+        console.info('Đã xếp hàng job gửi DocuSign envelope', {
+                contractId,
+                actorId: actorPayload?.id ?? null,
+                skipAuthorization: options?.skipAuthorization ?? false
+        })
+}
+
 const mapDocuSignStatus = (status: string | null | undefined): ContractSignatureStatus | null => {
         const normalized = status?.toLowerCase()
         switch (normalized) {
@@ -912,19 +939,91 @@ const findContractForEnvelope = async (
         return null
 }
 
+const normaliseEventId = (value: unknown) =>
+        typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+
+const extractDocuSignEventId = (payload: unknown): string | null => {
+        if (!payload || typeof payload !== 'object') {
+                return null
+        }
+
+        const record = payload as Record<string, unknown>
+        const notification = record.eventNotification ?? record.EventNotification
+
+        if (notification && typeof notification === 'object') {
+                const notificationRecord = notification as Record<string, unknown>
+                return (
+                        normaliseEventId(notificationRecord.eventId) ??
+                        normaliseEventId(notificationRecord.EventId) ??
+                        normaliseEventId(notificationRecord.EventID) ??
+                        null
+                )
+        }
+
+        return (
+                normaliseEventId(record.eventId) ??
+                normaliseEventId(record.EventId) ??
+                normaliseEventId(record.EventID) ??
+                normaliseEventId(record.eventGuid) ??
+                null
+        )
+}
+
+const persistDocuSignWebhookLog = async (payload: unknown) => {
+        const eventId = extractDocuSignEventId(payload) ?? `evt_${randomUUID()}`
+
+        try {
+                await prismaClient.webhookEventLog.upsert({
+                        where: { eventId },
+                        update: { raw: payload as Prisma.InputJsonValue, processed: false, type: 'docusign.connect' },
+                        create: { eventId, type: 'docusign.connect', raw: payload as Prisma.InputJsonValue }
+                })
+        } catch (error) {
+                console.error('Không thể ghi log webhook DocuSign', { eventId, error })
+        }
+
+        return eventId
+}
+
+const markDocuSignWebhookProcessed = async (eventId: string | null) => {
+        if (!eventId) {
+                return
+        }
+
+        try {
+                await prismaClient.webhookEventLog.update({
+                        where: { eventId },
+                        data: { processed: true }
+                })
+        } catch (error) {
+                console.error('Không thể cập nhật trạng thái log webhook DocuSign', { eventId, error })
+        }
+}
+
 const handleDocuSignConnectEvent = async (payload: unknown) => {
         if (!DOCUSIGN.ENABLED) {
                 return false
         }
 
+        const webhookLogId = await persistDocuSignWebhookLog(payload)
         const envelope = extractEnvelopePayload(payload)
         if (!envelope?.envelopeId) {
+                console.warn('DocuSign webhook không có envelopeId', { eventId: webhookLogId })
                 return false
         }
 
+        console.info('Đã nhận webhook DocuSign', {
+                eventId: webhookLogId,
+                envelopeId: envelope.envelopeId,
+                status: envelope.status ?? null
+        })
+
         const contractId = await findContractForEnvelope(envelope.envelopeId, envelope.customFields)
         if (!contractId) {
-                        console.warn('DocuSign event không xác định được hợp đồng', envelope.envelopeId)
+                console.warn('DocuSign event không xác định được hợp đồng', {
+                        eventId: webhookLogId,
+                        envelopeId: envelope.envelopeId
+                })
                 return false
         }
 
@@ -1042,6 +1141,15 @@ const handleDocuSignConnectEvent = async (payload: unknown) => {
                 }
         })
 
+        await markDocuSignWebhookProcessed(webhookLogId)
+
+        console.info('Đã cập nhật trạng thái DocuSign từ webhook', {
+                eventId: webhookLogId,
+                contractId: contractRecord.id,
+                envelopeId: envelope.envelopeId,
+                status: mappedStatus ?? envelope.status ?? null
+        })
+
         return true
 }
 
@@ -1115,6 +1223,7 @@ const syncDocuSignEnvelopeStatus = async (
 
 const contractSignatureService = {
         isDocuSignEnabled: () => DOCUSIGN.ENABLED,
+        enqueueDocuSignEnvelope,
         triggerDocuSignEnvelope,
         handleDocuSignConnectEvent,
         syncDocuSignEnvelopeStatus

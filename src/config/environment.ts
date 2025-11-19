@@ -384,6 +384,22 @@ const docuSignConsentRedirectUri =
         optionalEnv(process.env.DOCUSIGN_CONSENT_REDIRECT_URI) ??
         'https://developers.docusign.com/platform/auth/consent'
 
+const docuSignQueueRetryAttempts = clamp(
+        Math.round(parseNumber(process.env.DOCUSIGN_QUEUE_RETRY_ATTEMPTS, 5)),
+        1,
+        10
+)
+const docuSignQueueRetryDelayMs = clamp(
+        Math.round(parseNumber(process.env.DOCUSIGN_QUEUE_RETRY_DELAY_MS, 30_000)),
+        1_000,
+        300_000
+)
+const docuSignQueueWorkerConcurrency = clamp(
+        Math.round(parseNumber(process.env.DOCUSIGN_QUEUE_WORKER_CONCURRENCY, 2)),
+        1,
+        10
+)
+
 const docuSignEnabled = Boolean(
         docuSignIntegrationKey && docuSignUserId && docuSignAccountId && docuSignPrivateKey
 )
@@ -411,5 +427,10 @@ export const DOCUSIGN = {
                           email: docuSignPlatformSignerEmail,
                           name: docuSignPlatformSignerName ?? 'Platform Admin'
                   }
-                : null
+                : null,
+        QUEUE: {
+                RETRY_ATTEMPTS: docuSignQueueRetryAttempts,
+                RETRY_DELAY_MS: docuSignQueueRetryDelayMs,
+                WORKER_CONCURRENCY: docuSignQueueWorkerConcurrency
+        }
 }
