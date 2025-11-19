@@ -21,6 +21,7 @@ import docusignService, {
 } from './docusign.service'
 import { TriggerDocuSignEnvelopeInput } from '~/schema/contract.schema'
 import { docusignEnvelopeQueue } from '~/queues/docusign.queue'
+import type { DocuSignEnvelopeJobData } from '~/queues/docusign.queue'
 
 const composeDisplayName = (profile?: { firstName: string | null; lastName: string | null } | null) => {
         const firstName = profile?.firstName?.trim() ?? ''
@@ -824,12 +825,20 @@ const enqueueDocuSignEnvelope = async (
 
         const actorPayload = actor ? { id: actor.id, role: actor.role ?? null } : null
 
-        await docusignEnvelopeQueue.add('send-envelope', {
+        const jobData: DocuSignEnvelopeJobData = {
                 contractId,
-                actor: actorPayload,
-                payload,
-                options
-        })
+                actor: actorPayload
+        }
+
+        if (payload) {
+                jobData.payload = payload
+        }
+
+        if (options) {
+                jobData.options = options
+        }
+
+        await docusignEnvelopeQueue.add('send-envelope', jobData)
 
         console.info('Đã xếp hàng job gửi DocuSign envelope', {
                 contractId,
