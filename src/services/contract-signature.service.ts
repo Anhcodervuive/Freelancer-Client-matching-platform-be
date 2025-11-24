@@ -668,6 +668,21 @@ const buildEnvelopeDefinition = (contract: {
         }
 }
 
+const resolveDocuSignUri = (uri?: string | null) => {
+        if (!uri) {
+                return null
+        }
+
+        if (/^https?:\/\//i.test(uri)) {
+                return uri
+        }
+
+        const origin = DOCUSIGN.BASE_URL.replace(/\/restapi$/i, '')
+        const normalizedPath = uri.startsWith('/') ? uri : `/${uri}`
+
+        return `${origin}${normalizedPath}`
+}
+
 const triggerDocuSignEnvelope = async (
         contractId: string,
         actor: ContractActor,
@@ -806,8 +821,8 @@ const triggerDocuSignEnvelope = async (
                         signatureEnvelopeId: summary.envelopeId,
                         signatureStatus: ContractSignatureStatus.SENT,
                         signatureSentAt: new Date(),
-                        signatureDocumentsUri: summary.documentsUri ?? null,
-                        signatureCertificateUri: summary.certificateUri ?? null,
+                        signatureDocumentsUri: resolveDocuSignUri(summary.documentsUri),
+                        signatureCertificateUri: resolveDocuSignUri(summary.certificateUri),
                         signatureEnvelopeSummary: summary as unknown as Prisma.InputJsonValue,
                         signatureRecipients: toStoredRecipientJson(storedRecipients),
                         signatureLastError: null
@@ -1228,8 +1243,8 @@ const handleDocuSignConnectEvent = async (payload: unknown) => {
         await prismaClient.$transaction(async tx => {
                 const updateData: Prisma.ContractUpdateInput = {
                         signatureEnvelopeSummary: normalizedContractPayload,
-                        signatureDocumentsUri: envelope.documentsUri ?? null,
-                        signatureCertificateUri: envelope.certificateUri ?? null
+                        signatureDocumentsUri: resolveDocuSignUri(envelope.documentsUri),
+                        signatureCertificateUri: resolveDocuSignUri(envelope.certificateUri)
                 }
 
                 if (mappedStatus) {

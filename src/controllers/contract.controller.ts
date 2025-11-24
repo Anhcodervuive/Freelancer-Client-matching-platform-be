@@ -28,6 +28,7 @@ import {
 import { SubmitFinalEvidenceSchema } from '~/schema/dispute.schema'
 import contractService from '~/services/contract.service'
 import contractSignatureService from '~/services/contract-signature.service'
+import { throwArbitrationDisabled } from '~/helpers/arbitration'
 
 const RESOURCE_FILE_FIELD_NAMES = new Set(['resourceFiles', 'resourceFiles[]', 'files', 'files[]'])
 const SUBMISSION_FILE_FIELD_NAMES = new Set(['attachments', 'attachments[]', 'files', 'files[]'])
@@ -592,17 +593,19 @@ export const confirmArbitrationFee = async (req: Request, res: Response) => {
 	const userId = req.user?.id
 	const { contractId, milestoneId, disputeId } = req.params
 
-	if (!userId) {
-		throw new UnauthorizedException('Bạn cần đăng nhập để xác nhận đã đóng phí trọng tài', ErrorCode.UNAUTHORIED)
-	}
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để xác nhận đã đóng phí trọng tài', ErrorCode.UNAUTHORIED)
+        }
 
-	if (!contractId || !milestoneId || !disputeId) {
-		throw new BadRequestException('Thiếu tham số contractId, milestoneId hoặc disputeId', ErrorCode.PARAM_QUERY_ERROR)
-	}
+        if (!contractId || !milestoneId || !disputeId) {
+                throw new BadRequestException('Thiếu tham số contractId, milestoneId hoặc disputeId', ErrorCode.PARAM_QUERY_ERROR)
+        }
 
-	const payload = ConfirmArbitrationFeeSchema.parse(req.body)
+        throwArbitrationDisabled()
 
-	const result = await contractService.confirmArbitrationFee(userId, contractId, milestoneId, disputeId, payload)
+        const payload = ConfirmArbitrationFeeSchema.parse(req.body)
+
+        const result = await contractService.confirmArbitrationFee(userId, contractId, milestoneId, disputeId, payload)
 
 	return res.status(StatusCodes.OK).json(result)
 }
@@ -611,15 +614,17 @@ export const listFinalEvidenceSources = async (req: Request, res: Response) => {
 	const userId = req.user?.id
 	const { contractId, milestoneId, disputeId } = req.params
 
-	if (!userId) {
-		throw new UnauthorizedException('Bạn cần đăng nhập để xem danh sách chứng cứ', ErrorCode.UNAUTHORIED)
-	}
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để xem danh sách chứng cứ', ErrorCode.UNAUTHORIED)
+        }
 
-	if (!contractId || !milestoneId || !disputeId) {
-		throw new BadRequestException('Thiếu tham số contractId, milestoneId hoặc disputeId', ErrorCode.PARAM_QUERY_ERROR)
-	}
+        if (!contractId || !milestoneId || !disputeId) {
+                throw new BadRequestException('Thiếu tham số contractId, milestoneId hoặc disputeId', ErrorCode.PARAM_QUERY_ERROR)
+        }
 
-	const result = await contractService.listFinalEvidenceSources(userId, contractId, milestoneId, disputeId)
+        throwArbitrationDisabled()
+
+        const result = await contractService.listFinalEvidenceSources(userId, contractId, milestoneId, disputeId)
 
 	return res.status(StatusCodes.OK).json(result)
 }
@@ -628,16 +633,18 @@ export const submitFinalEvidence = async (req: Request, res: Response) => {
 	const userId = req.user?.id
 	const { contractId, milestoneId, disputeId } = req.params
 
-	if (!userId) {
-		throw new UnauthorizedException('Bạn cần đăng nhập để nộp bằng chứng tranh chấp', ErrorCode.UNAUTHORIED)
-	}
+        if (!userId) {
+                throw new UnauthorizedException('Bạn cần đăng nhập để nộp bằng chứng tranh chấp', ErrorCode.UNAUTHORIED)
+        }
 
-	if (!contractId || !milestoneId || !disputeId) {
-		throw new BadRequestException('Thiếu tham số contractId, milestoneId hoặc disputeId', ErrorCode.PARAM_QUERY_ERROR)
-	}
+        if (!contractId || !milestoneId || !disputeId) {
+                throw new BadRequestException('Thiếu tham số contractId, milestoneId hoặc disputeId', ErrorCode.PARAM_QUERY_ERROR)
+        }
 
-	const payload = SubmitFinalEvidenceSchema.parse(req.body)
-	const result = await contractService.submitFinalEvidence(userId, contractId, milestoneId, disputeId, payload)
+        throwArbitrationDisabled()
+
+        const payload = SubmitFinalEvidenceSchema.parse(req.body)
+        const result = await contractService.submitFinalEvidence(userId, contractId, milestoneId, disputeId, payload)
 
 	return res.status(StatusCodes.OK).json(result)
 }

@@ -16,6 +16,7 @@ import { ForbiddenException } from '~/exceptions/Forbidden'
 import { ErrorCode } from '~/exceptions/root'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ensureAdminUser } from './utils'
+import { throwArbitrationDisabled } from '~/helpers/arbitration'
 
 const resolveArbitrationContextViewer = (req: Request) => {
     const user = req.user
@@ -49,6 +50,8 @@ export const listAdminDisputes = async (req: Request, res: Response) => {
 
 export const listArbitrators = async (req: Request, res: Response) => {
     ensureAdminUser(req)
+
+    throwArbitrationDisabled()
 
     const arbitrators = await adminDisputeService.listArbitrators()
 
@@ -91,6 +94,8 @@ export const requestArbitrationFees = async (req: Request, res: Response) => {
         throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
     }
 
+    throwArbitrationDisabled()
+
     const payload = AdminRequestArbitrationFeesSchema.parse(req.body)
     const result = await adminDisputeService.requestArbitrationFees(adminId, disputeId, payload)
 
@@ -104,6 +109,8 @@ export const lockDisputeForArbitration = async (req: Request, res: Response) => 
     if (!disputeId) {
         throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
     }
+
+    throwArbitrationDisabled()
 
     const payload = AdminLockDisputeSchema.parse(req.body)
     const result = await adminDisputeService.lockDispute(adminId, disputeId, payload)
@@ -119,6 +126,8 @@ export const generateArbitrationDossier = async (req: Request, res: Response) =>
         throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
     }
 
+    throwArbitrationDisabled()
+
     const payload = AdminGenerateArbitrationDossierSchema.parse(req.body)
     const result = await adminDisputeService.generateArbitrationDossier(adminId, disputeId, payload)
 
@@ -133,6 +142,8 @@ export const listDisputeDossiers = async (req: Request, res: Response) => {
     if (!disputeId) {
         throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
     }
+
+    throwArbitrationDisabled()
 
     const query = AdminListDisputeDossiersSchema.parse(req.query)
     const result = await adminDisputeService.listDisputeDossiers(disputeId, query)
@@ -152,6 +163,8 @@ export const downloadDisputeDossierPdf = async (req: Request, res: Response) => 
     if (!dossierId) {
         throw new BadRequestException('Thiếu dossierId', ErrorCode.PARAM_QUERY_ERROR)
     }
+
+    throwArbitrationDisabled()
 
     const { buffer, filename } = await adminDisputeService.getDisputeDossierPdf(disputeId, dossierId)
     const safeFilename = filename.replace(/"/g, '')
@@ -175,6 +188,8 @@ export const assignArbitratorToDispute = async (req: Request, res: Response) => 
         throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
     }
 
+    throwArbitrationDisabled()
+
     const payload = AdminAssignArbitratorSchema.parse(req.body)
     const result = await adminDisputeService.assignArbitrator(adminId, disputeId, payload)
 
@@ -189,10 +204,9 @@ export const getArbitrationContext = async (req: Request, res: Response) => {
         throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
     }
 
-    const result = await adminDisputeService.getArbitrationContext(
-        viewer,
-        disputeId
-    )
+    throwArbitrationDisabled()
+
+    const result = await adminDisputeService.getArbitrationContext(viewer, disputeId)
 
     return res.json(result)
 }
@@ -204,6 +218,8 @@ export const recordArbitrationDecision = async (req: Request, res: Response) => 
     if (!disputeId) {
         throw new BadRequestException('Thiếu disputeId', ErrorCode.PARAM_QUERY_ERROR)
     }
+
+    throwArbitrationDisabled()
 
     const payload = AdminRecordArbitrationDecisionSchema.parse(req.body)
     const result = await adminDisputeService.recordArbitrationDecision(viewer, disputeId, payload)
