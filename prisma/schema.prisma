@@ -73,32 +73,32 @@ model User {
   // 1-1
   profile Profile?
 
-  emailVerifyTokens            EmailVerifyToken[]
-  jobActivityLogs              JobActivityLog[]
-  notificationsReceived        Notification[]       @relation("NotificationRecipient")
-  notificationsAuthored        Notification[]       @relation("NotificationActor")
-  chatParticipants             ChatParticipant[]
-  chatMessagesSent             ChatMessage[]        @relation("ChatMessageSender")
-  chatAdminAccessLogs          ChatAdminAccessLog[] @relation("ChatAdminAccessLogAdmin")
-  disputeNegotiationsProposed  DisputeNegotiation[] @relation("DisputeNegotiationProposer")
-  disputeNegotiationsReceived  DisputeNegotiation[] @relation("DisputeNegotiationCounterparty")
-  disputeNegotiationsResponded DisputeNegotiation[] @relation("DisputeNegotiationResponder")
-  disputesLocked               Dispute[]            @relation("DisputeLockedBy")
-  arbitrationDossiersGenerated ArbitrationDossier[] @relation("ArbitrationDossierGeneratedBy")
-  arbitrationsAssigned         Dispute[]            @relation("DisputeArbitrator")
-  disputesDecided              Dispute[]            @relation("DisputeDecidedBy")
+  emailVerifyTokens              EmailVerifyToken[]
+  jobActivityLogs                JobActivityLog[]
+  notificationsReceived          Notification[]                  @relation("NotificationRecipient")
+  notificationsAuthored          Notification[]                  @relation("NotificationActor")
+  chatParticipants               ChatParticipant[]
+  chatMessagesSent               ChatMessage[]                   @relation("ChatMessageSender")
+  chatAdminAccessLogs            ChatAdminAccessLog[]            @relation("ChatAdminAccessLogAdmin")
+  disputeNegotiationsProposed    DisputeNegotiation[]            @relation("DisputeNegotiationProposer")
+  disputeNegotiationsReceived    DisputeNegotiation[]            @relation("DisputeNegotiationCounterparty")
+  disputeNegotiationsResponded   DisputeNegotiation[]            @relation("DisputeNegotiationResponder")
+  disputesLocked                 Dispute[]                       @relation("DisputeLockedBy")
+  arbitrationDossiersGenerated   ArbitrationDossier[]            @relation("ArbitrationDossierGeneratedBy")
+  arbitrationsAssigned           Dispute[]                       @relation("DisputeArbitrator")
+  disputesDecided                Dispute[]                       @relation("DisputeDecidedBy")
   arbitrationEvidenceSubmissions ArbitrationEvidenceSubmission[] @relation("ArbitrationEvidenceSubmittedBy")
-  paymentsAsPayer              Payment[]            @relation("PaymentPayer")
-  contractsClosed              Contract[]           @relation("ContractClosedBy")
-  contractTermsAccepted        Contract[]           @relation("ContractTermsAcceptedBy")
-  contractTermsApproved        Contract[]           @relation("ContractClientAcceptedBy")
-  contractFeedbackAuthored     ContractFeedback[]   @relation("ContractFeedbackReviewer")
-  contractFeedbackReceived     ContractFeedback[]   @relation("ContractFeedbackReviewee")
-  bans                         UserBan[]            @relation("UserBanUser")
-  bansAuthored                 UserBan[]            @relation("UserBanAdmin")
-  bansLifted                   UserBan[]            @relation("UserBanLiftedBy")
-  platformTermsAuthored        PlatformTerms[]      @relation("PlatformTermsCreatedBy")
-  contractAcceptanceLogs       ContractAcceptanceLog[] @relation("ContractAcceptanceActor")
+  paymentsAsPayer                Payment[]                       @relation("PaymentPayer")
+  contractsClosed                Contract[]                      @relation("ContractClosedBy")
+  contractTermsAccepted          Contract[]                      @relation("ContractTermsAcceptedBy")
+  contractTermsApproved          Contract[]                      @relation("ContractClientAcceptedBy")
+  contractFeedbackAuthored       ContractFeedback[]              @relation("ContractFeedbackReviewer")
+  contractFeedbackReceived       ContractFeedback[]              @relation("ContractFeedbackReviewee")
+  bans                           UserBan[]                       @relation("UserBanUser")
+  bansAuthored                   UserBan[]                       @relation("UserBanAdmin")
+  bansLifted                     UserBan[]                       @relation("UserBanLiftedBy")
+  platformTermsAuthored          PlatformTerms[]                 @relation("PlatformTermsCreatedBy")
+  contractAcceptanceLogs         ContractAcceptanceLog[]         @relation("ContractAcceptanceActor")
 
   @@index([email])
   @@map("user")
@@ -144,15 +144,15 @@ model EmailVerifyToken {
 }
 
 model UserBan {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  adminId    String   @map("admin_id")
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  adminId    String    @map("admin_id")
   reason     String
-  note       String?  @db.Text
+  note       String?   @db.Text
   expiresAt  DateTime? @map("expires_at")
-  createdAt  DateTime @default(now()) @map("created_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
   liftedAt   DateTime? @map("lifted_at")
-  liftedById String?  @map("lifted_by_id")
+  liftedById String?   @map("lifted_by_id")
 
   user     User  @relation("UserBanUser", fields: [userId], references: [id], onDelete: Cascade)
   admin    User  @relation("UserBanAdmin", fields: [adminId], references: [id])
@@ -209,9 +209,11 @@ model Freelancer {
   jobInvitations               JobInvitation[]
   jobOffers                    JobOffer[]
   matchInteractions            MatchInteraction[]
+  matchFeatures                MatchFeature[]
+  stats                        FreelancerStats?
   savedJobs                    FreelancerSavedJob[]
   savedByClients               ClientSavedFreelancer[]
-  payouts                     FreelancerPayout[]
+  payouts                      FreelancerPayout[]
 
   createdAt            DateTime              @default(now()) @map("created_at")
   updatedAt            DateTime              @updatedAt @map("updated_at")
@@ -268,22 +270,22 @@ model FreelancerConnectAccount {
 }
 
 model FreelancerPayout {
-  id          String                  @id @default(cuid())
-  freelancerId String                 @map("freelancer_id")
-  freelancer   Freelancer             @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  freelancerId String     @map("freelancer_id")
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
 
-  amount   Decimal               @db.Decimal(12, 2)
+  amount   Decimal                @db.Decimal(12, 2)
   currency String
   status   FreelancerPayoutStatus @default(PENDING)
   source   FreelancerPayoutSource @default(PLATFORM)
 
-  stripePayoutId             String? @unique @map("stripe_payout_id")
-  stripeBalanceTransactionId String? @map("stripe_balance_transaction_id")
-  idemKey                    String? @unique @map("idem_key")
-  description                String? @db.VarChar(255)
-  failureCode                String? @map("failure_code") @db.VarChar(255)
-  failureMessage             String? @map("failure_message") @db.VarChar(255)
-  metadata                   Json?   @map("metadata")
+  stripePayoutId             String?   @unique @map("stripe_payout_id")
+  stripeBalanceTransactionId String?   @map("stripe_balance_transaction_id")
+  idemKey                    String?   @unique @map("idem_key")
+  description                String?   @db.VarChar(255)
+  failureCode                String?   @map("failure_code") @db.VarChar(255)
+  failureMessage             String?   @map("failure_message") @db.VarChar(255)
+  metadata                   Json?     @map("metadata")
   stripeCreatedAt            DateTime? @map("stripe_created_at")
   arrivalDate                DateTime? @map("arrival_date")
   requestedAt                DateTime? @map("requested_at")
@@ -463,7 +465,7 @@ model Asset {
   chatMessageAttachments         ChatMessageAttachment[]
   milestoneSubmissionAttachments MilestoneSubmissionAttachment[]
   milestoneResources             MilestoneResource[]
-  arbitrationEvidenceItems       ArbitrationEvidenceItem[] @relation("ArbitrationEvidenceAsset")
+  arbitrationEvidenceItems       ArbitrationEvidenceItem[]       @relation("ArbitrationEvidenceAsset")
   arbitrationDecisionAttachments ArbitrationDecisionAttachment[]
 
   @@index([provider, bucket, storageKey])
@@ -599,36 +601,36 @@ enum JobOfferType {
 }
 
 model JobPost {
-  id                 String                 @id @default(cuid())
-  clientId           String                 @map("client_id")
-  specialtyId        String                 @map("specialty_id")
-  title              String                 @db.VarChar(255)
-  description        String                 @db.MediumText
-  paymentMode        JobPaymentMode         @map("payment_mode")
-  budgetAmount       Decimal?               @map("budget_amount") @db.Decimal(12, 2)
-  budgetCurrency     String?                @map("budget_currency")
-  duration           JobDurationCommitment? @map("duration")
-  experienceLevel    JobExperienceLevel     @map("experience_level")
-  locationType       JobLocationType        @default(REMOTE) @map("location_type")
-  preferredLocations Json?                  @map("preferred_locations")
-  customTerms        Json?                  @map("custom_terms")
-  visibility         JobVisibility          @default(PUBLIC)
-  status             JobStatus              @default(DRAFT)
-  formVersion        JobPostFormVersion     @default(VERSION_1) @map("form_version")
-  publishedAt        DateTime?              @map("published_at")
-  closedAt           DateTime?              @map("closed_at")
-  moderationScore    Float?                 @map("moderation_score")
-  moderationCategory String?                @map("moderation_category") @db.VarChar(128)
-  moderationSummary  String?                @map("moderation_summary") @db.VarChar(255)
-  moderationPayload  Json?                  @map("moderation_payload")
-  moderationCheckedAt DateTime?             @map("moderation_checked_at")
-  proposalsCount     Int                    @default(0) @map("proposals_count")
-  viewsCount         Int                    @default(0) @map("views_count")
-  isDeleted          Boolean                @default(false) @map("is_deleted")
-  deletedAt          DateTime?              @map("deleted_at")
-  deletedBy          String?                @map("deleted_by")
-  createdAt          DateTime               @default(now()) @map("created_at")
-  updatedAt          DateTime               @updatedAt @map("updated_at")
+  id                  String                 @id @default(cuid())
+  clientId            String                 @map("client_id")
+  specialtyId         String                 @map("specialty_id")
+  title               String                 @db.VarChar(255)
+  description         String                 @db.MediumText
+  paymentMode         JobPaymentMode         @map("payment_mode")
+  budgetAmount        Decimal?               @map("budget_amount") @db.Decimal(12, 2)
+  budgetCurrency      String?                @map("budget_currency")
+  duration            JobDurationCommitment? @map("duration")
+  experienceLevel     JobExperienceLevel     @map("experience_level")
+  locationType        JobLocationType        @default(REMOTE) @map("location_type")
+  preferredLocations  Json?                  @map("preferred_locations")
+  customTerms         Json?                  @map("custom_terms")
+  visibility          JobVisibility          @default(PUBLIC)
+  status              JobStatus              @default(DRAFT)
+  formVersion         JobPostFormVersion     @default(VERSION_1) @map("form_version")
+  publishedAt         DateTime?              @map("published_at")
+  closedAt            DateTime?              @map("closed_at")
+  moderationScore     Float?                 @map("moderation_score")
+  moderationCategory  String?                @map("moderation_category") @db.VarChar(128)
+  moderationSummary   String?                @map("moderation_summary") @db.VarChar(255)
+  moderationPayload   Json?                  @map("moderation_payload")
+  moderationCheckedAt DateTime?              @map("moderation_checked_at")
+  proposalsCount      Int                    @default(0) @map("proposals_count")
+  viewsCount          Int                    @default(0) @map("views_count")
+  isDeleted           Boolean                @default(false) @map("is_deleted")
+  deletedAt           DateTime?              @map("deleted_at")
+  deletedBy           String?                @map("deleted_by")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
 
   client    Client    @relation(fields: [clientId], references: [userId], onDelete: Cascade)
   specialty Specialty @relation(fields: [specialtyId], references: [id], onDelete: Restrict)
@@ -641,6 +643,8 @@ model JobPost {
   offers             JobOffer[]
   activityLogs       JobActivityLog[]
   matchInteractions  MatchInteraction[]
+  matchFeatures      MatchFeature[]
+  stats              JobStats?
   contracts          Contract[]
   chatThreads        ChatThread[]
   attachments        JobPostAttachment[]
@@ -848,6 +852,17 @@ enum MatchInteractionSource {
   SYSTEM
 }
 
+enum EmbeddingEntityType {
+  JOB
+  FREELANCER
+}
+
+enum EmbeddingKind {
+  FULL
+  SKILLS
+  DOMAIN
+}
+
 model MatchInteraction {
   id             String                 @id @default(cuid())
   jobId          String?                @map("job_id")
@@ -876,6 +891,87 @@ model MatchInteraction {
   @@index([type, occurredAt], name: "idx_match_interaction_type")
   @@index([actorProfileId, occurredAt], name: "idx_match_interaction_actor")
   @@map("match_interaction")
+}
+
+model Embedding {
+  id         String              @id @default(cuid())
+  entityType EmbeddingEntityType @map("entity_type")
+  entityId   String              @map("entity_id")
+  kind       EmbeddingKind       @map("kind")
+  model      String              @map("model") @db.VarChar(191)
+  version    String?             @map("version") @db.VarChar(100)
+  vector     Json                @map("vector")
+  metadata   Json?               @map("metadata")
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+
+  @@unique([entityType, entityId, kind, model], name: "uq_embedding_entity_kind_model")
+  @@index([entityType, entityId], name: "idx_embedding_entity")
+  @@map("embedding")
+}
+
+model JobStats {
+  jobId     String   @id @map("job_id")
+  views     Int      @default(0)
+  clicks    Int      @default(0)
+  saves     Int      @default(0)
+  applies   Int      @default(0)
+  chats     Int      @default(0)
+  offers    Int      @default(0)
+  accepts   Int      @default(0)
+  declines  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  job JobPost @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_stats")
+}
+
+model FreelancerStats {
+  freelancerId String   @id @map("freelancer_id")
+  views        Int      @default(0)
+  profileViews Int      @default(0) @map("profile_views")
+  clicks       Int      @default(0)
+  saves        Int      @default(0)
+  invites      Int      @default(0)
+  applies      Int      @default(0)
+  chats        Int      @default(0)
+  offers       Int      @default(0)
+  accepts      Int      @default(0)
+  declines     Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  freelancer Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+  @@map("freelancer_stats")
+}
+
+model MatchFeature {
+  id                String    @id @default(cuid())
+  jobId             String    @map("job_id")
+  freelancerId      String    @map("freelancer_id")
+  similarityScore   Float?    @map("similarity_score")
+  budgetGap         Decimal?  @map("budget_gap") @db.Decimal(12, 2)
+  rateGap           Decimal?  @map("rate_gap") @db.Decimal(12, 2)
+  timezoneGapHours  Int?      @map("timezone_gap_hours")
+  levelGap          Int?      @map("level_gap")
+  pMatch            Float?    @map("p_match")
+  pFreelancerAccept Float?    @map("p_freelancer_accept")
+  pClientAccept     Float?    @map("p_client_accept")
+  lastInteractionAt DateTime? @map("last_interaction_at")
+  metadata          Json?     @map("metadata")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  job        JobPost    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  freelancer Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
+
+  @@unique([jobId, freelancerId], name: "uq_match_feature_pair")
+  @@index([jobId], name: "idx_match_feature_job")
+  @@index([freelancerId], name: "idx_match_feature_freelancer")
+  @@map("match_feature")
 }
 
 model Notification {
@@ -1037,58 +1133,58 @@ enum AccountType {
 
 // Chỉ dùng fixed-price → mỗi contract có nhiều milestone
 model Contract {
-  id           String         @id @default(cuid())
-  clientId     String         @map("client_id")
-  freelancerId String         @map("freelancer_id")
-  jobPostId    String?        @map("job_post_id")
-  proposalId   String?        @unique @map("proposal_id")
-  offerId      String?        @unique @map("offer_id")
-  title        String
-  currency     String // "usd", ...
-  status       ContractStatus @default(ACTIVE)
-  closureType  ContractClosureType? @map("closure_type")
-  closureReason String?              @map("closure_reason") @db.MediumText
-  endedAt      DateTime?            @map("ended_at")
-  closedById   String?              @map("closed_by_id")
-  platformTermsId        String?   @map("platform_terms_id")
-  platformTermsVersion   String?   @map("platform_terms_version") @db.VarChar(191)
-  platformTermsSnapshot  Json?     @map("platform_terms_snapshot")
-  termsAcceptedAt        DateTime? @map("terms_accepted_at")
-  termsAcceptedById      String?   @map("terms_accepted_by_id")
-  termsAcceptedIp        String?   @map("terms_accepted_ip") @db.VarChar(255)
-  termsAcceptedUserAgent String?   @map("terms_accepted_user_agent") @db.VarChar(500)
-  clientAcceptedAt        DateTime? @map("client_accepted_at")
-  clientAcceptedById      String?   @map("client_accepted_by_id")
-  clientAcceptedIp        String?   @map("client_accepted_ip") @db.VarChar(255)
-  clientAcceptedUserAgent String?   @map("client_accepted_user_agent") @db.VarChar(500)
-  signatureProvider       ContractSignatureProvider? @map("signature_provider")
-  signatureEnvelopeId     String?   @unique @map("signature_envelope_id") @db.VarChar(191)
-  signatureStatus         ContractSignatureStatus?   @map("signature_status")
-  signatureRecipients     Json?     @map("signature_recipients")
-  signatureEnvelopeSummary Json?    @map("signature_envelope_summary")
-  signatureDocumentsUri   String?   @map("signature_documents_uri") @db.VarChar(2048)
-  signatureCertificateUri String?   @map("signature_certificate_uri") @db.VarChar(2048)
-  signatureSentAt         DateTime? @map("signature_sent_at")
-  signatureCompletedAt    DateTime? @map("signature_completed_at")
-  signatureDeclinedAt     DateTime? @map("signature_declined_at")
-  signatureVoidedAt       DateTime? @map("signature_voided_at")
-  signatureLastError      String?   @map("signature_last_error") @db.VarChar(1000)
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
+  id                       String                     @id @default(cuid())
+  clientId                 String                     @map("client_id")
+  freelancerId             String                     @map("freelancer_id")
+  jobPostId                String?                    @map("job_post_id")
+  proposalId               String?                    @unique @map("proposal_id")
+  offerId                  String?                    @unique @map("offer_id")
+  title                    String
+  currency                 String // "usd", ...
+  status                   ContractStatus             @default(ACTIVE)
+  closureType              ContractClosureType?       @map("closure_type")
+  closureReason            String?                    @map("closure_reason") @db.MediumText
+  endedAt                  DateTime?                  @map("ended_at")
+  closedById               String?                    @map("closed_by_id")
+  platformTermsId          String?                    @map("platform_terms_id")
+  platformTermsVersion     String?                    @map("platform_terms_version") @db.VarChar(191)
+  platformTermsSnapshot    Json?                      @map("platform_terms_snapshot")
+  termsAcceptedAt          DateTime?                  @map("terms_accepted_at")
+  termsAcceptedById        String?                    @map("terms_accepted_by_id")
+  termsAcceptedIp          String?                    @map("terms_accepted_ip") @db.VarChar(255)
+  termsAcceptedUserAgent   String?                    @map("terms_accepted_user_agent") @db.VarChar(500)
+  clientAcceptedAt         DateTime?                  @map("client_accepted_at")
+  clientAcceptedById       String?                    @map("client_accepted_by_id")
+  clientAcceptedIp         String?                    @map("client_accepted_ip") @db.VarChar(255)
+  clientAcceptedUserAgent  String?                    @map("client_accepted_user_agent") @db.VarChar(500)
+  signatureProvider        ContractSignatureProvider? @map("signature_provider")
+  signatureEnvelopeId      String?                    @unique @map("signature_envelope_id") @db.VarChar(191)
+  signatureStatus          ContractSignatureStatus?   @map("signature_status")
+  signatureRecipients      Json?                      @map("signature_recipients")
+  signatureEnvelopeSummary Json?                      @map("signature_envelope_summary")
+  signatureDocumentsUri    String?                    @map("signature_documents_uri") @db.VarChar(2048)
+  signatureCertificateUri  String?                    @map("signature_certificate_uri") @db.VarChar(2048)
+  signatureSentAt          DateTime?                  @map("signature_sent_at")
+  signatureCompletedAt     DateTime?                  @map("signature_completed_at")
+  signatureDeclinedAt      DateTime?                  @map("signature_declined_at")
+  signatureVoidedAt        DateTime?                  @map("signature_voided_at")
+  signatureLastError       String?                    @map("signature_last_error") @db.VarChar(1000)
+  createdAt                DateTime                   @default(now()) @map("created_at")
+  updatedAt                DateTime                   @updatedAt @map("updated_at")
 
-  client      Client       @relation(fields: [clientId], references: [userId])
-  freelancer  Freelancer   @relation(fields: [freelancerId], references: [userId])
-  jobPost     JobPost?     @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
-  proposal    JobProposal? @relation("ContractProposal", fields: [proposalId], references: [id], onDelete: SetNull)
-  offer       JobOffer?    @relation("OfferContract", fields: [offerId], references: [id], onDelete: SetNull)
-  closedBy    User?        @relation("ContractClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
-  platformTerms PlatformTerms? @relation(fields: [platformTermsId], references: [id], onDelete: SetNull)
-  termsAcceptedBy User?        @relation("ContractTermsAcceptedBy", fields: [termsAcceptedById], references: [id], onDelete: SetNull)
-  clientAcceptedBy User?       @relation("ContractClientAcceptedBy", fields: [clientAcceptedById], references: [id], onDelete: SetNull)
-  milestones  Milestone[]
-  chatThreads ChatThread[]
-  feedbacks   ContractFeedback[]
-  acceptanceLogs ContractAcceptanceLog[]
+  client           Client                  @relation(fields: [clientId], references: [userId])
+  freelancer       Freelancer              @relation(fields: [freelancerId], references: [userId])
+  jobPost          JobPost?                @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
+  proposal         JobProposal?            @relation("ContractProposal", fields: [proposalId], references: [id], onDelete: SetNull)
+  offer            JobOffer?               @relation("OfferContract", fields: [offerId], references: [id], onDelete: SetNull)
+  closedBy         User?                   @relation("ContractClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  platformTerms    PlatformTerms?          @relation(fields: [platformTermsId], references: [id], onDelete: SetNull)
+  termsAcceptedBy  User?                   @relation("ContractTermsAcceptedBy", fields: [termsAcceptedById], references: [id], onDelete: SetNull)
+  clientAcceptedBy User?                   @relation("ContractClientAcceptedBy", fields: [clientAcceptedById], references: [id], onDelete: SetNull)
+  milestones       Milestone[]
+  chatThreads      ChatThread[]
+  feedbacks        ContractFeedback[]
+  acceptanceLogs   ContractAcceptanceLog[]
 
   @@index([jobPostId])
   @@index([closedById])
@@ -1099,18 +1195,18 @@ model Contract {
 }
 
 model PlatformTerms {
-  id            String               @id @default(cuid())
-  version       String               @unique
+  id            String              @id @default(cuid())
+  version       String              @unique
   title         String
   body          Json
-  status        PlatformTermsStatus  @default(DRAFT)
-  effectiveFrom DateTime?            @map("effective_from")
-  effectiveTo   DateTime?            @map("effective_to")
-  createdById   String?              @map("created_by_id")
-  createdAt     DateTime             @default(now()) @map("created_at")
-  updatedAt     DateTime             @updatedAt @map("updated_at")
+  status        PlatformTermsStatus @default(DRAFT)
+  effectiveFrom DateTime?           @map("effective_from")
+  effectiveTo   DateTime?           @map("effective_to")
+  createdById   String?             @map("created_by_id")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
 
-  createdBy User?     @relation("PlatformTermsCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy User?      @relation("PlatformTermsCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   contracts Contract[]
 
   @@index([status, effectiveFrom], name: "idx_platform_terms_status_effective")
@@ -1118,15 +1214,15 @@ model PlatformTerms {
 }
 
 model ContractAcceptanceLog {
-  id           String                   @id @default(cuid())
-  contractId   String                   @map("contract_id")
-  actorId      String                   @map("actor_id")
-  action       ContractAcceptanceAction @default(ACCEPTED)
-  termsVersion String                   @map("terms_version")
-  termsSnapshot Json?                   @map("terms_snapshot")
-  ipAddress    String?                  @map("ip_address") @db.VarChar(255)
-  userAgent    String?                  @map("user_agent") @db.VarChar(500)
-  createdAt    DateTime                 @default(now()) @map("created_at")
+  id            String                   @id @default(cuid())
+  contractId    String                   @map("contract_id")
+  actorId       String                   @map("actor_id")
+  action        ContractAcceptanceAction @default(ACCEPTED)
+  termsVersion  String                   @map("terms_version")
+  termsSnapshot Json?                    @map("terms_snapshot")
+  ipAddress     String?                  @map("ip_address") @db.VarChar(255)
+  userAgent     String?                  @map("user_agent") @db.VarChar(500)
+  createdAt     DateTime                 @default(now()) @map("created_at")
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
   actor    User     @relation("ContractAcceptanceActor", fields: [actorId], references: [id], onDelete: Cascade)
@@ -1137,16 +1233,16 @@ model ContractAcceptanceLog {
 }
 
 model ContractFeedback {
-  id             String                   @id @default(cuid())
-  contractId     String                   @map("contract_id")
-  reviewerId     String                   @map("reviewer_id")
-  revieweeId     String                   @map("reviewee_id")
+  id             String                  @id @default(cuid())
+  contractId     String                  @map("contract_id")
+  reviewerId     String                  @map("reviewer_id")
+  revieweeId     String                  @map("reviewee_id")
   role           ContractParticipantRole
-  rating         Int                      @db.UnsignedTinyInt
-  comment        String?                  @db.MediumText
-  wouldHireAgain Boolean?                 @default(true) @map("would_hire_again")
-  createdAt      DateTime                 @default(now()) @map("created_at")
-  updatedAt      DateTime                 @updatedAt @map("updated_at")
+  rating         Int                     @db.UnsignedTinyInt
+  comment        String?                 @db.MediumText
+  wouldHireAgain Boolean?                @default(true) @map("would_hire_again")
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
   reviewer User     @relation("ContractFeedbackReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
@@ -1386,15 +1482,15 @@ enum DisputeNegotiationStatus {
 }
 
 model Dispute {
-  id               String        @id @default(cuid())
-  escrowId         String        @unique
-  openedById       String
-  status           DisputeStatus @default(OPEN)
-  latestProposalId String?       @unique @map("latest_proposal_id")
-  lockedAt         DateTime?     @map("locked_at")
-  lockedById       String?       @map("locked_by_id")
-  arbitratorId     String?       @map("arbitrator_id")
-  arbitratorAssignedAt DateTime? @map("arbitrator_assigned_at")
+  id                   String        @id @default(cuid())
+  escrowId             String        @unique
+  openedById           String
+  status               DisputeStatus @default(OPEN)
+  latestProposalId     String?       @unique @map("latest_proposal_id")
+  lockedAt             DateTime?     @map("locked_at")
+  lockedById           String?       @map("locked_by_id")
+  arbitratorId         String?       @map("arbitrator_id")
+  arbitratorAssignedAt DateTime?     @map("arbitrator_assigned_at")
 
   // đề xuất cuối cùng (để 2 bên nhìn & đồng ý)
   proposedRelease Decimal @default(0) @map("proposed_release") @db.Decimal(12, 2) // trả freelancer
@@ -1413,26 +1509,26 @@ model Dispute {
   currentDossierVersion Int? @map("current_dossier_version")
 
   // kết quả chốt (nếu RESOLVED_*)
-  decidedRelease Decimal @default(0) @map("decided_release") @db.Decimal(12, 2)
-  decidedRefund  Decimal @default(0) @map("decided_refund") @db.Decimal(12, 2)
-  decidedById    String? @map("decided_by_id")
-  decidedAt      DateTime? @map("decided_at")
-  decisionSummary   String?  @map("decision_summary") @db.Text
-  decisionReasoning String?  @map("decision_reasoning") @db.Text
+  decidedRelease    Decimal   @default(0) @map("decided_release") @db.Decimal(12, 2)
+  decidedRefund     Decimal   @default(0) @map("decided_refund") @db.Decimal(12, 2)
+  decidedById       String?   @map("decided_by_id")
+  decidedAt         DateTime? @map("decided_at")
+  decisionSummary   String?   @map("decision_summary") @db.Text
+  decisionReasoning String?   @map("decision_reasoning") @db.Text
 
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  escrow                 Escrow               @relation(fields: [escrowId], references: [id])
+  escrow                 Escrow                          @relation(fields: [escrowId], references: [id])
   chatAccessLogs         ChatAdminAccessLog[]
-  latestProposal         DisputeNegotiation?  @relation("DisputeLatestProposal", fields: [latestProposalId], references: [id])
+  latestProposal         DisputeNegotiation?             @relation("DisputeLatestProposal", fields: [latestProposalId], references: [id])
   negotiations           DisputeNegotiation[]
-  lockedBy               User?                @relation("DisputeLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
-  arbitrator             User?                @relation("DisputeArbitrator", fields: [arbitratorId], references: [id], onDelete: SetNull)
-  decidedBy              User?                @relation("DisputeDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  lockedBy               User?                           @relation("DisputeLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  arbitrator             User?                           @relation("DisputeArbitrator", fields: [arbitratorId], references: [id], onDelete: SetNull)
+  decidedBy              User?                           @relation("DisputeDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
   arbitrationDossiers    ArbitrationDossier[]
-  arbitrationFeePayments Payment[]            @relation("DisputeArbitrationPayments")
+  arbitrationFeePayments Payment[]                       @relation("DisputeArbitrationPayments")
   evidenceSubmissions    ArbitrationEvidenceSubmission[]
   decisionAttachments    ArbitrationDecisionAttachment[]
 
@@ -1462,16 +1558,16 @@ model ArbitrationDossier {
 }
 
 model ArbitrationEvidenceSubmission {
-  id                   String      @id @default(cuid())
-  disputeId            String      @map("dispute_id")
-  submittedById        String      @map("submitted_by_id")
-  statement            String?     @db.Text
-  noAdditionalEvidence Boolean     @default(false) @map("no_additional_evidence")
-  submittedAt          DateTime    @default(now()) @map("submitted_at")
-  updatedAt            DateTime    @updatedAt @map("updated_at")
+  id                   String   @id @default(cuid())
+  disputeId            String   @map("dispute_id")
+  submittedById        String   @map("submitted_by_id")
+  statement            String?  @db.Text
+  noAdditionalEvidence Boolean  @default(false) @map("no_additional_evidence")
+  submittedAt          DateTime @default(now()) @map("submitted_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
-  dispute     Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
-  submittedBy User    @relation("ArbitrationEvidenceSubmittedBy", fields: [submittedById], references: [id], onDelete: Cascade)
+  dispute     Dispute                   @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  submittedBy User                      @relation("ArbitrationEvidenceSubmittedBy", fields: [submittedById], references: [id], onDelete: Cascade)
   items       ArbitrationEvidenceItem[]
 
   @@unique([disputeId, submittedById], name: "uq_evidence_submission_per_user")
@@ -1480,15 +1576,15 @@ model ArbitrationEvidenceSubmission {
 }
 
 model ArbitrationEvidenceItem {
-  id           String                       @id @default(cuid())
-  submissionId String                       @map("submission_id")
-  label        String?                      @db.VarChar(255)
-  description  String?                      @db.Text
+  id           String                        @id @default(cuid())
+  submissionId String                        @map("submission_id")
+  label        String?                       @db.VarChar(255)
+  description  String?                       @db.Text
   sourceType   ArbitrationEvidenceSourceType @map("source_type")
-  sourceId     String?                      @map("source_id")
-  url          String?                      @db.VarChar(2048)
-  assetId      String?                      @map("asset_id")
-  createdAt    DateTime                     @default(now()) @map("created_at")
+  sourceId     String?                       @map("source_id")
+  url          String?                       @db.VarChar(2048)
+  assetId      String?                       @map("asset_id")
+  createdAt    DateTime                      @default(now()) @map("created_at")
 
   submission ArbitrationEvidenceSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   asset      Asset?                        @relation("ArbitrationEvidenceAsset", fields: [assetId], references: [id], onDelete: SetNull)
