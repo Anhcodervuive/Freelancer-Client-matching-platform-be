@@ -3,7 +3,9 @@ import { prismaClient } from '~/config/prisma-client'
 import { BadRequestException } from '~/exceptions/bad-request'
 import { ErrorCode } from '~/exceptions/root'
 import { UnprocessableEntityException } from '~/exceptions/validation'
+import { embeddingEntityQueue } from '~/queues/embedding-entity-moderation.queue'
 import { TAXONOMY_LIMITS } from '~/utils/constant'
+import { buildDomainTextForFreelancer, buildSkillsTextForFreelancer } from '~/utils/embeddingText'
 
 export async function assertCategoriesExist(categoryIds: string[]) {
 	if (!categoryIds.length) return
@@ -158,6 +160,48 @@ export async function setCategoriesAndSpecialties(userId: string, categoryIds: s
 			}
 		}
 
+		const updatedUser = await tx.user.findFirst({
+			where: {
+				id: userId
+			},
+			include: {
+				profile: {
+					include: {
+						freelancer: {
+							include: {
+								freelancerCategorySelection: {
+									include: {
+										category: true
+									}
+								},
+								freelancerSpecialtySelection: {
+									include: {
+										specialty: true
+									}
+								},
+								freelancerSkillSelection: {
+									include: {
+										skill: true
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		})
+
+		if (updatedUser?.profile?.freelancer) {
+			const embeddingTextPrepareForEmbed = buildDomainTextForFreelancer(updatedUser.profile.freelancer)
+			console.log(embeddingTextPrepareForEmbed)
+			embeddingEntityQueue.add('', {
+				entity_type: 'FREELANCER',
+				entity_id: updatedUser.profile.freelancer.userId,
+				text: embeddingTextPrepareForEmbed,
+				kind: 'DOMAIN'
+			})
+		}
+
 		return { success: true }
 	})
 }
@@ -229,6 +273,48 @@ export async function setSkills(userId: string, skillIds: string[]) {
 			}
 		}
 
+		const updatedUser = await tx.user.findFirst({
+			where: {
+				id: userId
+			},
+			include: {
+				profile: {
+					include: {
+						freelancer: {
+							include: {
+								freelancerCategorySelection: {
+									include: {
+										category: true
+									}
+								},
+								freelancerSpecialtySelection: {
+									include: {
+										specialty: true
+									}
+								},
+								freelancerSkillSelection: {
+									include: {
+										skill: true
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		})
+
+		if (updatedUser?.profile?.freelancer) {
+			const embeddingTextPrepareForEmbed = buildSkillsTextForFreelancer(updatedUser.profile.freelancer)
+			console.log(embeddingTextPrepareForEmbed)
+			embeddingEntityQueue.add('', {
+				entity_type: 'FREELANCER',
+				entity_id: updatedUser.profile.freelancer.userId,
+				text: embeddingTextPrepareForEmbed,
+				kind: 'SKILLS'
+			})
+		}
+
 		return { success: true }
 	})
 }
@@ -293,6 +379,48 @@ export async function attachOneSkill(userId: string, skillId: string) {
 		data: { userId, skillId, pickedAt: now }
 	})
 
+	const updatedUser = await prismaClient.user.findFirst({
+		where: {
+			id: userId
+		},
+		include: {
+			profile: {
+				include: {
+					freelancer: {
+						include: {
+							freelancerCategorySelection: {
+								include: {
+									category: true
+								}
+							},
+							freelancerSpecialtySelection: {
+								include: {
+									specialty: true
+								}
+							},
+							freelancerSkillSelection: {
+								include: {
+									skill: true
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	})
+
+	if (updatedUser?.profile?.freelancer) {
+		const embeddingTextPrepareForEmbed = buildSkillsTextForFreelancer(updatedUser.profile.freelancer)
+		console.log(embeddingTextPrepareForEmbed)
+		embeddingEntityQueue.add('', {
+			entity_type: 'FREELANCER',
+			entity_id: updatedUser.profile.freelancer.userId,
+			text: embeddingTextPrepareForEmbed,
+			kind: 'SKILLS'
+		})
+	}
+
 	return { success: true }
 }
 
@@ -308,6 +436,48 @@ export async function detachOneSkill(userId: string, skillId: string) {
 		where: { id: existing.id },
 		data: { isDeleted: true, deletedAt: new Date(), deletedBy: userId }
 	})
+
+	const updatedUser = await prismaClient.user.findFirst({
+		where: {
+			id: userId
+		},
+		include: {
+			profile: {
+				include: {
+					freelancer: {
+						include: {
+							freelancerCategorySelection: {
+								include: {
+									category: true
+								}
+							},
+							freelancerSpecialtySelection: {
+								include: {
+									specialty: true
+								}
+							},
+							freelancerSkillSelection: {
+								include: {
+									skill: true
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	})
+
+	if (updatedUser?.profile?.freelancer) {
+		const embeddingTextPrepareForEmbed = buildSkillsTextForFreelancer(updatedUser.profile.freelancer)
+		console.log(embeddingTextPrepareForEmbed)
+		embeddingEntityQueue.add('', {
+			entity_type: 'FREELANCER',
+			entity_id: updatedUser.profile.freelancer.userId,
+			text: embeddingTextPrepareForEmbed,
+			kind: 'SKILLS'
+		})
+	}
 
 	return { success: true }
 }

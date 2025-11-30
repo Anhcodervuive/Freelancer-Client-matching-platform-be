@@ -14,6 +14,7 @@ import { UnauthorizedException } from '~/exceptions/unauthoried'
 import { JobInvitationFilterInput, RespondJobInvitationInput } from '~/schema/job-invitation.schema'
 import { jobInvitationInclude, serializeJobInvitation } from '~/services/job-invitation/shared'
 import notificationService from '~/services/notification.service'
+import matchInteractionService from '../match-interaction.service'
 
 const uniquePreserveOrder = <T>(items: readonly T[]): T[] => {
 	const seen = new Set<T>()
@@ -248,6 +249,19 @@ const respondToJobInvitation = async (
 		},
 		include: jobInvitationInclude
 	})
+
+	if (payload.status === 'ACCEPTED') {
+		await matchInteractionService.recordInteraction({
+			type: 'INVITATION_ACCEPTED',
+			source: 'DIRECT',
+			jobId: invitation.jobId,
+			freelancerId: freelancerUserId,
+			clientId: invitation.clientId,
+			actorProfileId: freelancerUserId,
+			actorRole: 'FREELANCER',
+			invitationId: invitation.id
+		})
+	}
 
 	const serialized = serializeInvitationForFreelancer(updatedInvitation)
 
