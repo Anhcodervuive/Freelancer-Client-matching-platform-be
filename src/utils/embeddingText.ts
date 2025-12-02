@@ -70,7 +70,7 @@ export function buildFullTextForFreelancer(f: FreelancerForEmbedding): string {
 }
 
 export function buildSkillsTextForFreelancer(f: FreelancerForEmbedding): string {
-	const skills = f.freelancerSkillSelection?.map(s => s.skill.name) ?? []
+	const skills = f.freelancerSkillSelection?.filter(s => !s.isDeleted).map(s => s.skill.name) ?? []
 	if (!skills || skills.length === 0) return ''
 	// đơn giản: chỉ list skill
 	return skills.join(', ')
@@ -167,8 +167,8 @@ export function buildFullTextForJob(job: JobPostForEmbedding): string {
 	return parts.join('\n')
 }
 
-export function buildSkillsTextForJob(job: JobPostForEmbedding): string {
-	const skillNames = job.requiredSkills?.map(rs => rs.skill?.name).filter(Boolean) ?? []
+export function buildSkillsTextForJob(job: any): string {
+	const skillNames = job.skills?.required?.map((rs: { name: any }) => rs.name) ?? []
 
 	if (skillNames.length === 0) return ''
 
@@ -192,12 +192,12 @@ export function buildDomainTextForJob(job: JobPostForEmbedding): string {
 	}
 
 	// Có thể thêm experienceLevel / locationType để domain rõ hơn
-	if (job.experienceLevel) {
-		parts.push(job.experienceLevel)
-	}
-	if (job.locationType) {
-		parts.push(job.locationType)
-	}
+	// if (job.experienceLevel) {
+	// 	parts.push(job.experienceLevel)
+	// }
+	// if (job.locationType) {
+	// 	parts.push(job.locationType)
+	// }
 
 	return parts.join(' / ')
 }

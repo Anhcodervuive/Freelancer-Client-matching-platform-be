@@ -29,7 +29,7 @@ import { destroyCloudinary } from '~/providers/cloudinaryProvider.provider'
 import { deleteR2Object, uploadBufferToR2 } from '~/providers/r2.provider'
 import jobPostModerationService from '~/services/moderation/job-post-moderation.service'
 import { embeddingEntityQueue } from '~/queues/embedding-entity-moderation.queue'
-import { buildFullTextForJob } from '~/utils/embeddingText'
+import { buildDomainTextForJob, buildFullTextForJob, buildSkillsTextForJob } from '~/utils/embeddingText'
 
 type TransactionClient = Parameters<
 	Extract<Parameters<typeof prismaClient.$transaction>[0], (client: any) => unknown>
@@ -895,12 +895,26 @@ const createJobPost = async (
 		const jobPost = await getJobPostById(createdJobId, clientUserId)
 
 		const embeddingTextPrepareForEmbed = buildFullTextForJob(jobPost as any)
-		console.log(embeddingTextPrepareForEmbed)
+		const embeddingTextSkillPrepareForEmbed = buildSkillsTextForJob(jobPost as any)
+		const embeddingTextDomainPrepareForEmbed = buildDomainTextForJob(jobPost as any)
+		console.log(embeddingTextPrepareForEmbed, embeddingTextPrepareForEmbed, embeddingTextSkillPrepareForEmbed)
 		embeddingEntityQueue.add('', {
 			entity_type: 'JOB',
 			entity_id: createdJobId,
 			text: embeddingTextPrepareForEmbed,
 			kind: 'FULL'
+		})
+		embeddingEntityQueue.add('', {
+			entity_type: 'JOB',
+			entity_id: createdJobId,
+			text: embeddingTextSkillPrepareForEmbed,
+			kind: 'SKILLS'
+		})
+		embeddingEntityQueue.add('', {
+			entity_type: 'JOB',
+			entity_id: createdJobId,
+			text: embeddingTextDomainPrepareForEmbed,
+			kind: 'DOMAIN'
 		})
 
 		await jobPostModerationService.requestModeration({
@@ -1082,12 +1096,27 @@ const updateJobPost = async (
 	const jobPost = await getJobPostById(jobId, clientUserId)
 
 	const embeddingTextPrepareForEmbed = buildFullTextForJob(jobPost as any)
-	console.log(embeddingTextPrepareForEmbed)
+	const embeddingTextSkillPrepareForEmbed = buildSkillsTextForJob(jobPost as any)
+	const embeddingTextDomainPrepareForEmbed = buildDomainTextForJob(jobPost as any)
+	console.log(jobPost.skills.required)
+	console.log(embeddingTextSkillPrepareForEmbed, embeddingTextDomainPrepareForEmbed)
 	embeddingEntityQueue.add('', {
 		entity_type: 'JOB',
 		entity_id: jobId,
 		text: embeddingTextPrepareForEmbed,
 		kind: 'FULL'
+	})
+	embeddingEntityQueue.add('', {
+		entity_type: 'JOB',
+		entity_id: jobId,
+		text: embeddingTextSkillPrepareForEmbed,
+		kind: 'SKILLS'
+	})
+	embeddingEntityQueue.add('', {
+		entity_type: 'JOB',
+		entity_id: jobId,
+		text: embeddingTextDomainPrepareForEmbed,
+		kind: 'DOMAIN'
 	})
 
 	if (shouldQueueModeration) {
