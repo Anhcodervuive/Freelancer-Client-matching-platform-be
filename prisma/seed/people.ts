@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt'
-import { CompanySize, LanguageProficiency, Role } from '../../src/generated/prisma'
+import { CompanySize, LanguageProficiency, Prisma, Role } from '../../src/generated/prisma'
 import { prisma, runStep } from './_utils'
 
 type ClientSeed = {
@@ -839,7 +839,7 @@ export async function seedPeople() {
                                                                 create: {
                                                                         title: freelancer.title,
                                                                         bio: freelancer.bio,
-                                                                        links: freelancer.links ?? null
+                                                                        links: freelancer.links ?? Prisma.JsonNull
                                                                 }
                                                         }
                                                 }
@@ -864,7 +864,7 @@ export async function seedPeople() {
                                                                         create: {
                                                                                 title: freelancer.title,
                                                                                 bio: freelancer.bio,
-                                                                                links: freelancer.links ?? null
+                                                                                links: freelancer.links ?? Prisma.JsonNull
                                                                         }
                                                                 }
                                                         },
@@ -881,12 +881,12 @@ export async function seedPeople() {
                                                                                 create: {
                                                                                         title: freelancer.title,
                                                                                         bio: freelancer.bio,
-                                                                                        links: freelancer.links ?? null
+                                                                                        links: freelancer.links ?? Prisma.JsonNull
                                                                                 },
                                                                                 update: {
                                                                                         title: freelancer.title,
                                                                                         bio: freelancer.bio,
-                                                                                        links: freelancer.links ?? null
+                                                                                        links: freelancer.links ?? Prisma.JsonNull
                                                                                 }
                                                                         }
                                                                 }
