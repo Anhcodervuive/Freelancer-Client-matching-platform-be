@@ -51,6 +51,7 @@ type FreelancerSeed = {
 
 const TEST_PASSWORD_HASH = bcrypt.hashSync('TestPassword!123', 10)
 const VERIFIED_AT = new Date('2024-01-15T00:00:00.000Z')
+const SKIP_EXISTING_USERS = (process.env.SEED_SKIP_EXISTING_USERS ?? '').toLowerCase() === 'true'
 
 const CLIENTS: ClientSeed[] = [
         {
@@ -730,8 +731,35 @@ const FREELANCERS: FreelancerSeed[] = [
 ]
 
 export async function seedPeople() {
+        const [categories, specialties, skills] = await Promise.all([
+                prisma.category.findMany({ select: { id: true } }),
+                prisma.specialty.findMany({ select: { id: true } }),
+                prisma.skill.findMany({ select: { id: true } })
+        ])
+
+        const categoryIds = new Set(categories.map(c => c.id))
+        const specialtyIds = new Set(specialties.map(s => s.id))
+        const skillIds = new Set(skills.map(s => s.id))
+
+        function filterExisting(ids: string[], validSet: Set<string>, label: string, owner: string) {
+                const existing = ids.filter(id => validSet.has(id))
+                const missing = ids.filter(id => !validSet.has(id))
+                if (missing.length) {
+                        console.warn(`⚠ Missing ${label} for ${owner}: ${missing.join(', ')}`)
+                }
+                return existing
+        }
+
         await runStep('Seed clients', async () => {
                 for (const client of CLIENTS) {
+                        if (SKIP_EXISTING_USERS) {
+                                const existing = await prisma.user.findUnique({ where: { email: client.email }, select: { id: true } })
+                                if (existing) {
+                                        console.log(`↷ Skip existing client ${client.email}`)
+                                        continue
+                                }
+                        }
+
                         await prisma.user.upsert({
                                 where: { email: client.email },
                                 create: {
@@ -818,6 +846,33 @@ export async function seedPeople() {
 
         await runStep('Seed freelancers', async () => {
                 for (const freelancer of FREELANCERS) {
+                        if (SKIP_EXISTING_USERS) {
+                                const existing = await prisma.user.findUnique({ where: { email: freelancer.email }, select: { id: true } })
+                                if (existing) {
+                                        console.log(`↷ Skip existing freelancer ${freelancer.email}`)
+                                        continue
+                                }
+                        }
+
+                        const allowedCategories = filterExisting(
+                                freelancer.categories,
+                                categoryIds,
+                                'categories',
+                                freelancer.email
+                        )
+                        const allowedSpecialties = filterExisting(
+                                freelancer.specialties,
+                                specialtyIds,
+                                'specialties',
+                                freelancer.email
+                        )
+                        const allowedSkills = filterExisting(
+                                freelancer.skills,
+                                skillIds,
+                                'skills',
+                                freelancer.email
+                        )
+
                         const user = await prisma.user.upsert({
                                 where: { email: freelancer.email },
                                 create: {
@@ -908,9 +963,9 @@ export async function seedPeople() {
                         }
 
                         await prisma.freelancerCategorySelection.deleteMany({ where: { userId: user.id } })
-                        if (freelancer.categories.length) {
+                        if (allowedCategories.length) {
                                 await prisma.freelancerCategorySelection.createMany({
-                                        data: freelancer.categories.map(categoryId => ({
+                                        data: allowedCategories.map(categoryId => ({
                                                 userId: user.id,
                                                 categoryId
                                         }))
@@ -918,9 +973,9 @@ export async function seedPeople() {
                         }
 
                         await prisma.freelancerSpecialtySelection.deleteMany({ where: { userId: user.id } })
-                        if (freelancer.specialties.length) {
+                        if (allowedSpecialties.length) {
                                 await prisma.freelancerSpecialtySelection.createMany({
-                                        data: freelancer.specialties.map(specialtyId => ({
+                                        data: allowedSpecialties.map(specialtyId => ({
                                                 userId: user.id,
                                                 specialtyId
                                         }))
@@ -928,9 +983,9 @@ export async function seedPeople() {
                         }
 
                         await prisma.freelancerSkillSelection.deleteMany({ where: { userId: user.id } })
-                        if (freelancer.skills.length) {
+                        if (allowedSkills.length) {
                                 await prisma.freelancerSkillSelection.createMany({
-                                        data: freelancer.skills.map((skillId, index) => ({
+                                        data: allowedSkills.map((skillId, index) => ({
                                                 userId: user.id,
                                                 skillId,
                                                 orderHint: index
