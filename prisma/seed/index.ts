@@ -1,6 +1,7 @@
 import { prisma } from './_utils'
 import { seedTaxonomy } from './taxonomy'
 import { seedPlatformTerms } from './platform-terms'
+import { seedPeople } from './people'
 
 /**
  * Cho phép chạy 1 phần:  `npm run seed -- taxonomy`
@@ -16,6 +17,7 @@ function shouldRun(...keys: string[]) {
 async function main() {
         if (shouldRun('taxonomy')) await seedTaxonomy()
         if (shouldRun('platform-terms', 'platformterms', 'terms')) await seedPlatformTerms()
+        if (shouldRun('people', 'users', 'sample-users')) await seedPeople()
 }
 
 main()
