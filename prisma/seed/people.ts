@@ -744,17 +744,17 @@ export async function seedPeople() {
                                                 create: {
                                                         firstName: client.firstName,
                                                         lastName: client.lastName,
-                                                        phoneNumber: client.phoneNumber,
-                                                        country: client.country,
-                                                        city: client.city,
-                                                        district: client.district,
-                                                        address: client.address,
+                                                        phoneNumber: client.phoneNumber ?? null,
+                                                        country: client.country ?? null,
+                                                        city: client.city ?? null,
+                                                        district: client.district ?? null,
+                                                        address: client.address ?? null,
                                                         client: {
                                                                 create: {
-                                                                        companyName: client.companyName,
-                                                                        websiteUrl: client.websiteUrl,
-                                                                        size: client.size,
-                                                                        description: client.description
+                                                                        companyName: client.companyName ?? null,
+                                                                        websiteUrl: client.websiteUrl ?? null,
+                                                                        size: client.size ?? null,
+                                                                        description: client.description ?? null
                                                                 }
                                                         }
                                                 }
@@ -770,41 +770,41 @@ export async function seedPeople() {
                                                         create: {
                                                                 firstName: client.firstName,
                                                                 lastName: client.lastName,
-                                                                phoneNumber: client.phoneNumber,
-                                                                country: client.country,
-                                                                city: client.city,
-                                                                district: client.district,
-                                                                address: client.address,
+                                                                phoneNumber: client.phoneNumber ?? null,
+                                                                country: client.country ?? null,
+                                                                city: client.city ?? null,
+                                                                district: client.district ?? null,
+                                                                address: client.address ?? null,
                                                                 client: {
                                                                         create: {
-                                                                                companyName: client.companyName,
-                                                                                websiteUrl: client.websiteUrl,
-                                                                                size: client.size,
-                                                                                description: client.description
+                                                                                companyName: client.companyName ?? null,
+                                                                                websiteUrl: client.websiteUrl ?? null,
+                                                                                size: client.size ?? null,
+                                                                                description: client.description ?? null
                                                                         }
                                                                 }
                                                         },
                                                         update: {
                                                                 firstName: client.firstName,
                                                                 lastName: client.lastName,
-                                                                phoneNumber: client.phoneNumber,
-                                                                country: client.country,
-                                                                city: client.city,
-                                                                district: client.district,
-                                                                address: client.address,
+                                                                phoneNumber: client.phoneNumber ?? null,
+                                                                country: client.country ?? null,
+                                                                city: client.city ?? null,
+                                                                district: client.district ?? null,
+                                                                address: client.address ?? null,
                                                                 client: {
                                                                         upsert: {
                                                                                 create: {
-                                                                                        companyName: client.companyName,
-                                                                                        websiteUrl: client.websiteUrl,
-                                                                                        size: client.size,
-                                                                                        description: client.description
+                                                                                        companyName: client.companyName ?? null,
+                                                                                        websiteUrl: client.websiteUrl ?? null,
+                                                                                        size: client.size ?? null,
+                                                                                        description: client.description ?? null
                                                                                 },
                                                                                 update: {
-                                                                                        companyName: client.companyName,
-                                                                                        websiteUrl: client.websiteUrl,
-                                                                                        size: client.size,
-                                                                                        description: client.description
+                                                                                        companyName: client.companyName ?? null,
+                                                                                        websiteUrl: client.websiteUrl ?? null,
+                                                                                        size: client.size ?? null,
+                                                                                        description: client.description ?? null
                                                                                 }
                                                                         }
                                                                 }
@@ -830,11 +830,11 @@ export async function seedPeople() {
                                                 create: {
                                                         firstName: freelancer.firstName,
                                                         lastName: freelancer.lastName,
-                                                        phoneNumber: freelancer.phoneNumber,
-                                                        country: freelancer.country,
-                                                        city: freelancer.city,
-                                                        district: freelancer.district,
-                                                        address: freelancer.address,
+                                                        phoneNumber: freelancer.phoneNumber ?? null,
+                                                        country: freelancer.country ?? null,
+                                                        city: freelancer.city ?? null,
+                                                        district: freelancer.district ?? null,
+                                                        address: freelancer.address ?? null,
                                                         freelancer: {
                                                                 create: {
                                                                         title: freelancer.title,
@@ -855,11 +855,11 @@ export async function seedPeople() {
                                                         create: {
                                                                 firstName: freelancer.firstName,
                                                                 lastName: freelancer.lastName,
-                                                                phoneNumber: freelancer.phoneNumber,
-                                                                country: freelancer.country,
-                                                                city: freelancer.city,
-                                                                district: freelancer.district,
-                                                                address: freelancer.address,
+                                                                phoneNumber: freelancer.phoneNumber ?? null,
+                                                                country: freelancer.country ?? null,
+                                                                city: freelancer.city ?? null,
+                                                                district: freelancer.district ?? null,
+                                                                address: freelancer.address ?? null,
                                                                 freelancer: {
                                                                         create: {
                                                                                 title: freelancer.title,
@@ -871,11 +871,11 @@ export async function seedPeople() {
                                                         update: {
                                                                 firstName: freelancer.firstName,
                                                                 lastName: freelancer.lastName,
-                                                                phoneNumber: freelancer.phoneNumber,
-                                                                country: freelancer.country,
-                                                                city: freelancer.city,
-                                                                district: freelancer.district,
-                                                                address: freelancer.address,
+                                                                phoneNumber: freelancer.phoneNumber ?? null,
+                                                                country: freelancer.country ?? null,
+                                                                city: freelancer.city ?? null,
+                                                                district: freelancer.district ?? null,
+                                                                address: freelancer.address ?? null,
                                                                 freelancer: {
                                                                         upsert: {
                                                                                 create: {
