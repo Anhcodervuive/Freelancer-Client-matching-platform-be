@@ -641,6 +641,255 @@ const JOB_POSTS: JobSeed[] = [
                         { question: 'Share an example of accessibility testing you automated.' }
                 ],
                 customTerms: { compliance: ['HIPAA'], traceableReports: true }
+        },
+        {
+                clientEmail: 'minh.nguyen@client.test',
+                specialtyId: 'specialty_backend_dev',
+                title: 'Event-driven order orchestration for marketplace sellers',
+                description:
+                        'Refactor the commerce backend into event-driven services that coordinate catalog updates, payouts, and dispute workflows. Include idempotent processors, replayable streams, and reconciliation dashboards for ops.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 18000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.THREE_TO_SIX_MONTHS,
+                experienceLevel: JobExperienceLevel.EXPERT,
+                locationType: JobLocationType.HYBRID,
+                preferredLocations: [{ country: 'Vietnam', city: 'Ho Chi Minh City' }],
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-05-20T00:00:00.000Z'),
+                languages: [
+                        { code: 'en', proficiency: LanguageProficiency.FLUENT },
+                        { code: 'vi', proficiency: LanguageProficiency.FLUENT }
+                ],
+                requiredSkills: ['skill_typescript', 'skill_nestjs', 'skill_nodejs', 'skill_postgresql', 'skill_redis'],
+                screeningQuestions: [
+                        { question: 'How do you guarantee idempotency across chained domain events?', isRequired: true },
+                        { question: 'Describe your strategy for replaying historical events without duplicating side effects.' }
+                ],
+                customTerms: { observability: ['OpenTelemetry'], runbook: true }
+        },
+        {
+                clientEmail: 'huong.pham@client.test',
+                specialtyId: 'specialty_data_engineering',
+                title: 'Data quality and lineage program for analytics mesh',
+                description:
+                        'Stand up data quality monitors, lineage graphs, and contracts across marketing, product, and billing domains. Deliver anomaly alerts, SLA tracking, and backfills with auditability for finance and GTM leads.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 20000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.THREE_TO_SIX_MONTHS,
+                experienceLevel: JobExperienceLevel.EXPERT,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-05-28T00:00:00.000Z'),
+                languages: [{ code: 'en', proficiency: LanguageProficiency.FLUENT }],
+                requiredSkills: ['skill_data_engineering', 'skill_airflow', 'skill_sql', 'skill_python', 'skill_gcp'],
+                screeningQuestions: [
+                        { question: 'What metrics do you track to prove data quality improvements?', isRequired: true },
+                        { question: 'Share an example lineage approach that helped a finance or billing team unblock reporting.' }
+                ],
+                customTerms: { prefers: ['Great Expectations', 'Dataform'], lineageRequired: true }
+        },
+        {
+                clientEmail: 'diep.le@client.test',
+                specialtyId: 'specialty_mlops',
+                title: 'ML observability and feature store build-out',
+                description:
+                        'Implement a feature store and observability stack for ranking models. Cover data freshness, drift detection, canary rollouts, and rollbacks with a clear promotion checklist for MLOps and product managers.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 23000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.THREE_TO_SIX_MONTHS,
+                experienceLevel: JobExperienceLevel.EXPERT,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-06-02T00:00:00.000Z'),
+                languages: [{ code: 'en', proficiency: LanguageProficiency.FLUENT }],
+                requiredSkills: ['skill_python', 'skill_kubernetes', 'skill_docker', 'skill_ci_cd', 'skill_terraform'],
+                screeningQuestions: [
+                        { question: 'How do you set up drift alerts that avoid false positives for seasonality?', isRequired: true },
+                        { question: 'Describe your rollout strategy for promoting models between staging and production.' }
+                ],
+                customTerms: { preferredFeatureStore: 'Feast', rollbacks: 'automated' }
+        },
+        {
+                clientEmail: 'andrew.taylor@client.test',
+                specialtyId: 'specialty_native_ios',
+                title: 'Telehealth iOS app with secure video visits',
+                description:
+                        'Build a native iOS app for scheduled and on-demand telehealth. Include appointment booking, secure messaging, encrypted video calls, and offline-first chart notes that sync when connectivity resumes.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 16000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-05-18T00:00:00.000Z'),
+                languages: [
+                        { code: 'en', proficiency: LanguageProficiency.NATIVE },
+                        { code: 'fr', proficiency: LanguageProficiency.CONVERSATIONAL }
+                ],
+                requiredSkills: ['skill_swift', 'skill_ios', 'skill_rest_api', 'skill_security_compliance', 'skill_ci_cd'],
+                screeningQuestions: [
+                        { question: 'How would you implement HIPAA-grade media handling for video calls?', isRequired: true },
+                        { question: 'Describe your offline caching strategy for clinical notes and attachments.' }
+                ],
+                customTerms: { compliance: ['HIPAA'], videoProviderFlexible: true }
+        },
+        {
+                clientEmail: 'paulina.rivera@client.test',
+                specialtyId: 'specialty_uiux',
+                title: 'Research-backed redesign for B2B billing console',
+                description:
+                        'Conduct discovery and redesign invoicing, dunning, and payments reconciliation screens. Deliver service blueprints, interaction design, accessibility checks, and stakeholder playback sessions with prototypes.',
+                paymentMode: JobPaymentMode.FIXED_SINGLE,
+                budgetAmount: 12000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-05-08T00:00:00.000Z'),
+                languages: [
+                        { code: 'en', proficiency: LanguageProficiency.FLUENT },
+                        { code: 'es', proficiency: LanguageProficiency.FLUENT }
+                ],
+                requiredSkills: ['skill_figma', 'skill_ux_research', 'skill_design_systems', 'skill_html', 'skill_css'],
+                screeningQuestions: [
+                        { question: 'Share how you validate billing flows with finance and support teams.', isRequired: true },
+                        { question: 'How do you document interaction patterns so engineers can implement consistently?' }
+                ]
+        },
+        {
+                clientEmail: 'fatima.khan@client.test',
+                specialtyId: 'specialty_business_intelligence',
+                title: 'Revenue analytics and retention dashboards',
+                description:
+                        'Create finance-ready revenue dashboards for subscriptions and usage billing. Include churn cohorts, retention drivers, pipeline-to-revenue conversion, and scheduled executive summaries with annotations.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 14000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-05-04T00:00:00.000Z'),
+                languages: [{ code: 'en', proficiency: LanguageProficiency.FLUENT }],
+                requiredSkills: ['skill_sql', 'skill_powerbi', 'skill_tableau', 'skill_python', 'skill_data_engineering'],
+                screeningQuestions: [
+                        { question: 'What approach do you use to align finance and sales on revenue definitions?', isRequired: true },
+                        { question: 'Describe a retention analysis you led and how it informed product changes.' }
+                ],
+                customTerms: { preferredWarehouse: 'Snowflake', executiveViews: true }
+        },
+        {
+                clientEmail: 'maria.rossi@client.test',
+                specialtyId: 'specialty_offensive_security',
+                title: 'Application penetration test and threat modeling',
+                description:
+                        'Execute a full-scope penetration test on customer portals and APIs, then produce prioritized remediation and threat models. Include test plans, exploit proofs, retest cycles, and executive readouts.',
+                paymentMode: JobPaymentMode.FIXED_SINGLE,
+                budgetAmount: 13000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.LESS_THAN_ONE_MONTH,
+                experienceLevel: JobExperienceLevel.EXPERT,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-06-10T00:00:00.000Z'),
+                languages: [{ code: 'en', proficiency: LanguageProficiency.NATIVE }],
+                requiredSkills: ['skill_security_compliance', 'skill_rest_api', 'skill_python', 'skill_ci_cd', 'skill_kubernetes'],
+                screeningQuestions: [
+                        { question: 'Provide a sample test plan and reporting structure you use for pentests.', isRequired: true },
+                        { question: 'How do you align findings with threat models that engineers can action?' }
+                ],
+                customTerms: { retestWindowDays: 30, requiresExecutiveSummary: true }
+        },
+        {
+                clientEmail: 'linh.tran@client.test',
+                specialtyId: 'specialty_product_strategy',
+                title: 'North Star metrics and roadmap for SMB expense platform',
+                description:
+                        'Define the product strategy, North Star metric, and experiment roadmap for an SMB expense management platform. Facilitate workshops, prioritize bets, and create a 2-quarter delivery plan aligned with engineering capacity.',
+                paymentMode: JobPaymentMode.FIXED_SINGLE,
+                budgetAmount: 11000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.EXPERT,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-05-12T00:00:00.000Z'),
+                languages: [
+                        { code: 'en', proficiency: LanguageProficiency.FLUENT },
+                        { code: 'vi', proficiency: LanguageProficiency.CONVERSATIONAL }
+                ],
+                requiredSkills: ['skill_ux_research', 'skill_data_analysis', 'skill_product_discovery', 'skill_figma', 'skill_sql'],
+                screeningQuestions: [
+                        { question: 'Share a time you defined a North Star metric and how you validated it.', isRequired: true },
+                        { question: 'How do you translate research insights into a sequenced roadmap for engineers?' }
+                ],
+                customTerms: { workshopFormat: 'remote', cadenceWeeks: 2 }
+        },
+        {
+                clientEmail: 'minh.nguyen@client.test',
+                specialtyId: 'specialty_native_android',
+                title: 'Courier Android app with geofencing and telemetry',
+                description:
+                        'Develop a courier-facing Android app that handles optimized routes, delivery proofs, barcode scanning, and geofenced status updates. Include background sync, offline resilience, and crash-free monitoring.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 15000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.HYBRID,
+                preferredLocations: [{ country: 'Vietnam', city: 'Da Nang' }],
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-05-16T00:00:00.000Z'),
+                languages: [
+                        { code: 'en', proficiency: LanguageProficiency.CONVERSATIONAL },
+                        { code: 'vi', proficiency: LanguageProficiency.FLUENT }
+                ],
+                requiredSkills: ['skill_kotlin', 'skill_android', 'skill_react_native', 'skill_rest_api', 'skill_ci_cd'],
+                screeningQuestions: [
+                        { question: 'How do you ensure offline-safe workflows for scans and signatures?', isRequired: true },
+                        { question: 'What telemetry stack do you use to monitor crash-free sessions and ANRs?' }
+                ],
+                customTerms: { mappingProvider: 'Google Maps', prefersExpo: false }
+        },
+        {
+                clientEmail: 'noah.wilson@client.test',
+                specialtyId: 'specialty_frontend_dev',
+                title: 'Localization-ready marketing site with A/B testing',
+                description:
+                        'Rebuild the public marketing site with localization, performance budgets, and integrated experimentation. Provide CMS components, analytics events, and QA across browsers for rapid landing page launches.',
+                paymentMode: JobPaymentMode.FIXED_SINGLE,
+                budgetAmount: 9000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-05-14T00:00:00.000Z'),
+                languages: [
+                        { code: 'en', proficiency: LanguageProficiency.FLUENT },
+                        { code: 'de', proficiency: LanguageProficiency.CONVERSATIONAL }
+                ],
+                requiredSkills: ['skill_nextjs', 'skill_react', 'skill_typescript', 'skill_css', 'skill_html'],
+                screeningQuestions: [
+                        { question: 'How do you structure experiments without slowing down content teams?', isRequired: true },
+                        { question: 'Describe your approach to CLS/LCP budgets and monitoring.' }
+                ],
+                customTerms: { cms: 'headless', abTesting: 'built-in' }
         }
 ]
 
