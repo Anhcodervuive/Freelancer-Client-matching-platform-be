@@ -116,7 +116,11 @@ async function resolveParticipants(scenario: Scenario): Promise<ParticipantSet |
     return null
   }
 
-  return { client, freelancer, job }
+  return {
+    client: { id: client.id, role: client.role as Role },
+    freelancer: { id: freelancer.id, role: freelancer.role as Role },
+    job
+  }
 }
 
 async function ensureProposal(jobId: string, freelancerId: string, scenario: Scenario) {
@@ -183,7 +187,7 @@ async function ensureContract(jobId: string, clientId: string, freelancerId: str
       currency: scenario.contract.currency,
       status: scenario.contract.status,
       signatureStatus: scenario.contract.signatureStatus,
-      signatureProvider: scenario.contract.signatureProvider,
+      signatureProvider: scenario.contract.signatureProvider ?? null,
       signatureCompletedAt: new Date(scenario.contract.signatureCompletedAt),
       termsAcceptedAt: scenario.contract.termsAcceptedAt ? new Date(scenario.contract.termsAcceptedAt) : null,
       clientAcceptedAt: scenario.contract.clientAcceptedAt ? new Date(scenario.contract.clientAcceptedAt) : null,
@@ -200,7 +204,7 @@ async function ensureContract(jobId: string, clientId: string, freelancerId: str
       currency: scenario.contract.currency,
       status: scenario.contract.status,
       signatureStatus: scenario.contract.signatureStatus,
-      signatureProvider: scenario.contract.signatureProvider,
+      signatureProvider: scenario.contract.signatureProvider ?? null,
       signatureCompletedAt: new Date(scenario.contract.signatureCompletedAt),
       termsAcceptedAt: scenario.contract.termsAcceptedAt ? new Date(scenario.contract.termsAcceptedAt) : null,
       clientAcceptedAt: scenario.contract.clientAcceptedAt ? new Date(scenario.contract.clientAcceptedAt) : null,
