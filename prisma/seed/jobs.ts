@@ -48,9 +48,9 @@ const JOB_POSTS: JobSeed[] = [
         {
                 clientEmail: 'linh.tran@client.test',
                 specialtyId: 'specialty_fullstack_dev',
-                title: 'Xây dựng nền tảng onboarding tài khoản cho fintech B2B',
+                title: 'Build B2B fintech account onboarding platform',
                 description:
-                        'Thiết kế onboarding đa bước cho khách hàng doanh nghiệp, cần KYC/AML, ký số hợp đồng và dashboard phê duyệt nội bộ. Hệ thống phải audit logging đầy đủ, multi-tenant và mở rộng sang nhiều ngân hàng đối tác.',
+                        'Design a multi-step onboarding for enterprise customers with KYC/AML, e-signature, and an internal approval dashboard. The system must provide full audit logging, be multi-tenant, and extend to multiple partner banks.',
                 paymentMode: JobPaymentMode.FIXED_MILESTONE,
                 budgetAmount: 25000,
                 budgetCurrency: 'USD',
@@ -70,17 +70,17 @@ const JOB_POSTS: JobSeed[] = [
                 ],
                 requiredSkills: ['skill_typescript', 'skill_nodejs', 'skill_react', 'skill_graphql', 'skill_postgresql'],
                 screeningQuestions: [
-                        { question: 'Bạn đã từng triển khai eKYC/AML ở thị trường Đông Nam Á chưa?' },
-                        { question: 'Mô tả cách bạn thiết kế audit trail và kiểm soát phân quyền chi tiết.', isRequired: true }
+                        { question: 'Have you implemented eKYC/AML flows in Southeast Asia markets before?' },
+                        { question: 'Describe how you design audit trails and fine-grained access controls.', isRequired: true }
                 ],
                 customTerms: { timezoneOverlapHours: 4, securityPolicies: ['SOC2', 'MFA-required'] }
         },
         {
                 clientEmail: 'minh.nguyen@client.test',
                 specialtyId: 'specialty_frontend_dev',
-                title: 'Tối ưu web booking tour và trang landing chiến dịch',
+                title: 'Optimize tour-booking web and campaign landing pages',
                 description:
-                        'Cần cải thiện tốc độ tải trang, SEO và trải nghiệm thanh toán cho trang đặt tour miền Trung. Dự án bao gồm xây dựng component library, tối ưu ảnh/video và đo lường chuyển đổi với các biến thể A/B.',
+                        'Improve page speed, SEO, and checkout experience for a Central Vietnam tour booking site. Work includes building a component library, optimizing images/video, and measuring conversion through A/B variants.',
                 paymentMode: JobPaymentMode.FIXED_MILESTONE,
                 budgetAmount: 12000,
                 budgetCurrency: 'USD',
@@ -93,16 +93,16 @@ const JOB_POSTS: JobSeed[] = [
                 languages: [{ code: 'vi', proficiency: LanguageProficiency.NATIVE }],
                 requiredSkills: ['skill_react', 'skill_nextjs', 'skill_tailwind', 'skill_rest_api', 'skill_graphql'],
                 screeningQuestions: [
-                        { question: 'Gửi ví dụ dự án bạn tăng Core Web Vitals cho e-commerce hoặc booking.' },
-                        { question: 'Bạn đề xuất quy trình QA cho các biến thể A/B ra sao?', isRequired: true }
+                        { question: 'Share an example where you improved Core Web Vitals for e-commerce or booking.', isRequired: false },
+                        { question: 'What QA process do you propose for A/B variants?', isRequired: true }
                 ]
         },
         {
                 clientEmail: 'huong.pham@client.test',
                 specialtyId: 'specialty_machine_learning',
-                title: 'Dashboard dự báo sinh học từ dữ liệu lab IoT',
+                title: 'Bio-forecasting dashboard from IoT lab data',
                 description:
-                        'Thu thập dữ liệu cảm biến từ thiết bị lab, chuẩn hóa pipeline và dựng mô hình dự báo bất thường. Cần dashboard realtime, cảnh báo và khả năng xuất báo cáo cho nhà khoa học không chuyên kỹ thuật.',
+                        'Ingest sensor data from lab devices, normalize the pipeline, and build anomaly-forecasting models. Needs realtime dashboards, alerting, and exportable reports for scientists without deep technical skills.',
                 paymentMode: JobPaymentMode.FIXED_SINGLE,
                 budgetAmount: 18000,
                 budgetCurrency: 'USD',
@@ -115,16 +115,16 @@ const JOB_POSTS: JobSeed[] = [
                 languages: [{ code: 'en', proficiency: LanguageProficiency.FLUENT }],
                 requiredSkills: ['skill_python', 'skill_pandas', 'skill_scikit', 'skill_airflow', 'skill_gcp'],
                 screeningQuestions: [
-                        { question: 'Bạn từng xử lý dữ liệu cảm biến có noise/bị mất gói như thế nào?' },
-                        { question: 'Trình bày cách bạn vận hành mô hình ML với cảnh báo drift.', isRequired: true }
+                        { question: 'How have you handled noisy or lossy sensor data streams?', isRequired: false },
+                        { question: 'Explain how you operate ML models with drift monitoring and alerts.', isRequired: true }
                 ]
         },
         {
                 clientEmail: 'sylvia.chen@client.test',
                 specialtyId: 'specialty_cloud_architecture',
-                title: 'Tối ưu OMS, tích hợp kho & logistics cho chuỗi bán lẻ SEA',
+                title: 'Optimize OMS and integrate warehouse & logistics for SEA retail',
                 description:
-                        'Thiết kế kiến trúc OMS đa vùng cho các quốc gia SEA, cần đồng bộ tồn kho gần thời gian thực và tích hợp hãng vận chuyển. Yêu cầu high availability, giám sát SLA và hỗ trợ đợt flash sale.',
+                        'Design a multi-region OMS architecture for SEA countries with near-real-time inventory sync and carrier integrations. Requires high availability, SLA monitoring, and readiness for flash-sale traffic.',
                 paymentMode: JobPaymentMode.FIXED_MILESTONE,
                 budgetAmount: 30000,
                 budgetCurrency: 'USD',
@@ -141,17 +141,17 @@ const JOB_POSTS: JobSeed[] = [
                 ],
                 requiredSkills: ['skill_aws', 'skill_kubernetes', 'skill_redis', 'skill_postgresql', 'skill_terraform'],
                 screeningQuestions: [
-                        { question: 'Kinh nghiệm của bạn với multi-region active-active hoặc active-passive?' },
-                        { question: 'Bạn thiết kế kiến trúc scaling mùa sale như thế nào?', isRequired: true }
+                        { question: 'What experience do you have with multi-region active-active or active-passive?', isRequired: false },
+                        { question: 'How would you design scaling architecture for peak sale periods?', isRequired: true }
                 ],
                 customTerms: { requiresOnsite: true, onsiteCity: 'Singapore', preferredVendors: ['AWS', 'Cloudflare'] }
         },
         {
                 clientEmail: 'diep.le@client.test',
                 specialtyId: 'specialty_uiux',
-                title: 'Thiết kế trải nghiệm booking homestay cao cấp',
+                title: 'Design premium homestay booking experience',
                 description:
-                        'Cần flow đặt phòng nhiều bước, chọn add-on dịch vụ, lịch check-in linh hoạt và truyền thông thương hiệu xanh. Sản phẩm hướng tới khách quốc tế nên cần thiết kế song ngữ, accessible và có design system sẵn.',
+                        'Create a multi-step booking flow with service add-ons, flexible check-in schedules, and a green brand story. Targeting international guests, so needs bilingual, accessible design with a ready design system.',
                 paymentMode: JobPaymentMode.FIXED_SINGLE,
                 budgetAmount: 8000,
                 budgetCurrency: 'USD',
@@ -167,16 +167,16 @@ const JOB_POSTS: JobSeed[] = [
                 ],
                 requiredSkills: ['skill_figma', 'skill_design_systems', 'skill_ux_research', 'skill_html', 'skill_css'],
                 screeningQuestions: [
-                        { question: 'Gửi mẫu prototype high-fidelity gần đây bạn thực hiện.' },
-                        { question: 'Bạn sẽ thu thập insight khách du lịch quốc tế như thế nào?' }
+                        { question: 'Share a recent high-fidelity prototype you delivered.', isRequired: false },
+                        { question: 'How would you gather insights from international travelers?' }
                 ]
         },
         {
                 clientEmail: 'paulina.rivera@client.test',
                 specialtyId: 'specialty_cross_platform_mobile',
-                title: 'Xây app marketplace đặc sản Latin America',
+                title: 'Build a Latin American specialty marketplace app',
                 description:
-                        'Xây ứng dụng mua bán đặc sản bản địa, hỗ trợ đa ngôn ngữ, thanh toán nội địa và loyalty. Cần trải nghiệm offline-friendly, push notification cá nhân hóa và tích hợp CMS để quản lý nội dung.',
+                        'Develop a marketplace app for regional specialty goods with multilingual support, local payments, and loyalty. Needs offline-friendly UX, personalized push notifications, and CMS integration for content management.',
                 paymentMode: JobPaymentMode.FIXED_MILESTONE,
                 budgetAmount: 14000,
                 budgetCurrency: 'USD',
@@ -192,16 +192,16 @@ const JOB_POSTS: JobSeed[] = [
                 ],
                 requiredSkills: ['skill_flutter', 'skill_rest_api', 'skill_graphql', 'skill_ci_cd', 'skill_postgresql'],
                 screeningQuestions: [
-                        { question: 'Bạn tích hợp và kiểm thử thanh toán nội địa (Pix/Stripe/etc.) như thế nào?' },
-                        { question: 'Chia sẻ kinh nghiệm làm push notification segment hóa người dùng.' }
+                        { question: 'How would you integrate and test local payments such as Pix/Stripe/etc.?', isRequired: false },
+                        { question: 'Share your experience with segmenting and personalizing push notifications.' }
                 ]
         },
         {
                 clientEmail: 'noah.wilson@client.test',
                 specialtyId: 'specialty_security_operations',
-                title: 'Xây dựng backend tuân thủ HIPAA cho app chăm sóc hậu phẫu',
+                title: 'Build HIPAA-compliant backend for post-op care app',
                 description:
-                        'Nền tảng mobile/web cho bệnh nhân sau phẫu thuật, cần nhắc lịch dùng thuốc, chat với bác sĩ và lưu trữ dữ liệu y tế an toàn. Yêu cầu audit trail, mã hóa dữ liệu, phân quyền chi tiết và cảnh báo bất thường.',
+                        'Mobile/web platform for post-surgery patients with medication reminders, doctor chat, and secure medical data storage. Needs audit trails, data encryption, fine-grained permissions, and anomaly alerts.',
                 paymentMode: JobPaymentMode.FIXED_MILESTONE,
                 budgetAmount: 20000,
                 budgetCurrency: 'USD',
@@ -216,17 +216,17 @@ const JOB_POSTS: JobSeed[] = [
                 ],
                 requiredSkills: ['skill_nodejs', 'skill_typescript', 'skill_aws', 'skill_security_compliance', 'skill_postgresql'],
                 screeningQuestions: [
-                        { question: 'Bạn từng triển khai chuẩn HIPAA/GDPR cho hệ thống healthcare nào?' },
-                        { question: 'Cách bạn xử lý sự cố khi phát hiện truy cập bất thường tới dữ liệu y tế?' }
+                        { question: 'Which healthcare systems have you implemented HIPAA/GDPR compliance for?' },
+                        { question: 'How would you handle incidents when abnormal access to medical data is detected?' }
                 ],
                 customTerms: { compliance: ['HIPAA'], dataResidency: 'US', securityReview: true }
         },
         {
                 clientEmail: 'fatima.khan@client.test',
                 specialtyId: 'specialty_data_engineering',
-                title: 'Pipeline dữ liệu dự báo tưới tiêu thông minh',
+                title: 'Smart irrigation forecasting data pipeline',
                 description:
-                        'Thu thập dữ liệu khí hậu, vệ tinh và cảm biến nông nghiệp để đưa khuyến nghị tưới tiêu tự động. Cần pipeline tin cậy, data quality check, lưu trữ lịch sử và API cho nhóm khoa học dữ liệu.',
+                        'Collect climate, satellite, and agricultural sensor data to recommend automated irrigation. Needs a reliable pipeline, data quality checks, historical storage, and APIs for the data science team.',
                 paymentMode: JobPaymentMode.FIXED_MILESTONE,
                 budgetAmount: 18000,
                 budgetCurrency: 'USD',
@@ -241,16 +241,16 @@ const JOB_POSTS: JobSeed[] = [
                 ],
                 requiredSkills: ['skill_data_engineering', 'skill_airflow', 'skill_python', 'skill_sql', 'skill_aws'],
                 screeningQuestions: [
-                        { question: 'Bạn bảo đảm chất lượng dữ liệu streaming như thế nào?' },
-                        { question: 'Hãy mô tả thiết kế data contract giữa pipeline và team ML.', isRequired: true }
+                        { question: 'How do you ensure streaming data quality?', isRequired: false },
+                        { question: 'Describe the data contract design between the pipeline and the ML team.', isRequired: true }
                 ]
         },
         {
                 clientEmail: 'maria.rossi@client.test',
                 specialtyId: 'specialty_unity_dev',
-                title: 'Lookbook AR và hệ thống đặt lịch fitting cho boutique thời trang',
+                title: 'AR lookbook and fitting scheduler for fashion boutique',
                 description:
-                        'Ứng dụng AR thử đồ ảo, đồng bộ catalog sản phẩm và đặt lịch fitting tại store. Cần tracking chuyển đổi, chia sẻ social, hỗ trợ nhiều thiết bị iOS/Android và panel quản trị nội dung.',
+                        'AR try-on app that syncs product catalogs and books in-store fitting appointments. Requires conversion tracking, social sharing, support for a wide range of iOS/Android devices, and an admin content panel.',
                 paymentMode: JobPaymentMode.FIXED_SINGLE,
                 budgetAmount: 16000,
                 budgetCurrency: 'USD',
@@ -267,8 +267,8 @@ const JOB_POSTS: JobSeed[] = [
                 ],
                 requiredSkills: ['skill_unity', 'skill_csharp', 'skill_blender', 'skill_rest_api', 'skill_graphql'],
                 screeningQuestions: [
-                        { question: 'Bạn từng tối ưu hiệu năng AR trên thiết bị mid-tier như thế nào?' },
-                        { question: 'Kinh nghiệm của bạn trong việc kết nối app AR với CMS/backoffice?' }
+                        { question: 'How have you optimized AR performance on mid-tier devices?' },
+                        { question: 'What is your experience connecting AR apps to a CMS/backoffice?' }
                 ]
         }
 ]
