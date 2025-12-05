@@ -76,6 +76,230 @@ const JOB_POSTS: JobSeed[] = [
                 customTerms: { timezoneOverlapHours: 4, securityPolicies: ['SOC2', 'MFA-required'] }
         },
         {
+                clientEmail: 'sylvia.chen@client.test',
+                specialtyId: 'specialty_data_engineering',
+                title: 'Realtime clickstream and attribution warehouse',
+                description:
+                        'Unify web/app analytics, ads spend, and CRM events into a governed warehouse with near real-time dashboards. Requires CDC ingestion, data contracts, and warehouse-first transformations for marketing science.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 21000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.THREE_TO_SIX_MONTHS,
+                experienceLevel: JobExperienceLevel.EXPERT,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-04-12T00:00:00.000Z'),
+                languages: [
+                        { code: 'en', proficiency: LanguageProficiency.FLUENT }
+                ],
+                requiredSkills: ['skill_data_engineering', 'skill_airflow', 'skill_python', 'skill_sql', 'skill_gcp'],
+                screeningQuestions: [
+                        { question: 'How do you design CDC for mixed Postgres/MySQL sources?', isRequired: true },
+                        { question: 'Share an example of enforcing schema/data contracts for marketing events.' }
+                ],
+                customTerms: { warehouse: 'BigQuery', biTool: 'Looker', latencyMinutes: 15 }
+        },
+        {
+                clientEmail: 'maria.rossi@client.test',
+                specialtyId: 'specialty_uiux',
+                title: 'Mobile banking onboarding and card activation UX',
+                description:
+                        'Design a frictionless onboarding and debit card activation flow with biometrics, liveness, and tiered KYC. Needs high accessibility, error handling, and in-app education for cross-sell.',
+                paymentMode: JobPaymentMode.FIXED_SINGLE,
+                budgetAmount: 9500,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.HYBRID,
+                preferredLocations: [{ country: 'Italy', city: 'Rome' }],
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-03-22T00:00:00.000Z'),
+                languages: [
+                        { code: 'it', proficiency: LanguageProficiency.NATIVE },
+                        { code: 'en', proficiency: LanguageProficiency.CONVERSATIONAL }
+                ],
+                requiredSkills: ['skill_figma', 'skill_ux_research', 'skill_design_systems', 'skill_html', 'skill_css'],
+                screeningQuestions: [
+                        { question: 'Provide a recent flow you designed that reduced drop-off during onboarding.', isRequired: true },
+                        { question: 'How would you communicate security controls without harming UX?' }
+                ]
+        },
+        {
+                clientEmail: 'noah.wilson@client.test',
+                specialtyId: 'specialty_security_operations',
+                title: 'Security hardening and observability for fintech core',
+                description:
+                        'Audit and improve IAM, threat detection, and secure SDLC for a fintech transaction core. Deliver Terraform guardrails, SIEM dashboards, runbooks, and purple-team exercises with measurable outcomes.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 24000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.THREE_TO_SIX_MONTHS,
+                experienceLevel: JobExperienceLevel.EXPERT,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-04-30T00:00:00.000Z'),
+                languages: [{ code: 'en', proficiency: LanguageProficiency.NATIVE }],
+                requiredSkills: ['skill_aws', 'skill_security_compliance', 'skill_kubernetes', 'skill_terraform', 'skill_ci_cd'],
+                screeningQuestions: [
+                        { question: 'Describe how you set up alert fatigue reduction and runbooks.', isRequired: true },
+                        { question: 'Share an example of threat modeling you performed for financial APIs.' }
+                ],
+                customTerms: { requiresISO: true, prefersSOC2: true, runbookFormat: 'Markdown/Confluence' }
+        },
+        {
+                clientEmail: 'fatima.khan@client.test',
+                specialtyId: 'specialty_machine_learning',
+                title: 'Conversational agent for agritech support',
+                description:
+                        'Build an LLM-powered assistant that helps farmers troubleshoot irrigation equipment and schedule maintenance. Needs retrieval grounding from manuals/telemetry, safety filters, and multilingual support.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 22000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.THREE_TO_SIX_MONTHS,
+                experienceLevel: JobExperienceLevel.EXPERT,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-05-12T00:00:00.000Z'),
+                languages: [
+                        { code: 'en', proficiency: LanguageProficiency.FLUENT },
+                        { code: 'es', proficiency: LanguageProficiency.CONVERSATIONAL }
+                ],
+                requiredSkills: ['skill_python', 'skill_pandas', 'skill_tensorflow', 'skill_gcp', 'skill_rest_api'],
+                screeningQuestions: [
+                        { question: 'How do you design retrieval and grounding for safety-critical chatbots?', isRequired: true },
+                        { question: 'Share your experience evaluating hallucinations and response safety.' }
+                ],
+                customTerms: { prefersVectorDB: 'pgvector', prefersLLM: 'GPT-4o', safetyReview: true }
+        },
+        {
+                clientEmail: 'linh.tran@client.test',
+                specialtyId: 'specialty_fullstack_dev',
+                title: 'Customer success portal with SLA timers',
+                description:
+                        'Develop a portal where B2B customers raise incidents, track SLAs, and collaborate on runbooks. Includes role-based access, timeline/audit logs, and webhook integrations to internal tooling.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 17000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-03-18T00:00:00.000Z'),
+                languages: [{ code: 'en', proficiency: LanguageProficiency.FLUENT }],
+                requiredSkills: ['skill_nodejs', 'skill_typescript', 'skill_react', 'skill_postgresql', 'skill_redis'],
+                screeningQuestions: [
+                        { question: 'How would you implement SLA timers and escalation rules?', isRequired: true },
+                        { question: 'Describe your strategy for event/audit logging and exports.' }
+                ],
+                customTerms: { prefersQueue: 'BullMQ', observability: ['OpenTelemetry'] }
+        },
+        {
+                clientEmail: 'diep.le@client.test',
+                specialtyId: 'specialty_design_systems',
+                title: 'Design tokens and theming for franchise rollout',
+                description:
+                        'Build a token-based design system that can be themed per franchise while keeping accessibility baselines. Deliver Storybook docs, Figma libraries, and CI checks to prevent token regressions.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 10500,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-02-26T00:00:00.000Z'),
+                languages: [
+                        { code: 'en', proficiency: LanguageProficiency.CONVERSATIONAL },
+                        { code: 'vi', proficiency: LanguageProficiency.NATIVE }
+                ],
+                requiredSkills: ['skill_figma', 'skill_design_systems', 'skill_react', 'skill_typescript', 'skill_tailwind'],
+                screeningQuestions: [
+                        { question: 'Show how you manage multi-brand theming with tokens.', isRequired: true },
+                        { question: 'How do you enforce accessibility in components and CI?' }
+                ],
+                customTerms: { prefersTheming: 'CSS variables', docsFormat: 'Storybook' }
+        },
+        {
+                clientEmail: 'paulina.rivera@client.test',
+                specialtyId: 'specialty_cross_platform_mobile',
+                title: 'Field service mobile app with offline sync',
+                description:
+                        'Create a Flutter app for technicians to log jobs, capture photos, and sync checklists with offline-first behavior. Needs push notifications, background sync, role-based permissions, and analytics events.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 15000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-03-06T00:00:00.000Z'),
+                languages: [
+                        { code: 'es', proficiency: LanguageProficiency.NATIVE },
+                        { code: 'en', proficiency: LanguageProficiency.CONVERSATIONAL }
+                ],
+                requiredSkills: ['skill_flutter', 'skill_rest_api', 'skill_ci_cd', 'skill_postgresql', 'skill_graphql'],
+                screeningQuestions: [
+                        { question: 'How would you design offline-first data sync and conflict resolution?', isRequired: true },
+                        { question: 'Describe your approach to background tasks and battery efficiency.' }
+                ],
+                customTerms: { prefersPushProvider: 'Firebase', requiresMobileAnalytics: true }
+        },
+        {
+                clientEmail: 'minh.nguyen@client.test',
+                specialtyId: 'specialty_frontend_dev',
+                title: 'Content localization pipeline for travel portal',
+                description:
+                        'Implement a localization-ready frontend that supports structured translations, locale-driven routing, and experimentation. Includes CMS integration, caching, and robust QA for SEO across locales.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 12500,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-04-14T00:00:00.000Z'),
+                languages: [
+                        { code: 'vi', proficiency: LanguageProficiency.NATIVE },
+                        { code: 'en', proficiency: LanguageProficiency.FLUENT }
+                ],
+                requiredSkills: ['skill_nextjs', 'skill_tailwind', 'skill_graphql', 'skill_rest_api', 'skill_react'],
+                screeningQuestions: [
+                        { question: 'How do you structure translations and fallbacks in Next.js?', isRequired: true },
+                        { question: 'Share your approach to SEO and caching for multi-locale sites.' }
+                ],
+                customTerms: { prefersCDN: 'Cloudflare', cms: 'Contentful' }
+        },
+        {
+                clientEmail: 'fatima.khan@client.test',
+                specialtyId: 'specialty_test_automation',
+                title: 'Mobile regression suite for wearable IoT companion app',
+                description:
+                        'Create Playwright/Appium-based regression for Android/iOS companion apps that pair with wearable devices. Cover pairing flows, BLE events, notifications, and backend API checks with dashboards.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 13000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-04-01T00:00:00.000Z'),
+                languages: [{ code: 'en', proficiency: LanguageProficiency.FLUENT }],
+                requiredSkills: ['skill_playwright', 'skill_cypress', 'skill_rest_api', 'skill_jest', 'skill_ci_cd'],
+                screeningQuestions: [
+                        { question: 'How do you run reliable mobile tests in CI labs?', isRequired: true },
+                        { question: 'Share how you validate BLE-driven events end to end.' }
+                ],
+                customTerms: { deviceMatrix: ['Pixel 7', 'iPhone 14'], prefersRemoteLab: true }
+        },
+        {
                 clientEmail: 'minh.nguyen@client.test',
                 specialtyId: 'specialty_frontend_dev',
                 title: 'Optimize tour-booking web and campaign landing pages',
