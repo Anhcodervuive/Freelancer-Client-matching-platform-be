@@ -903,7 +903,7 @@ function generateJobSeeds(count: number): JobSeed[] {
 
         return Array.from({ length: count }, (_, index) => {
                 const idx = index + 1
-                const specialty = specialties[index % specialties.length]
+                const specialty = specialties[index % specialties.length]!
                 const clientIndex = (index % 25) + 1
                 const publishedAt = new Date(Date.UTC(2024, 0, 1 + index))
 
@@ -919,7 +919,7 @@ function generateJobSeeds(count: number): JobSeed[] {
                         duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
                         experienceLevel: idx % 2 === 0 ? JobExperienceLevel.INTERMEDIATE : JobExperienceLevel.EXPERT,
                         locationType: idx % 3 === 0 ? JobLocationType.REMOTE : JobLocationType.HYBRID,
-                        preferredLocations: idx % 3 === 0 ? Prisma.JsonNull : [{ country: 'Vietnam', timeZone: 'GMT+7' }],
+                        preferredLocations: idx % 3 === 0 ? null : [{ country: 'Vietnam', timeZone: 'GMT+7' }],
                         visibility: JobVisibility.PUBLIC,
                         status: JobStatus.PUBLISHED,
                         publishedAt,
