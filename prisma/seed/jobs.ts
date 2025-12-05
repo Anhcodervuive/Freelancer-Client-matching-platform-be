@@ -32,7 +32,7 @@ type JobSeed = {
         duration?: JobDurationCommitment | null
         experienceLevel: JobExperienceLevel
         locationType?: JobLocationType
-        preferredLocations?: Prisma.InputJsonValue
+        preferredLocations?: Prisma.InputJsonValue | null
         visibility?: JobVisibility
         status?: JobStatus
         publishedAt?: Date
