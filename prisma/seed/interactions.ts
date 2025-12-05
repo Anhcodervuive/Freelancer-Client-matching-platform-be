@@ -80,6 +80,13 @@ type ParticipantSet = {
   job: { id: string; clientId: string; title: string }
 }
 
+type BulkFlowStep = {
+  type: MatchInteractionType
+  source: MatchInteractionSource
+  actor: 'client' | 'freelancer'
+  metadata?: Record<string, unknown>
+}
+
 async function resolveParticipants(scenario: Scenario): Promise<ParticipantSet | null> {
   const freelancer = await prisma.user.findUnique({
     where: { email: scenario.freelancerEmail },
@@ -300,6 +307,136 @@ async function seedMatchInteractions(scenario: Scenario, participants: Participa
       metadata: { ...item.metadata, offerId }
     }))
   })
+}
+
+async function seedBulkMatchTimelines() {
+  const generatedJobs = await prisma.jobPost.findMany({
+    where: { title: { startsWith: 'Generated ML job' }, isDeleted: false },
+    select: { id: true, clientId: true, title: true }
+  })
+
+  const freelancers = await prisma.user.findMany({
+    where: { role: Role.FREELANCER },
+    select: { id: true, email: true }
+  })
+
+  if (!generatedJobs.length || !freelancers.length) {
+    console.warn('⚠ Skipping bulk ML match interactions because generated jobs or freelancers are missing')
+    return
+  }
+
+  const flows: { name: string; steps: BulkFlowStep[] }[] = [
+    {
+      name: 'invitation_accepted_to_hire',
+      steps: [
+        { type: MatchInteractionType.INVITATION_SENT, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { outreach: 'curated' } },
+        { type: MatchInteractionType.INVITATION_ACCEPTED, source: MatchInteractionSource.DIRECT, actor: 'freelancer', metadata: { responseMinutes: 90 } },
+        { type: MatchInteractionType.PROPOSAL_SHORTLISTED, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { shortlistReason: 'portfolio' } },
+        { type: MatchInteractionType.PROPOSAL_INTERVIEWING, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { interview: 'video' } },
+        { type: MatchInteractionType.OFFER_SENT, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { offerType: 'fixed' } },
+        { type: MatchInteractionType.OFFER_ACCEPTED, source: MatchInteractionSource.DIRECT, actor: 'freelancer', metadata: { note: 'signed' } },
+        { type: MatchInteractionType.PROPOSAL_HIRED, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { hire: true } }
+      ]
+    },
+    {
+      name: 'invitation_declined',
+      steps: [
+        { type: MatchInteractionType.INVITATION_SENT, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { outreach: 'niche_skill' } },
+        { type: MatchInteractionType.INVITATION_DECLINED, source: MatchInteractionSource.DIRECT, actor: 'freelancer', metadata: { reason: 'bandwidth' } }
+      ]
+    },
+    {
+      name: 'invitation_no_response',
+      steps: [
+        { type: MatchInteractionType.INVITATION_SENT, source: MatchInteractionSource.SYSTEM, actor: 'client', metadata: { outreach: 'broadcast', status: 'no-response' } }
+      ]
+    },
+    {
+      name: 'application_declined',
+      steps: [
+        { type: MatchInteractionType.JOB_VIEW, source: MatchInteractionSource.SEARCH, actor: 'freelancer', metadata: { query: 'typescript' } },
+        { type: MatchInteractionType.PROPOSAL_SUBMITTED, source: MatchInteractionSource.DIRECT, actor: 'freelancer', metadata: { bidCurrency: 'USD' } },
+        { type: MatchInteractionType.PROPOSAL_DECLINED, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { reason: 'skill_mismatch' } }
+      ]
+    },
+    {
+      name: 'application_interview_no_offer',
+      steps: [
+        { type: MatchInteractionType.JOB_VIEW, source: MatchInteractionSource.RECOMMENDATION, actor: 'freelancer', metadata: { panel: 'ml-feed' } },
+        { type: MatchInteractionType.PROPOSAL_SUBMITTED, source: MatchInteractionSource.DIRECT, actor: 'freelancer', metadata: { coverLetter: true } },
+        { type: MatchInteractionType.PROPOSAL_SHORTLISTED, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { shortlistReason: 'case-study' } },
+        { type: MatchInteractionType.PROPOSAL_INTERVIEWING, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { interview: 'async' } }
+      ]
+    },
+    {
+      name: 'offer_declined_after_agreeing',
+      steps: [
+        { type: MatchInteractionType.JOB_VIEW, source: MatchInteractionSource.SEARCH, actor: 'freelancer', metadata: { query: 'data platform' } },
+        { type: MatchInteractionType.PROPOSAL_SUBMITTED, source: MatchInteractionSource.DIRECT, actor: 'freelancer', metadata: { rate: 85 } },
+        { type: MatchInteractionType.PROPOSAL_SHORTLISTED, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { shortlistReason: 'referral' } },
+        { type: MatchInteractionType.OFFER_SENT, source: MatchInteractionSource.DIRECT, actor: 'client', metadata: { offerType: 'milestone' } },
+        { type: MatchInteractionType.OFFER_DECLINED, source: MatchInteractionSource.DIRECT, actor: 'freelancer', metadata: { reason: 'scope_change' } }
+      ]
+    }
+  ]
+
+  const targetRows = 2000
+  const averageFlowLength = flows.reduce((total, flow) => total + flow.steps.length, 0) / flows.length
+  const targetPairs = Math.ceil(targetRows / averageFlowLength)
+
+  const pairs: { job: { id: string; clientId: string; title: string }; freelancer: { id: string; email: string } }[] = []
+  let offset = 0
+  while (pairs.length < targetPairs) {
+    const job = generatedJobs[pairs.length % generatedJobs.length]
+    const freelancer = freelancers[(pairs.length + offset) % freelancers.length]
+
+    pairs.push({ job, freelancer })
+
+    if ((pairs.length % generatedJobs.length) === 0) {
+      offset++
+    }
+  }
+
+  const interactions: Prisma.MatchInteractionCreateManyInput[] = []
+  const jobIdsToReset = generatedJobs.map(job => job.id)
+
+  for (let index = 0; index < pairs.length && interactions.length < targetRows; index++) {
+    const flow = flows[index % flows.length]
+    let occurredAt = new Date(Date.UTC(2024, 0, 1, 0, (index % 24) * 2))
+
+    for (let stepIndex = 0; stepIndex < flow.steps.length && interactions.length < targetRows; stepIndex++) {
+      const step = flow.steps[stepIndex]
+
+      interactions.push({
+        jobId: pairs[index].job.id,
+        freelancerId: pairs[index].freelancer.id,
+        clientId: pairs[index].job.clientId,
+        actorProfileId: step.actor === 'client' ? pairs[index].job.clientId : pairs[index].freelancer.id,
+        actorRole: step.actor === 'client' ? Role.CLIENT : Role.FREELANCER,
+        type: step.type,
+        source: step.source,
+        occurredAt,
+        metadata: {
+          dataset: 'ml-bulk',
+          flow: flow.name,
+          sequence: stepIndex,
+          jobTitle: pairs[index].job.title,
+          freelancerEmail: pairs[index].freelancer.email,
+          ...(step.metadata ?? {})
+        }
+      })
+
+      occurredAt = new Date(occurredAt.getTime() + 5 * 60 * 1000)
+    }
+  }
+
+  if (jobIdsToReset.length) {
+    await prisma.matchInteraction.deleteMany({ where: { jobId: { in: jobIdsToReset } } })
+  }
+
+  if (interactions.length) {
+    await prisma.matchInteraction.createMany({ data: interactions })
+  }
 }
 
 export async function seedInteractions() {
@@ -692,5 +829,9 @@ export async function seedInteractions() {
       await refreshChat(scenario, participants, proposal.id, contract.id)
       await seedMatchInteractions(scenario, participants, proposal.id, offer.id)
     }
+  })
+
+  await runStep('Seed bulk ML match interactions', async () => {
+    await seedBulkMatchTimelines()
   })
 }
