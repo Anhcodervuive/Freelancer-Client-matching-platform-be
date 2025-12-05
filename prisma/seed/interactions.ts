@@ -387,8 +387,12 @@ async function seedBulkMatchTimelines() {
   const pairs: { job: { id: string; clientId: string; title: string }; freelancer: { id: string; email: string } }[] = []
   let offset = 0
   while (pairs.length < targetPairs) {
-    const job = generatedJobs[pairs.length % generatedJobs.length]!
-    const freelancer = freelancers[(pairs.length + offset) % freelancers.length]!
+    const job = generatedJobs[pairs.length % generatedJobs.length]
+    const freelancer = freelancers[(pairs.length + offset) % freelancers.length]
+
+    if (!job || !freelancer) {
+      break
+    }
 
     pairs.push({ job, freelancer })
 
@@ -401,17 +405,26 @@ async function seedBulkMatchTimelines() {
   const jobIdsToReset = generatedJobs.map(job => job.id)
 
   for (let index = 0; index < pairs.length && interactions.length < targetRows; index++) {
-    const flow = flows[index % flows.length]!
+    const flow = flows[index % flows.length]
+
+    if (!flow) continue
+
     let occurredAt = new Date(Date.UTC(2024, 0, 1, 0, (index % 24) * 2))
 
     for (let stepIndex = 0; stepIndex < flow.steps.length && interactions.length < targetRows; stepIndex++) {
-      const step = flow.steps[stepIndex]!
+      const step = flow.steps[stepIndex]
+
+      if (!step) continue
+
+      const pair = pairs[index]
+
+      if (!pair) continue
 
       interactions.push({
-        jobId: pairs[index].job.id,
-        freelancerId: pairs[index].freelancer.id,
-        clientId: pairs[index].job.clientId,
-        actorProfileId: step.actor === 'client' ? pairs[index].job.clientId : pairs[index].freelancer.id,
+        jobId: pair.job.id,
+        freelancerId: pair.freelancer.id,
+        clientId: pair.job.clientId,
+        actorProfileId: step.actor === 'client' ? pair.job.clientId : pair.freelancer.id,
         actorRole: step.actor === 'client' ? Role.CLIENT : Role.FREELANCER,
         type: step.type,
         source: step.source,
@@ -420,8 +433,8 @@ async function seedBulkMatchTimelines() {
           dataset: 'ml-bulk',
           flow: flow.name,
           sequence: stepIndex,
-          jobTitle: pairs[index].job.title,
-          freelancerEmail: pairs[index].freelancer.email,
+          jobTitle: pair.job.title,
+          freelancerEmail: pair.freelancer.email,
           ...(step.metadata ?? {})
         }
       })
