@@ -270,6 +270,153 @@ const JOB_POSTS: JobSeed[] = [
                         { question: 'How have you optimized AR performance on mid-tier devices?' },
                         { question: 'What is your experience connecting AR apps to a CMS/backoffice?' }
                 ]
+        },
+        {
+                clientEmail: 'andrew.taylor@client.test',
+                specialtyId: 'specialty_business_intelligence',
+                title: 'Self-serve BI portal with governed datasets',
+                description:
+                        'Build a Power BI–backed portal where consultants can explore governed datasets, schedule data refreshes, and publish curated dashboards. Includes role-based access, lineage tracking, and semantic layer definitions.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 15000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-04-08T00:00:00.000Z'),
+                languages: [{ code: 'en', proficiency: LanguageProficiency.NATIVE }],
+                requiredSkills: ['skill_powerbi', 'skill_sql', 'skill_data_engineering', 'skill_airflow', 'skill_python'],
+                screeningQuestions: [
+                        { question: 'Share an example of a governed semantic model you shipped.', isRequired: true },
+                        { question: 'How do you enforce data lineage and refresh SLAs in BI environments?' }
+                ],
+                customTerms: { preferredWarehouse: 'Snowflake', accessModel: 'RBAC', needsDataCatalog: true }
+        },
+        {
+                clientEmail: 'paulina.rivera@client.test',
+                specialtyId: 'specialty_fullstack_dev',
+                title: 'Marketplace vendor success console',
+                description:
+                        'Create a console for marketplace vendors to manage catalog health, order issues, and loyalty campaigns. Needs granular permissions, audit-ready event logging, and embeddable analytics widgets.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 13000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-03-28T00:00:00.000Z'),
+                languages: [
+                        { code: 'es', proficiency: LanguageProficiency.NATIVE },
+                        { code: 'en', proficiency: LanguageProficiency.CONVERSATIONAL }
+                ],
+                requiredSkills: ['skill_nextjs', 'skill_nodejs', 'skill_typescript', 'skill_postgresql', 'skill_redis'],
+                screeningQuestions: [
+                        { question: 'How do you design tenant isolation for vendor-facing portals?', isRequired: true },
+                        { question: 'Describe your approach to audit logging and exportable reports.' }
+                ]
+        },
+        {
+                clientEmail: 'diep.le@client.test',
+                specialtyId: 'specialty_vr_ar',
+                title: 'Interactive 3D showcase for green architecture studio',
+                description:
+                        'Develop an immersive 3D web experience to showcase sustainable buildings with day/night lighting, material swaps, and guided tours. Should run smoothly on modern browsers and support VR headset viewing.',
+                paymentMode: JobPaymentMode.FIXED_SINGLE,
+                budgetAmount: 11000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-02-28T00:00:00.000Z'),
+                languages: [
+                        { code: 'en', proficiency: LanguageProficiency.CONVERSATIONAL },
+                        { code: 'vi', proficiency: LanguageProficiency.NATIVE }
+                ],
+                requiredSkills: ['skill_unity', 'skill_blender', 'skill_react', 'skill_typescript', 'skill_css'],
+                screeningQuestions: [
+                        { question: 'Share a 3D or WebXR experience you optimized for browser performance.', isRequired: true },
+                        { question: 'How would you balance visual fidelity with load times for global visitors?' }
+                ],
+                customTerms: { expectsWebXR: true, prefersStaticHosting: true }
+        },
+        {
+                clientEmail: 'maria.rossi@client.test',
+                specialtyId: 'specialty_design_systems',
+                title: 'Design system refresh for omnichannel retail',
+                description:
+                        'Audit the current design system, expand component coverage, and deliver tokens that work across web, kiosks, and mobile apps. Needs accessibility baselines, responsive patterns, and Storybook handoff.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 9000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.HYBRID,
+                preferredLocations: [{ country: 'Italy', city: 'Milan' }],
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-04-02T00:00:00.000Z'),
+                languages: [
+                        { code: 'it', proficiency: LanguageProficiency.NATIVE },
+                        { code: 'en', proficiency: LanguageProficiency.CONVERSATIONAL }
+                ],
+                requiredSkills: ['skill_figma', 'skill_design_systems', 'skill_react', 'skill_typescript', 'skill_tailwind'],
+                screeningQuestions: [
+                        { question: 'Show an example of accessibility-first components you shipped.', isRequired: true },
+                        { question: 'What is your process for tokens, theming, and documentation readiness?' }
+                ],
+                customTerms: { prefersDesignTokens: true, handoffTool: 'Storybook/Figma' }
+        },
+        {
+                clientEmail: 'fatima.khan@client.test',
+                specialtyId: 'specialty_data_science',
+                title: 'Crop-yield forecasting models with explainability',
+                description:
+                        'Train time-series models that predict irrigation needs and yield impact for arid-region crops. Pipelines should include feature stores, drift monitoring, and explainability reports for agronomists.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 19000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.THREE_TO_SIX_MONTHS,
+                experienceLevel: JobExperienceLevel.EXPERT,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-05-06T00:00:00.000Z'),
+                languages: [{ code: 'en', proficiency: LanguageProficiency.FLUENT }],
+                requiredSkills: ['skill_python', 'skill_pandas', 'skill_scikit', 'skill_tensorflow', 'skill_gcp'],
+                screeningQuestions: [
+                        { question: 'How do you validate models against extreme weather scenarios?', isRequired: true },
+                        { question: 'Describe your approach to explainability for non-technical stakeholders.' }
+                ],
+                customTerms: { requiresFeatureStore: true, preferredPlatform: 'GCP' }
+        },
+        {
+                clientEmail: 'noah.wilson@client.test',
+                specialtyId: 'specialty_test_automation',
+                title: 'Automation and regression suite for healthcare web app',
+                description:
+                        'Expand automated regression coverage for the post-op care platform, including web, API, and accessibility checks. Integrate with CI, produce traceable reports, and set up synthetic monitoring for login flows.',
+                paymentMode: JobPaymentMode.FIXED_MILESTONE,
+                budgetAmount: 10000,
+                budgetCurrency: 'USD',
+                duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
+                experienceLevel: JobExperienceLevel.INTERMEDIATE,
+                locationType: JobLocationType.REMOTE,
+                visibility: JobVisibility.PUBLIC,
+                status: JobStatus.PUBLISHED,
+                publishedAt: new Date('2024-03-10T00:00:00.000Z'),
+                languages: [{ code: 'en', proficiency: LanguageProficiency.FLUENT }],
+                requiredSkills: ['skill_playwright', 'skill_cypress', 'skill_rest_api', 'skill_jest', 'skill_ci_cd'],
+                screeningQuestions: [
+                        { question: 'What is your plan for handling fixtures and test data in CI?', isRequired: true },
+                        { question: 'Share an example of accessibility testing you automated.' }
+                ],
+                customTerms: { compliance: ['HIPAA'], traceableReports: true }
         }
 ]
 
