@@ -305,12 +305,15 @@ export async function setSkills(userId: string, skillIds: string[]) {
 		})
 
 		if (updatedUser?.profile?.freelancer) {
+			const skillList = updatedUser?.profile?.freelancer.freelancerSkillSelection
+				.filter(sl => !sl.isDeleted)
+				.map(sl => sl.skill.name)
+			console.log(skillList)
 			const embeddingTextPrepareForEmbed = buildSkillsTextForFreelancer(updatedUser.profile.freelancer)
-			console.log(embeddingTextPrepareForEmbed)
 			embeddingEntityQueue.add('', {
 				entity_type: 'FREELANCER',
 				entity_id: updatedUser.profile.freelancer.userId,
-				text: embeddingTextPrepareForEmbed,
+				skills: skillList,
 				kind: 'SKILLS'
 			})
 		}
@@ -411,12 +414,15 @@ export async function attachOneSkill(userId: string, skillId: string) {
 	})
 
 	if (updatedUser?.profile?.freelancer) {
+		const skillList = updatedUser?.profile?.freelancer.freelancerSkillSelection
+			.filter(sl => !sl.isDeleted)
+			.map(sl => sl.skill.name)
 		const embeddingTextPrepareForEmbed = buildSkillsTextForFreelancer(updatedUser.profile.freelancer)
-		console.log(embeddingTextPrepareForEmbed)
+		console.log(skillList)
 		embeddingEntityQueue.add('', {
 			entity_type: 'FREELANCER',
 			entity_id: updatedUser.profile.freelancer.userId,
-			text: embeddingTextPrepareForEmbed,
+			skills: skillList,
 			kind: 'SKILLS'
 		})
 	}
@@ -470,11 +476,14 @@ export async function detachOneSkill(userId: string, skillId: string) {
 
 	if (updatedUser?.profile?.freelancer) {
 		const embeddingTextPrepareForEmbed = buildSkillsTextForFreelancer(updatedUser.profile.freelancer)
-		console.log(embeddingTextPrepareForEmbed)
+		const skillList = updatedUser?.profile?.freelancer.freelancerSkillSelection
+			.filter(sl => !sl.isDeleted)
+			.map(sl => sl.skill.name)
+		console.log(skillList)
 		embeddingEntityQueue.add('', {
 			entity_type: 'FREELANCER',
 			entity_id: updatedUser.profile.freelancer.userId,
-			text: embeddingTextPrepareForEmbed,
+			skills: skillList,
 			kind: 'SKILLS'
 		})
 	}

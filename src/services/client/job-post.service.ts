@@ -897,7 +897,7 @@ const createJobPost = async (
 		const embeddingTextPrepareForEmbed = buildFullTextForJob(jobPost as any)
 		const embeddingTextSkillPrepareForEmbed = buildSkillsTextForJob(jobPost as any)
 		const embeddingTextDomainPrepareForEmbed = buildDomainTextForJob(jobPost as any)
-		console.log(embeddingTextPrepareForEmbed, embeddingTextPrepareForEmbed, embeddingTextSkillPrepareForEmbed)
+		console.log(embeddingTextPrepareForEmbed, jobPost.skills.required, embeddingTextDomainPrepareForEmbed)
 		embeddingEntityQueue.add('', {
 			entity_type: 'JOB',
 			entity_id: createdJobId,
@@ -907,7 +907,7 @@ const createJobPost = async (
 		embeddingEntityQueue.add('', {
 			entity_type: 'JOB',
 			entity_id: createdJobId,
-			text: embeddingTextSkillPrepareForEmbed,
+			skills: jobPost.skills.required.map(skill => skill.name),
 			kind: 'SKILLS'
 		})
 		embeddingEntityQueue.add('', {
@@ -1098,8 +1098,7 @@ const updateJobPost = async (
 	const embeddingTextPrepareForEmbed = buildFullTextForJob(jobPost as any)
 	const embeddingTextSkillPrepareForEmbed = buildSkillsTextForJob(jobPost as any)
 	const embeddingTextDomainPrepareForEmbed = buildDomainTextForJob(jobPost as any)
-	console.log(jobPost.skills.required)
-	console.log(embeddingTextSkillPrepareForEmbed, embeddingTextDomainPrepareForEmbed)
+	console.log(jobPost.skills.required, embeddingTextDomainPrepareForEmbed)
 	embeddingEntityQueue.add('', {
 		entity_type: 'JOB',
 		entity_id: jobId,
@@ -1109,7 +1108,7 @@ const updateJobPost = async (
 	embeddingEntityQueue.add('', {
 		entity_type: 'JOB',
 		entity_id: jobId,
-		text: embeddingTextSkillPrepareForEmbed,
+		skills: jobPost.skills.required.map(skill => skill.name),
 		kind: 'SKILLS'
 	})
 	embeddingEntityQueue.add('', {
