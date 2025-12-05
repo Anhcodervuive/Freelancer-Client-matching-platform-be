@@ -387,8 +387,8 @@ async function seedBulkMatchTimelines() {
   const pairs: { job: { id: string; clientId: string; title: string }; freelancer: { id: string; email: string } }[] = []
   let offset = 0
   while (pairs.length < targetPairs) {
-    const job = generatedJobs[pairs.length % generatedJobs.length]
-    const freelancer = freelancers[(pairs.length + offset) % freelancers.length]
+    const job = generatedJobs[pairs.length % generatedJobs.length]!
+    const freelancer = freelancers[(pairs.length + offset) % freelancers.length]!
 
     pairs.push({ job, freelancer })
 
@@ -401,11 +401,11 @@ async function seedBulkMatchTimelines() {
   const jobIdsToReset = generatedJobs.map(job => job.id)
 
   for (let index = 0; index < pairs.length && interactions.length < targetRows; index++) {
-    const flow = flows[index % flows.length]
+    const flow = flows[index % flows.length]!
     let occurredAt = new Date(Date.UTC(2024, 0, 1, 0, (index % 24) * 2))
 
     for (let stepIndex = 0; stepIndex < flow.steps.length && interactions.length < targetRows; stepIndex++) {
-      const step = flow.steps[stepIndex]
+      const step = flow.steps[stepIndex]!
 
       interactions.push({
         jobId: pairs[index].job.id,
