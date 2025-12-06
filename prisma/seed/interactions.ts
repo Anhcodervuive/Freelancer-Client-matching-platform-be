@@ -142,7 +142,7 @@ async function resolveParticipants(scenario: Scenario): Promise<ParticipantSet |
   }
 }
 
-async function ensureProposal(jobId: string, freelancerId: string, scenario: Scenario, invitationId?: string) {
+async function ensureProposal(jobId: string, freelancerId: string, scenario: Scenario, invitationId?: string | null) {
   return prisma.jobProposal.upsert({
     where: { jobId_freelancerId: { jobId, freelancerId } },
     update: {
@@ -150,7 +150,7 @@ async function ensureProposal(jobId: string, freelancerId: string, scenario: Sce
       bidAmount: new Prisma.Decimal(scenario.proposal.bidAmount),
       bidCurrency: scenario.proposal.bidCurrency,
       status: scenario.proposal.status ?? JobProposalStatus.HIRED,
-      invitationId
+      invitationId: invitationId ?? null
     },
     create: {
       jobId,
@@ -160,7 +160,7 @@ async function ensureProposal(jobId: string, freelancerId: string, scenario: Sce
       bidCurrency: scenario.proposal.bidCurrency,
       status: scenario.proposal.status ?? JobProposalStatus.HIRED,
       submittedAt: new Date(scenario.proposal.submittedAt),
-      invitationId
+      invitationId: invitationId ?? null
     }
   })
 }
@@ -195,7 +195,10 @@ function buildInvitationSeed(
     ? new Date(sent.metadata.expiresAt as string)
     : new Date(sentAt.getTime() + 7 * 24 * 60 * 60 * 1000)
 
-  const message = sent.metadata?.note ?? `Invitation to collaborate on ${sent.metadata?.jobTitle ?? 'your project'}`
+  const metadataMessage = sent.metadata?.note
+  const message = typeof metadataMessage === 'string'
+    ? metadataMessage
+    : `Invitation to collaborate on ${sent.metadata?.jobTitle ?? 'your project'}`
 
   return {
     jobId,
@@ -239,7 +242,7 @@ async function ensureOffer(
   freelancerId: string,
   proposalId: string,
   scenario: Scenario,
-  invitationId?: string
+  invitationId?: string | null
 ) {
   const existingOffer = await prisma.jobOffer.findFirst({
     where: { jobId, freelancerId }
@@ -261,7 +264,7 @@ async function ensureOffer(
     status: scenario.offer.status,
     sentAt: new Date(scenario.offer.sentAt),
     respondedAt: new Date(scenario.offer.respondedAt),
-    invitationId,
+    invitationId: invitationId ?? null,
     isDeleted: scenario.offer.isDeleted ?? false,
     deletedAt: scenario.offer.deletedAt ? new Date(scenario.offer.deletedAt) : null
   }
