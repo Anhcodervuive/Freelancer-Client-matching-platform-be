@@ -5,6 +5,7 @@ import {
   ContractSignatureStatus,
   ContractStatus,
   ContractClosureType,
+  JobInvitationStatus,
   JobOfferStatus,
   JobOfferType,
   JobProposalStatus,
@@ -80,6 +81,17 @@ type ParticipantSet = {
   job: { id: string; clientId: string; title: string }
 }
 
+type InvitationSeed = {
+  jobId: string
+  clientId: string
+  freelancerId: string
+  message?: string | null
+  status: JobInvitationStatus
+  sentAt: Date
+  respondedAt?: Date | null
+  expiresAt?: Date | null
+}
+
 type BulkFlowStep = {
   type: MatchInteractionType
   source: MatchInteractionSource
@@ -130,14 +142,15 @@ async function resolveParticipants(scenario: Scenario): Promise<ParticipantSet |
   }
 }
 
-async function ensureProposal(jobId: string, freelancerId: string, scenario: Scenario) {
+async function ensureProposal(jobId: string, freelancerId: string, scenario: Scenario, invitationId?: string) {
   return prisma.jobProposal.upsert({
     where: { jobId_freelancerId: { jobId, freelancerId } },
     update: {
       coverLetter: scenario.proposal.coverLetter,
       bidAmount: new Prisma.Decimal(scenario.proposal.bidAmount),
       bidCurrency: scenario.proposal.bidCurrency,
-      status: scenario.proposal.status ?? JobProposalStatus.HIRED
+      status: scenario.proposal.status ?? JobProposalStatus.HIRED,
+      invitationId
     },
     create: {
       jobId,
@@ -146,12 +159,88 @@ async function ensureProposal(jobId: string, freelancerId: string, scenario: Sce
       bidAmount: new Prisma.Decimal(scenario.proposal.bidAmount),
       bidCurrency: scenario.proposal.bidCurrency,
       status: scenario.proposal.status ?? JobProposalStatus.HIRED,
-      submittedAt: new Date(scenario.proposal.submittedAt)
+      submittedAt: new Date(scenario.proposal.submittedAt),
+      invitationId
     }
   })
 }
 
-async function ensureOffer(jobId: string, clientId: string, freelancerId: string, proposalId: string, scenario: Scenario) {
+function buildInvitationSeed(
+  jobId: string,
+  clientId: string,
+  freelancerId: string,
+  interactions: Scenario['interactions']
+): InvitationSeed | null {
+  const sent = interactions.find(item => item.type === MatchInteractionType.INVITATION_SENT)
+  if (!sent) return null
+
+  const accepted = interactions.find(item => item.type === MatchInteractionType.INVITATION_ACCEPTED)
+  const declined = interactions.find(item => item.type === MatchInteractionType.INVITATION_DECLINED)
+
+  let status: JobInvitationStatus = JobInvitationStatus.SENT
+  let respondedAt: Date | null = null
+
+  if (accepted) {
+    status = JobInvitationStatus.ACCEPTED
+    respondedAt = new Date(accepted.occurredAt)
+  } else if (declined) {
+    status = JobInvitationStatus.DECLINED
+    respondedAt = new Date(declined.occurredAt)
+  } else if (sent.metadata?.status === 'no-response') {
+    status = JobInvitationStatus.EXPIRED
+  }
+
+  const sentAt = new Date(sent.occurredAt)
+  const expiresAt = sent.metadata?.expiresAt
+    ? new Date(sent.metadata.expiresAt as string)
+    : new Date(sentAt.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+  const message = sent.metadata?.note ?? `Invitation to collaborate on ${sent.metadata?.jobTitle ?? 'your project'}`
+
+  return {
+    jobId,
+    clientId,
+    freelancerId,
+    message,
+    status,
+    sentAt,
+    respondedAt,
+    expiresAt
+  }
+}
+
+async function ensureInvitation(seed: InvitationSeed): Promise<string> {
+  const existing = await prisma.jobInvitation.findUnique({
+    where: { jobId_freelancerId: { jobId: seed.jobId, freelancerId: seed.freelancerId } },
+    select: { id: true }
+  })
+
+  const data = {
+    jobId: seed.jobId,
+    clientId: seed.clientId,
+    freelancerId: seed.freelancerId,
+    message: seed.message ?? null,
+    status: seed.status,
+    sentAt: seed.sentAt,
+    respondedAt: seed.respondedAt ?? null,
+    expiresAt: seed.expiresAt ?? null
+  }
+
+  const invitation = existing
+    ? await prisma.jobInvitation.update({ where: { id: existing.id }, data })
+    : await prisma.jobInvitation.create({ data })
+
+  return invitation.id
+}
+
+async function ensureOffer(
+  jobId: string,
+  clientId: string,
+  freelancerId: string,
+  proposalId: string,
+  scenario: Scenario,
+  invitationId?: string
+) {
   const existingOffer = await prisma.jobOffer.findFirst({
     where: { jobId, freelancerId }
   })
@@ -172,6 +261,7 @@ async function ensureOffer(jobId: string, clientId: string, freelancerId: string
     status: scenario.offer.status,
     sentAt: new Date(scenario.offer.sentAt),
     respondedAt: new Date(scenario.offer.respondedAt),
+    invitationId,
     isDeleted: scenario.offer.isDeleted ?? false,
     deletedAt: scenario.offer.deletedAt ? new Date(scenario.offer.deletedAt) : null
   }
@@ -402,6 +492,7 @@ async function seedBulkMatchTimelines() {
   }
 
   const interactions: Prisma.MatchInteractionCreateManyInput[] = []
+  const invitationMap = new Map<string, InvitationSeed>()
   const jobIdsToReset = generatedJobs.map(job => job.id)
 
   for (let index = 0; index < pairs.length && interactions.length < targetRows; index++) {
@@ -419,6 +510,44 @@ async function seedBulkMatchTimelines() {
       const pair = pairs[index]
 
       if (!pair) continue
+
+      const pairKey = `${pair.job.id}:${pair.freelancer.id}`
+      if (
+        step.type === MatchInteractionType.INVITATION_SENT ||
+        step.type === MatchInteractionType.INVITATION_ACCEPTED ||
+        step.type === MatchInteractionType.INVITATION_DECLINED
+      ) {
+        const existing = invitationMap.get(pairKey)
+        const base: InvitationSeed =
+          existing ?? {
+            jobId: pair.job.id,
+            clientId: pair.job.clientId,
+            freelancerId: pair.freelancer.id,
+            message: step.metadata?.outreach
+              ? `Invitation via ${step.metadata.outreach}`
+              : `Invitation for ${pair.job.title}`,
+            status: JobInvitationStatus.SENT,
+            sentAt: occurredAt,
+            respondedAt: null,
+            expiresAt: new Date(occurredAt.getTime() + 7 * 24 * 60 * 60 * 1000)
+          }
+
+        if (step.type === MatchInteractionType.INVITATION_ACCEPTED) {
+          base.status = JobInvitationStatus.ACCEPTED
+          base.respondedAt = occurredAt
+        } else if (step.type === MatchInteractionType.INVITATION_DECLINED) {
+          base.status = JobInvitationStatus.DECLINED
+          base.respondedAt = occurredAt
+        } else if (step.metadata?.status === 'no-response') {
+          base.status = JobInvitationStatus.EXPIRED
+        }
+
+        if (!existing) {
+          invitationMap.set(pairKey, base)
+        } else {
+          invitationMap.set(pairKey, { ...existing, ...base })
+        }
+      }
 
       interactions.push({
         jobId: pair.job.id,
@@ -444,7 +573,25 @@ async function seedBulkMatchTimelines() {
   }
 
   if (jobIdsToReset.length) {
+    await prisma.jobInvitation.deleteMany({ where: { jobId: { in: jobIdsToReset } } })
     await prisma.matchInteraction.deleteMany({ where: { jobId: { in: jobIdsToReset } } })
+  }
+
+  const invitationSeeds = Array.from(invitationMap.values())
+
+  if (invitationSeeds.length) {
+    await prisma.jobInvitation.createMany({
+      data: invitationSeeds.map(seed => ({
+        jobId: seed.jobId,
+        clientId: seed.clientId,
+        freelancerId: seed.freelancerId,
+        message: seed.message ?? null,
+        status: seed.status,
+        sentAt: seed.sentAt,
+        respondedAt: seed.respondedAt ?? null,
+        expiresAt: seed.expiresAt ?? null
+      }))
+    })
   }
 
   if (interactions.length) {
@@ -835,8 +982,24 @@ export async function seedInteractions() {
       const participants = await resolveParticipants(scenario)
       if (!participants) continue
 
-      const proposal = await ensureProposal(participants.job.id, participants.freelancer.id, scenario)
-      const offer = await ensureOffer(participants.job.id, participants.client.id, participants.freelancer.id, proposal.id, scenario)
+      const invitationSeed = buildInvitationSeed(
+        participants.job.id,
+        participants.client.id,
+        participants.freelancer.id,
+        scenario.interactions
+      )
+
+      const invitationId = invitationSeed ? await ensureInvitation(invitationSeed) : undefined
+
+      const proposal = await ensureProposal(participants.job.id, participants.freelancer.id, scenario, invitationId)
+      const offer = await ensureOffer(
+        participants.job.id,
+        participants.client.id,
+        participants.freelancer.id,
+        proposal.id,
+        scenario,
+        invitationId
+      )
       const contract = await ensureContract(participants.job.id, participants.client.id, participants.freelancer.id, proposal.id, offer.id, scenario)
 
       await refreshChat(scenario, participants, proposal.id, contract.id)
