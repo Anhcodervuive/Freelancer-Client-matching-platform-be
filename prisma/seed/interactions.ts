@@ -508,7 +508,7 @@ async function seedBulkMatchTimelines() {
     }
   ]
 
-  const targetInvitations = 1200
+  const targetInvitations = 1000
   const targetRows = targetInvitations * 6
   const averageFlowLength = flows.reduce((total, flow) => total + flow.steps.length, 0) / flows.length
   const targetPairs = Math.max(targetInvitations, Math.ceil(targetRows / averageFlowLength))
@@ -533,9 +533,18 @@ async function seedBulkMatchTimelines() {
   const interactions: Prisma.MatchInteractionCreateManyInput[] = []
   const invitationMap = new Map<string, InvitationSeed>()
   const matchInsights = new Map<string, { overlap: number; score: number; matchedSkills: string[] }>()
+  const candidatePlans: {
+    pair: { job: { id: string; clientId: string; title: string }; freelancer: { id: string; email: string } }
+    pairKey: string
+    overlap: number
+    score: number
+    matchedSkills: string[]
+    acceptanceScore: number
+    statusBias: number
+  }[] = []
   const jobIdsToReset = generatedJobs.map(job => job.id)
 
-  for (let index = 0; index < pairs.length && invitationMap.size < targetInvitations; index++) {
+  for (let index = 0; index < pairs.length && candidatePlans.length < targetInvitations; index++) {
     const pair = pairs[index]
 
     if (!pair) continue
@@ -547,14 +556,32 @@ async function seedBulkMatchTimelines() {
     const matchedSkills = Array.from(requiredSkills).filter(skill => freelancerSkillSet.has(skill))
     const overlap = matchedSkills.length
     const score = requiredSkills.size ? overlap / requiredSkills.size : 0
-    const acceptanceProbability = Math.min(0.58, 0.18 + score * 0.4)
-    const declineProbability = acceptanceProbability + Math.max(0.22, 0.35 - score * 0.1)
-    const randomValue = hashStringToFloat(pairKey)
+    const acceptanceScore = score * 0.7 + hashStringToFloat(`${pairKey}:affinity`) * 0.3
+    const statusBias = hashStringToFloat(`${pairKey}:status`)
+
+    candidatePlans.push({ pair, pairKey, overlap, score, matchedSkills, acceptanceScore, statusBias })
+  }
+
+  const acceptanceRate = 0.3
+  const acceptanceTarget = Math.round(targetInvitations * acceptanceRate)
+  const acceptedKeys = new Set(
+    [...candidatePlans]
+      .sort((a, b) => b.acceptanceScore - a.acceptanceScore)
+      .slice(0, acceptanceTarget)
+      .map(item => item.pairKey)
+  )
+
+  for (let index = 0; index < candidatePlans.length && invitationMap.size < targetInvitations; index++) {
+    const plan = candidatePlans[index]
+    const { pair, pairKey, overlap, score, matchedSkills, statusBias } = plan
+
+    const isAccepted = acceptedKeys.has(pairKey)
+    const declineChance = Math.max(0.3, Math.min(0.82, 0.62 - score * 0.25 + statusBias * 0.15))
 
     let flow: (typeof flows)[number]
-    if (randomValue < acceptanceProbability) {
+    if (isAccepted) {
       flow = flows.find(item => item.name === 'invitation_accepted_to_hire') ?? flows[0]
-    } else if (randomValue < declineProbability) {
+    } else if (statusBias < declineChance) {
       flow = flows.find(item => item.name === 'invitation_declined') ?? flows[1]
     } else {
       flow = flows.find(item => item.name === 'invitation_no_response') ?? flows[2]
@@ -631,6 +658,11 @@ async function seedBulkMatchTimelines() {
         }
       })
 
+      occurredAt = new Date(occurredAt.getTime() + 5 * 60 * 1000)
+    }
+  }
+
+  if (jobIdsToReset.length) {
       occurredAt = new Date(occurredAt.getTime() + 5 * 60 * 1000)
     }
   }
