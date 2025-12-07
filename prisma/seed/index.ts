@@ -3,7 +3,7 @@ import { seedTaxonomy } from './taxonomy'
 import { seedPlatformTerms } from './platform-terms'
 import { seedPeople } from './people'
 import { seedJobs } from './jobs'
-import { seedMatchInteractions } from './match-interactions'
+import { seedInteractions } from './interactions'
 
 /**
  * Cho phép chạy 1 phần:  `npm run seed -- taxonomy`
@@ -21,7 +21,11 @@ async function main() {
         if (shouldRun('platform-terms', 'platformterms', 'terms')) await seedPlatformTerms()
         if (shouldRun('people', 'users', 'sample-users')) await seedPeople()
         if (shouldRun('jobs', 'job-posts', 'jobposts')) await seedJobs()
+<<<<<<< HEAD
         if (shouldRun('match-interactions', 'match', 'interactions')) await seedMatchInteractions()
+=======
+        if (shouldRun('interactions', 'match-interactions', 'timeline')) await seedInteractions()
+>>>>>>> codex/review-my-project
 }
 
 main()

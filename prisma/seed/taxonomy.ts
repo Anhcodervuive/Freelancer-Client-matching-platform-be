@@ -46,6 +46,7 @@ const SKILLS: SeedSkill[] = [
   { id: 'skill_java', slug: 'java', name: 'Java', description: 'General-purpose programming language used for enterprise systems.' },
   { id: 'skill_spring', slug: 'spring', name: 'Spring Boot', description: 'Framework for building production-grade Java services.' },
   { id: 'skill_python', slug: 'python', name: 'Python', description: 'Versatile programming language widely used in data science.' },
+  { id: 'skill_machine_learning', slug: 'machine-learning', name: 'Machine Learning', description: 'Techniques for building predictive models and intelligent systems.' },
   { id: 'skill_django', slug: 'django', name: 'Django', description: 'Python framework for building robust web applications.' },
   { id: 'skill_fastapi', slug: 'fastapi', name: 'FastAPI', description: 'Fast Python framework for building async APIs.' },
   { id: 'skill_postgresql', slug: 'postgresql', name: 'PostgreSQL', description: 'Open-source relational database.' },
