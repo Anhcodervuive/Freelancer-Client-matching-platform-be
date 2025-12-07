@@ -99,6 +99,16 @@ type BulkFlowStep = {
   metadata?: Record<string, unknown>
 }
 
+function hashStringToFloat(seed: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+
+  return Math.abs(hash % 10000) / 10000
+}
+
 async function resolveParticipants(scenario: Scenario): Promise<ParticipantSet | null> {
   const freelancer = await prisma.user.findUnique({
     where: { email: scenario.freelancerEmail },
@@ -413,6 +423,31 @@ async function seedBulkMatchTimelines() {
     select: { id: true, email: true }
   })
 
+  const [jobRequiredSkills, freelancerSkills] = await Promise.all([
+    prisma.jobRequiredSkill.findMany({
+      where: { jobId: { in: generatedJobs.map(job => job.id) } },
+      select: { jobId: true, skillId: true }
+    }),
+    prisma.freelancerSkillSelection.findMany({
+      where: { isDeleted: false },
+      select: { userId: true, skillId: true }
+    })
+  ])
+
+  const jobSkillMap = new Map<string, Set<string>>()
+  for (const req of jobRequiredSkills) {
+    const existing = jobSkillMap.get(req.jobId) ?? new Set<string>()
+    existing.add(req.skillId)
+    jobSkillMap.set(req.jobId, existing)
+  }
+
+  const freelancerSkillMap = new Map<string, Set<string>>()
+  for (const skill of freelancerSkills) {
+    const existing = freelancerSkillMap.get(skill.userId) ?? new Set<string>()
+    existing.add(skill.skillId)
+    freelancerSkillMap.set(skill.userId, existing)
+  }
+
   if (!generatedJobs.length || !freelancers.length) {
     console.warn('⚠ Skipping bulk ML match interactions because generated jobs or freelancers are missing')
     return
@@ -473,9 +508,10 @@ async function seedBulkMatchTimelines() {
     }
   ]
 
-  const targetRows = 2000
+  const targetInvitations = 1200
+  const targetRows = targetInvitations * 6
   const averageFlowLength = flows.reduce((total, flow) => total + flow.steps.length, 0) / flows.length
-  const targetPairs = Math.ceil(targetRows / averageFlowLength)
+  const targetPairs = Math.max(targetInvitations, Math.ceil(targetRows / averageFlowLength))
 
   const pairs: { job: { id: string; clientId: string; title: string }; freelancer: { id: string; email: string } }[] = []
   let offset = 0
@@ -496,12 +532,35 @@ async function seedBulkMatchTimelines() {
 
   const interactions: Prisma.MatchInteractionCreateManyInput[] = []
   const invitationMap = new Map<string, InvitationSeed>()
+  const matchInsights = new Map<string, { overlap: number; score: number; matchedSkills: string[] }>()
   const jobIdsToReset = generatedJobs.map(job => job.id)
 
-  for (let index = 0; index < pairs.length && interactions.length < targetRows; index++) {
-    const flow = flows[index % flows.length]
+  for (let index = 0; index < pairs.length && invitationMap.size < targetInvitations; index++) {
+    const pair = pairs[index]
 
-    if (!flow) continue
+    if (!pair) continue
+
+    const pairKey = `${pair.job.id}:${pair.freelancer.id}`
+    const requiredSkills = jobSkillMap.get(pair.job.id) ?? new Set<string>()
+    const freelancerSkillSet = freelancerSkillMap.get(pair.freelancer.id) ?? new Set<string>()
+
+    const matchedSkills = Array.from(requiredSkills).filter(skill => freelancerSkillSet.has(skill))
+    const overlap = matchedSkills.length
+    const score = requiredSkills.size ? overlap / requiredSkills.size : 0
+    const acceptanceProbability = Math.min(0.58, 0.18 + score * 0.4)
+    const declineProbability = acceptanceProbability + Math.max(0.22, 0.35 - score * 0.1)
+    const randomValue = hashStringToFloat(pairKey)
+
+    let flow: (typeof flows)[number]
+    if (randomValue < acceptanceProbability) {
+      flow = flows.find(item => item.name === 'invitation_accepted_to_hire') ?? flows[0]
+    } else if (randomValue < declineProbability) {
+      flow = flows.find(item => item.name === 'invitation_declined') ?? flows[1]
+    } else {
+      flow = flows.find(item => item.name === 'invitation_no_response') ?? flows[2]
+    }
+
+    matchInsights.set(pairKey, { overlap, score, matchedSkills })
 
     let occurredAt = new Date(Date.UTC(2024, 0, 1, 0, (index % 24) * 2))
 
@@ -510,25 +569,24 @@ async function seedBulkMatchTimelines() {
 
       if (!step) continue
 
-      const pair = pairs[index]
-
-      if (!pair) continue
-
-      const pairKey = `${pair.job.id}:${pair.freelancer.id}`
       if (
         step.type === MatchInteractionType.INVITATION_SENT ||
         step.type === MatchInteractionType.INVITATION_ACCEPTED ||
         step.type === MatchInteractionType.INVITATION_DECLINED
       ) {
         const existing = invitationMap.get(pairKey)
+        const matchDetail = matchInsights.get(pairKey)
+        const skillSummary = matchDetail?.matchedSkills.length
+          ? `Matched skills: ${matchDetail.matchedSkills.slice(0, 3).join(', ')}`
+          : 'Adjacent experience for this role'
         const base: InvitationSeed =
           existing ?? {
             jobId: pair.job.id,
             clientId: pair.job.clientId,
             freelancerId: pair.freelancer.id,
             message: step.metadata?.outreach
-              ? `Invitation via ${step.metadata.outreach}`
-              : `Invitation for ${pair.job.title}`,
+              ? `Invitation via ${step.metadata.outreach} — ${skillSummary}`
+              : `Invitation for ${pair.job.title} — ${skillSummary}`,
             status: JobInvitationStatus.SENT,
             sentAt: occurredAt,
             respondedAt: null,
@@ -567,6 +625,8 @@ async function seedBulkMatchTimelines() {
           sequence: stepIndex,
           jobTitle: pair.job.title,
           freelancerEmail: pair.freelancer.email,
+          skillOverlap: overlap,
+          affinityScore: score,
           ...(step.metadata ?? {})
         }
       })
