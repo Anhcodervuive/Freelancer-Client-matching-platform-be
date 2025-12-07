@@ -573,18 +573,22 @@ async function seedBulkMatchTimelines() {
 
   for (let index = 0; index < candidatePlans.length && invitationMap.size < targetInvitations; index++) {
     const plan = candidatePlans[index]
+
+    if (!plan) continue
+
     const { pair, pairKey, overlap, score, matchedSkills, statusBias } = plan
 
     const isAccepted = acceptedKeys.has(pairKey)
     const declineChance = Math.max(0.3, Math.min(0.82, 0.62 - score * 0.25 + statusBias * 0.15))
 
-    let flow: (typeof flows)[number]
+    const defaultFlow = flows[0] ?? { name: 'invitation_accepted_to_hire', steps: [] }
+    let flow: (typeof flows)[number] = defaultFlow
     if (isAccepted) {
-      flow = flows.find(item => item.name === 'invitation_accepted_to_hire') ?? flows[0]
+      flow = flows.find(item => item.name === 'invitation_accepted_to_hire') ?? flow
     } else if (statusBias < declineChance) {
-      flow = flows.find(item => item.name === 'invitation_declined') ?? flows[1]
+      flow = flows.find(item => item.name === 'invitation_declined') ?? flows[1] ?? defaultFlow
     } else {
-      flow = flows.find(item => item.name === 'invitation_no_response') ?? flows[2]
+      flow = flows.find(item => item.name === 'invitation_no_response') ?? flows[2] ?? defaultFlow
     }
 
     matchInsights.set(pairKey, { overlap, score, matchedSkills })
@@ -658,11 +662,6 @@ async function seedBulkMatchTimelines() {
         }
       })
 
-      occurredAt = new Date(occurredAt.getTime() + 5 * 60 * 1000)
-    }
-  }
-
-  if (jobIdsToReset.length) {
       occurredAt = new Date(occurredAt.getTime() + 5 * 60 * 1000)
     }
   }
