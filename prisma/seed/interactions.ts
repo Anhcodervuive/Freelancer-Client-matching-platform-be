@@ -510,30 +510,8 @@ async function seedBulkMatchTimelines() {
 
   const targetInvitations = 1000
   const targetRows = targetInvitations * 6
-  const averageFlowLength = flows.reduce((total, flow) => total + flow.steps.length, 0) / flows.length
-  const targetPairs = Math.max(targetInvitations, Math.ceil(targetRows / averageFlowLength))
 
-  const pairs: { job: { id: string; clientId: string; title: string }; freelancer: { id: string; email: string } }[] = []
-  let offset = 0
-  while (pairs.length < targetPairs) {
-    const job = generatedJobs[pairs.length % generatedJobs.length]
-    const freelancer = freelancers[(pairs.length + offset) % freelancers.length]
-
-    if (!job || !freelancer) {
-      break
-    }
-
-    pairs.push({ job, freelancer })
-
-    if ((pairs.length % generatedJobs.length) === 0) {
-      offset++
-    }
-  }
-
-  const interactions: Prisma.MatchInteractionCreateManyInput[] = []
-  const invitationMap = new Map<string, InvitationSeed>()
-  const matchInsights = new Map<string, { overlap: number; score: number; matchedSkills: string[] }>()
-  const candidatePlans: {
+  type CandidatePlan = {
     pair: { job: { id: string; clientId: string; title: string }; freelancer: { id: string; email: string } }
     pairKey: string
     overlap: number
@@ -541,25 +519,42 @@ async function seedBulkMatchTimelines() {
     matchedSkills: string[]
     acceptanceScore: number
     statusBias: number
-  }[] = []
+  }
+
+  const candidatePlans: CandidatePlan[] = []
+  const interactions: Prisma.MatchInteractionCreateManyInput[] = []
+  const invitationMap = new Map<string, InvitationSeed>()
+  const matchInsights = new Map<string, { overlap: number; score: number; matchedSkills: string[] }>()
   const jobIdsToReset = generatedJobs.map(job => job.id)
 
-  for (let index = 0; index < pairs.length && candidatePlans.length < targetInvitations; index++) {
-    const pair = pairs[index]
+  const perJobTarget = Math.max(8, Math.ceil(targetInvitations / generatedJobs.length))
 
-    if (!pair) continue
+  for (const job of generatedJobs) {
+    const requiredSkills = jobSkillMap.get(job.id) ?? new Set<string>()
 
-    const pairKey = `${pair.job.id}:${pair.freelancer.id}`
-    const requiredSkills = jobSkillMap.get(pair.job.id) ?? new Set<string>()
-    const freelancerSkillSet = freelancerSkillMap.get(pair.freelancer.id) ?? new Set<string>()
+    const scoredFreelancers = freelancers
+      .map(freelancer => {
+        const freelancerSkillSet = freelancerSkillMap.get(freelancer.id) ?? new Set<string>()
+        const matchedSkills = Array.from(requiredSkills).filter(skill => freelancerSkillSet.has(skill))
+        const overlap = matchedSkills.length
+        const score = requiredSkills.size ? overlap / requiredSkills.size : 0
+        const pairKey = `${job.id}:${freelancer.id}`
+        const acceptanceScore = score * 0.7 + hashStringToFloat(`${pairKey}:affinity`) * 0.3
+        const statusBias = hashStringToFloat(`${pairKey}:status`)
 
-    const matchedSkills = Array.from(requiredSkills).filter(skill => freelancerSkillSet.has(skill))
-    const overlap = matchedSkills.length
-    const score = requiredSkills.size ? overlap / requiredSkills.size : 0
-    const acceptanceScore = score * 0.7 + hashStringToFloat(`${pairKey}:affinity`) * 0.3
-    const statusBias = hashStringToFloat(`${pairKey}:status`)
+        return { pair: { job, freelancer }, pairKey, overlap, score, matchedSkills, acceptanceScore, statusBias }
+      })
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score
+        return b.acceptanceScore - a.acceptanceScore
+      })
 
-    candidatePlans.push({ pair, pairKey, overlap, score, matchedSkills, acceptanceScore, statusBias })
+    const targetForJob = Math.min(perJobTarget, scoredFreelancers.length)
+    for (let i = 0; i < targetForJob; i++) {
+      const plan = scoredFreelancers[i]
+      if (!plan) continue
+      candidatePlans.push(plan)
+    }
   }
 
   const acceptanceRate = 0.3
