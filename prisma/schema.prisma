@@ -954,21 +954,62 @@ model FreelancerStats {
 }
 
 model MatchFeature {
-  id                String    @id @default(cuid())
-  jobId             String    @map("job_id")
-  freelancerId      String    @map("freelancer_id")
-  similarityScore   Float?    @map("similarity_score")
-  budgetGap         Decimal?  @map("budget_gap") @db.Decimal(12, 2)
-  rateGap           Decimal?  @map("rate_gap") @db.Decimal(12, 2)
-  timezoneGapHours  Int?      @map("timezone_gap_hours")
-  levelGap          Int?      @map("level_gap")
-  pMatch            Float?    @map("p_match")
-  pFreelancerAccept Float?    @map("p_freelancer_accept")
-  pClientAccept     Float?    @map("p_client_accept")
+  id           String @id @default(cuid())
+  jobId        String @map("job_id")
+  freelancerId String @map("freelancer_id")
+
+  // -------- Core similarity / gap ----------
+  similarityScore   Float?   @map("similarity_score")
+  budgetGap         Decimal? @map("budget_gap") @db.Decimal(12, 2)
+  timezoneGapHours  Int?     @map("timezone_gap_hours")
+  levelGap          Int?     @map("level_gap")
+
+  // -------- Job-side features ----------
+  /// Job yêu cầu level ở mức nào (ENTRY=1, INTERMEDIATE=2, EXPERT=3...)
+  jobExperienceLevelNum     Int?   @map("job_experience_level_num")
+  /// Số skill job yêu cầu (job_required_skill)
+  jobRequiredSkillCount     Int?   @map("job_required_skill_count")
+  /// Số câu screening question
+  jobScreeningQuestionCount Int?   @map("job_screening_question_count")
+  /// Snapshot từ job_stats
+  jobStatsApplies           Int?   @map("job_stats_applies")
+  jobStatsOffers            Int?   @map("job_stats_offers")
+  jobStatsAccepts           Int?   @map("job_stats_accepts")
+
+  // -------- Freelancer-side features ----------
+  /// Số skill freelancer có (freelancer_skill_selection)
+  freelancerSkillCount       Int?   @map("freelancer_skill_count")
+  /// Snapshot từ freelancer_stats
+  freelancerStatsApplies     Int?   @map("freelancer_stats_applies")
+  freelancerStatsOffers      Int?   @map("freelancer_stats_offers")
+  freelancerStatsAccepts     Int?   @map("freelancer_stats_accepts")
+  /// Tỉ lệ freelancer từng chấp nhận invite (0.0..1.0)
+  freelancerInviteAcceptRate Float? @map("freelancer_invite_accept_rate")
+  /// Region rút gọn (VD: "VN", "SEA", "EU", "US"...)
+  freelancerRegion           String? @map("freelancer_region") @db.VarChar(32)
+
+  // -------- Pairwise (job–freelancer) features ----------
+  /// Số skill trùng giữa job_required_skill & freelancer_skill_selection
+  skillOverlapCount      Int?   @map("skill_overlap_count")
+  /// skillOverlapCount / jobRequiredSkillCount
+  skillOverlapRatio      Float? @map("skill_overlap_ratio")
+  /// Hai bên đã từng làm với nhau chưa
+  hasPastCollaboration   Boolean? @map("has_past_collaboration")
+  /// Số contract hoàn thành giữa 2 bên
+  pastCollaborationCount Int?   @map("past_collaboration_count")
+  /// Freelancer đã từng view job này chưa
+  hasViewedJob           Boolean? @map("has_viewed_job")
+
+  // -------- Model predictions (do ML fill vào) ----------
+  pMatch            Float? @map("p_match")              // model p(job–freelancer match)
+  pFreelancerAccept Float? @map("p_freelancer_accept")  // model p(freelancer accept invite)
+  pClientAccept     Float? @map("p_client_accept")      // model p(client chọn freelancer)
+
+  // -------- Misc ----------
   lastInteractionAt DateTime? @map("last_interaction_at")
   metadata          Json?     @map("metadata")
   createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  updatedAt         DateTime  @updatedAt      @map("updated_at")
 
   job        JobPost    @relation(fields: [jobId], references: [id], onDelete: Cascade)
   freelancer Freelancer @relation(fields: [freelancerId], references: [userId], onDelete: Cascade)
@@ -978,6 +1019,7 @@ model MatchFeature {
   @@index([freelancerId], name: "idx_match_feature_freelancer")
   @@map("match_feature")
 }
+
 
 model Notification {
   id           String                @id @default(cuid())

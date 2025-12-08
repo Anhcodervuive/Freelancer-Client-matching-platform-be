@@ -82,11 +82,11 @@ const listJobInvitations = async (freelancerUserId: string, filters: JobInvitati
 
 	const andConditions: Prisma.JobInvitationWhereInput[] = []
 
-	if (!includeExpired) {
-		andConditions.push({
-			OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
-		})
-	}
+	// if (!includeExpired) {
+	// 	andConditions.push({
+	// 		OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+	// 	})
+	// }
 
 	if (filters.sentFrom || filters.sentTo) {
 		andConditions.push({
@@ -174,6 +174,8 @@ const listJobInvitations = async (freelancerUserId: string, filters: JobInvitati
 		}),
 		prismaClient.jobInvitation.count({ where })
 	])
+
+	console.log(andConditions.map(condition => JSON.stringify(condition, null, 2)))
 
 	return {
 		data: items.map(serializeInvitationForFreelancer),

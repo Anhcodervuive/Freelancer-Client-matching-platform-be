@@ -373,52 +373,210 @@ const listFreelancers = async (clientUserId: string, filters: ClientFreelancerFi
 		skillIds: filters.skillIds ? uniquePreserveOrder(filters.skillIds) : undefined
 	}
 
-	console.log(normalizedFilters)
-
-	const page = normalizedFilters.page
-	const limit = normalizedFilters.limit
+	const page = Math.max(1, normalizedFilters.page || 1)
+	const limit = Math.max(1, normalizedFilters.limit || 20)
 
 	const where = buildFreelancerWhere(normalizedFilters, clientUserId)
-	const [items, total] = await prismaClient.$transaction([
-		prismaClient.freelancer.findMany({
-			where,
-			include: freelancerSummaryInclude,
-			orderBy: { updatedAt: Prisma.SortOrder.desc },
-			skip: (page - 1) * limit,
-			take: limit
-		}),
-		prismaClient.freelancer.count({ where })
-	])
 
-	const freelancerIds = items.map(freelancer => freelancer.userId)
+	// nếu có jobId thì ưu tiên ranking dựa trên match_feature
+	const jobId = filters.jobId
 
-	const savedFreelancerIds = new Set(
-		freelancerIds.length > 0
-			? (
-					await prismaClient.clientSavedFreelancer.findMany({
+	// helper: safe numeric coercion
+	const toNum = (v: any) => {
+		const n = Number(v)
+		return Number.isFinite(n) ? n : 0
+	}
+
+	if (jobId) {
+		// 1) Lấy tất cả freelancer matching 'where' (không paginate) — để tính score chính xác rồi paginate ở memory
+		// Bỏ where ra vì đâu phải freelancer nào match với mình cũng sẽ có category & skill trùng 100% vì where này nếu k trùng 100% thì k được tính
+		const allFreelancers = await prismaClient.freelancer.findMany({
+			// where,
+			include: freelancerSummaryInclude, // vẫn lấy đủ fields cho serialization
+			orderBy: { updatedAt: Prisma.SortOrder.desc } // fallback order
+		})
+
+		const total = allFreelancers.length
+		const freelancerIds = allFreelancers.map(f => f.userId)
+
+		// 2) Lấy tất cả match_feature cho jobId + những freelancerIds
+		const matchFeatures = await prismaClient.matchFeature.findMany({
+			where: {
+				jobId,
+				freelancerId: { in: freelancerIds }
+			},
+			select: {
+				freelancerId: true,
+				pMatch: true,
+				pFreelancerAccept: true,
+				similarityScore: true,
+				skillOverlapRatio: true,
+				freelancerInviteAcceptRate: true,
+				freelancerRegion: true,
+				lastInteractionAt: true,
+				// lấy thêm những trường fallback bạn muốn dùng
+				skillOverlapCount: true,
+				freelancerSkillCount: true,
+				jobRequiredSkillCount: true
+			}
+		})
+
+		// map by freelancerId
+		const mfById = new Map<string, any>()
+		matchFeatures.forEach(mf => mfById.set(mf.freelancerId, mf))
+
+		// 3) build score for each freelancer
+		// Score logic (you can tweak weights):
+		// If pMatch exists -> base = pMatch
+		// else -> base = normalize(similarityScore) in [0..1]
+		// adjust by: skillOverlapRatio, freelancerInviteAcceptRate, pFreelancerAccept (if exists)
+		const computeScore = (f: any) => {
+			const mf = mfById.get(f.userId)
+
+			// fallback values
+			const similarity = toNum(mf?.similarityScore)
+			const skillOverlapRatio = toNum(mf?.skillOverlapRatio)
+			const inviteAcceptRate = toNum(mf?.freelancerInviteAcceptRate)
+			const pMatch = mf?.pMatch != null ? toNum(mf.pMatch) : null
+			const pFreelancerAccept = mf?.pFreelancerAccept != null ? toNum(mf.pFreelancerAccept) : null
+
+			// normalize similarityScore if it's not already 0..1
+			// assume similarityScore might be 0..100 or 0..1; try both:
+			let simNorm = similarity
+			if (simNorm > 1.0) {
+				// assume 0..100
+				simNorm = Math.min(1, simNorm / 100)
+			} else {
+				simNorm = Math.max(0, Math.min(1, simNorm))
+			}
+
+			// base score
+			let base = pMatch ?? 0.7 * simNorm + 0.3 * skillOverlapRatio // if no pMatch, combine sim + overlap
+
+			// adjust by invite accept rate
+			// if pFreelancerAccept exists, use as multiplier factor (gives more weight)
+			const acceptFactor = pFreelancerAccept != null ? 0.6 + 0.4 * pFreelancerAccept : 0.8 + 0.2 * inviteAcceptRate
+			// final score
+			let score = base * acceptFactor
+
+			// small boost if skillOverlapRatio present
+			score += 0.05 * skillOverlapRatio
+
+			// ensure in [0..1]
+			score = Math.max(0, Math.min(1, score))
+
+			return {
+				score,
+				details: {
+					pMatch,
+					pFreelancerAccept,
+					similarity: simNorm,
+					skillOverlapRatio,
+					inviteAcceptRate
+				}
+			}
+		}
+
+		// 4) compute score for all freelancers and sort
+		const scored = allFreelancers.map(f => {
+			const s = computeScore(f)
+			return { freelancer: f, score: s.score, details: s.details }
+		})
+
+		scored.sort((a, b) => b.score - a.score)
+
+		// 5) paginate in-memory
+		const start = (page - 1) * limit
+		const paged = scored.slice(start, start + limit)
+
+		// 6) savedFreelancerIds
+		const pagedFreelancerIds = paged.map(p => p.freelancer.userId)
+		const savedFreelancerRows =
+			pagedFreelancerIds.length > 0
+				? await prismaClient.clientSavedFreelancer.findMany({
 						where: {
 							clientId: clientUserId,
-							freelancerId: { in: freelancerIds }
+							freelancerId: { in: pagedFreelancerIds }
 						},
 						select: { freelancerId: true }
-					})
-			  ).map(relation => relation.freelancerId)
-			: []
-	)
+				  })
+				: []
+		const savedFreelancerIds = new Set(savedFreelancerRows.map(r => r.freelancerId))
 
-	const data = await Promise.all(
-		items.map(async (freelancer: any) => {
-			const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
-			const isSaved = savedFreelancerIds.has(freelancer.userId)
-			return serializeFreelancerSummary(freelancer, avatarUrl, { isSaved })
-		})
-	)
+		// 7) serialize results (preserve order)
+		const data = await Promise.all(
+			paged.map(async ({ freelancer, score, details }) => {
+				const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
+				const isSaved = savedFreelancerIds.has(freelancer.userId)
 
-	return {
-		data,
-		total,
-		page,
-		limit
+				// 1) gọi serialize trước, không gán recommendation trong cùng 1 biểu thức
+				const summary = serializeFreelancerSummary(freelancer, avatarUrl, { isSaved })
+
+				// 2) chuẩn bị object recommendation riêng
+				const recommendation = {
+					score,
+					...details
+				}
+
+				// 3) trả về object mới (không tham chiếu vòng)
+				// Nếu summary có type, bạn có thể làm intersection type để giữ typing
+				const payload = { ...summary, recommendation } as unknown as typeof summary & {
+					recommendation: typeof recommendation
+				}
+
+				return payload
+			})
+		)
+
+		return {
+			data,
+			total,
+			page,
+			limit
+		}
+	} else {
+		// fallback: no jobId — original behaviour (DB-side pagination)
+		const [items, total] = await prismaClient.$transaction([
+			prismaClient.freelancer.findMany({
+				where,
+				include: freelancerSummaryInclude,
+				orderBy: { updatedAt: Prisma.SortOrder.desc },
+				skip: (page - 1) * limit,
+				take: limit
+			}),
+			prismaClient.freelancer.count({ where })
+		])
+
+		const freelancerIds = items.map(freelancer => freelancer.userId)
+
+		const savedFreelancerIds = new Set(
+			freelancerIds.length > 0
+				? (
+						await prismaClient.clientSavedFreelancer.findMany({
+							where: {
+								clientId: clientUserId,
+								freelancerId: { in: freelancerIds }
+							},
+							select: { freelancerId: true }
+						})
+				  ).map(relation => relation.freelancerId)
+				: []
+		)
+
+		const data = await Promise.all(
+			items.map(async (freelancer: any) => {
+				const avatarUrl = await assetService.getProfileAvatarUrl(freelancer.userId)
+				const isSaved = savedFreelancerIds.has(freelancer.userId)
+				return serializeFreelancerSummary(freelancer, avatarUrl, { isSaved })
+			})
+		)
+
+		return {
+			data,
+			total,
+			page,
+			limit
+		}
 	}
 }
 

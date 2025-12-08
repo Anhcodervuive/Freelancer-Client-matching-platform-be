@@ -1,10 +1,10 @@
 import {
-        JobStatus,
-        JobVisibility,
-        MatchInteractionSource,
-        MatchInteractionType,
-        Prisma,
-        Role
+	JobStatus,
+	JobVisibility,
+	MatchInteractionSource,
+	MatchInteractionType,
+	Prisma,
+	Role
 } from '~/generated/prisma'
 
 import { prismaClient } from '~/config/prisma-client'
@@ -20,14 +20,14 @@ const PUBLIC_JOB_STATUS_LIST = [JobStatus.PUBLISHED] as const
 const PUBLIC_JOB_STATUSES = new Set<JobStatus>(PUBLIC_JOB_STATUS_LIST)
 
 const buildModerationSafeWhere = (): Prisma.JobPostWhereInput | undefined => {
-        const warningThreshold = JOB_MODERATION.WARNING_THRESHOLD
-        if (!(warningThreshold > 0)) {
-                return undefined
-        }
+	const warningThreshold = JOB_MODERATION.WARNING_THRESHOLD
+	if (!(warningThreshold > 0)) {
+		return undefined
+	}
 
-        return {
-                OR: [{ moderationScore: null }, { moderationScore: { lt: warningThreshold } }]
-        }
+	return {
+		OR: [{ moderationScore: null }, { moderationScore: { lt: warningThreshold } }]
+	}
 }
 
 const publicJobDetailInclude = Prisma.validator<Prisma.JobPostInclude>()({
@@ -308,18 +308,18 @@ const recordJobActivities = async (entries: readonly ActivityEntry[]) => {
 }
 
 const ensurePublicJobExists = async (jobId: string) => {
-        const moderationFilter = buildModerationSafeWhere()
+	const moderationFilter = buildModerationSafeWhere()
 
-        const job = await prismaClient.jobPost.findFirst({
-                where: {
-                        id: jobId,
-                        status: { in: [...PUBLIC_JOB_STATUS_LIST] },
-                        visibility: JobVisibility.PUBLIC,
-                        isDeleted: false,
-                        ...(moderationFilter ? { AND: moderationFilter } : {})
-                },
-                select: { id: true }
-        })
+	const job = await prismaClient.jobPost.findFirst({
+		where: {
+			id: jobId,
+			status: { in: [...PUBLIC_JOB_STATUS_LIST] },
+			visibility: JobVisibility.PUBLIC,
+			isDeleted: false,
+			...(moderationFilter ? { AND: moderationFilter } : {})
+		},
+		select: { id: true }
+	})
 
 	if (!job) {
 		throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
@@ -327,13 +327,13 @@ const ensurePublicJobExists = async (jobId: string) => {
 }
 
 const buildPublicJobWhere = (filters: FreelancerJobPostFilterInput, viewerId?: string): Prisma.JobPostWhereInput => {
-        const moderationFilter = buildModerationSafeWhere()
+	const moderationFilter = buildModerationSafeWhere()
 
-        const where: Prisma.JobPostWhereInput = {
-                status: { in: [...PUBLIC_JOB_STATUS_LIST] },
-                visibility: JobVisibility.PUBLIC,
-                isDeleted: false
-        }
+	const where: Prisma.JobPostWhereInput = {
+		status: { in: [...PUBLIC_JOB_STATUS_LIST] },
+		visibility: JobVisibility.PUBLIC,
+		isDeleted: false
+	}
 
 	if (filters.search) {
 		where.OR = [{ title: { contains: filters.search } }, { description: { contains: filters.search } }]
@@ -347,7 +347,7 @@ const buildPublicJobWhere = (filters: FreelancerJobPostFilterInput, viewerId?: s
 		where.specialty = { categoryId: filters.categoryId }
 	}
 
-        const andConditions: Prisma.JobPostWhereInput[] = moderationFilter ? [moderationFilter] : []
+	const andConditions: Prisma.JobPostWhereInput[] = moderationFilter ? [moderationFilter] : []
 
 	if (filters.paymentModes && filters.paymentModes.length > 0) {
 		where.paymentMode = filters.paymentModes.length === 1 ? filters.paymentModes[0]! : { in: filters.paymentModes }
@@ -406,9 +406,9 @@ const buildPublicJobWhere = (filters: FreelancerJobPostFilterInput, viewerId?: s
 		andConditions.push({ savedByFreelancers: { some: { freelancerId: viewerId } } })
 	}
 
-        if (andConditions.length > 0) {
-                where.AND = andConditions
-        }
+	if (andConditions.length > 0) {
+		where.AND = andConditions
+	}
 
 	return where
 }
@@ -426,9 +426,9 @@ const listJobPosts = async (filters: FreelancerJobPostFilterInput, viewerId?: st
 		throw new BadRequestException('createdFrom phải nhỏ hơn hoặc bằng createdTo', ErrorCode.PARAM_QUERY_ERROR)
 	}
 
-        if (filters.statuses && filters.statuses.some(status => !PUBLIC_JOB_STATUSES.has(status))) {
-                throw new BadRequestException('Chỉ có thể xem job post đã được public', ErrorCode.PARAM_QUERY_ERROR)
-        }
+	if (filters.statuses && filters.statuses.some(status => !PUBLIC_JOB_STATUSES.has(status))) {
+		throw new BadRequestException('Chỉ có thể xem job post đã được public', ErrorCode.PARAM_QUERY_ERROR)
+	}
 
 	const normalizedFilters: FreelancerJobPostFilterInput = {
 		...filters,
@@ -438,74 +438,207 @@ const listJobPosts = async (filters: FreelancerJobPostFilterInput, viewerId?: st
 		skillIds: filters.skillIds ? uniquePreserveOrder(filters.skillIds) : undefined
 	}
 
-	const where = buildPublicJobWhere(normalizedFilters, viewerId)
+	// buildPublicJobWhere vẫn dùng để áp các filter chung: location, budget, dates, statuses, text, v.v.
+	// IMPORTANT: chúng ta sẽ tách hai luồng:
+	// A) Nếu caller có truyền skillIds/categoryId/specialtyId → chúng ta *bắt buộc* lọc theo đó (DB where)
+	// B) Nếu không có các constraints chuyên môn → chọn jobs theo ML / match_feature (xếp hạng)
+	const hasSkillOrTaxonomyFilter =
+		(normalizedFilters.skillIds && normalizedFilters.skillIds.length > 0) ||
+		Boolean(normalizedFilters.categoryId) ||
+		Boolean(normalizedFilters.specialtyId)
 
+	// base where từ các filter cơ bản
+	const baseWhere = buildPublicJobWhere(normalizedFilters, viewerId)
+
+	// Khi có filter chuyên môn: thực hiện query thẳng theo where (luồng A)
+	if (hasSkillOrTaxonomyFilter) {
+		const orderBy: Prisma.JobPostOrderByWithRelationInput =
+			sortBy === 'oldest' ? { createdAt: Prisma.SortOrder.asc } : { createdAt: Prisma.SortOrder.desc }
+
+		const [items, total] = await prismaClient.$transaction([
+			prismaClient.jobPost.findMany({
+				where: baseWhere,
+				include: publicJobSummaryInclude,
+				orderBy,
+				skip: (page - 1) * limit,
+				take: limit
+			}),
+			prismaClient.jobPost.count({ where: baseWhere })
+		])
+
+		const jobIds = items.map(i => i.id)
+		const savedJobIds =
+			viewerId && jobIds.length > 0
+				? new Set(
+						(
+							await prismaClient.freelancerSavedJob.findMany({
+								where: { freelancerId: viewerId, jobPostId: { in: jobIds } },
+								select: { jobPostId: true }
+							})
+						).map(r => r.jobPostId)
+				  )
+				: new Set<string>()
+
+		// record activities (giữ nguyên)
+		await recordJobActivities(
+			jobIds.map(jobId => ({
+				jobId,
+				actorId: viewerId ?? null,
+				actorRole: viewerId ? Role.FREELANCER : null,
+				action: 'FREELANCER_VIEW_JOB_SUMMARY',
+				metadata: { scope: 'LIST', page, limit, filter_mode: 'taxonomy' }
+			}))
+		)
+
+		const data = await Promise.all(
+			items.map(async job => {
+				const isSaved = savedJobIds.has(job.id)
+				const summary = serializeJobSummary(job, { isSaved })
+				// add recommendation metadata to keep UI consistent; source = 'filter'
+				return { ...summary, recommendation: { source: 'filter', score: null } }
+			})
+		)
+
+		return { data, total, page, limit }
+	}
+
+	// Nếu không có filter chuyên môn → luồng ML (B)
+	// Step 1: lấy candidate jobs từ DB theo baseWhere BUT tăng limit (hăm hụt)
+	//  - Lý do: nếu chỉ lấy page-size jobs rồi sắp theo ML, có thể bỏ qua job tốt ở page 2.
+	//  - Strategy: lấy top N (page*limit hoặc cap), rồi sắp xếp bằng ML trên client side.
+	const fetchCap = Math.max(limit * 3, 200) // bạn có thể tune: lấy nhiều hơn để ML có độ bao phủ
 	const orderBy: Prisma.JobPostOrderByWithRelationInput =
 		sortBy === 'oldest' ? { createdAt: Prisma.SortOrder.asc } : { createdAt: Prisma.SortOrder.desc }
 
-	const [items, total] = await prismaClient.$transaction([
-		prismaClient.jobPost.findMany({
-			where,
-			include: publicJobSummaryInclude,
-			orderBy,
-			skip: (page - 1) * limit,
-			take: limit
-		}),
-		prismaClient.jobPost.count({ where })
-	])
+	// Lấy candidate set (không paginate ngay) → sắp xếp/score bên server bằng ML
+	const candidates = await prismaClient.jobPost.findMany({
+		where: baseWhere,
+		include: publicJobSummaryInclude,
+		orderBy,
+		take: fetchCap
+	})
 
-	const jobIds = uniquePreserveOrder(items.map(item => item.id))
+	const totalCandidates = candidates.length
+	const candidateJobIds = candidates.map(j => j.id)
 
-	const savedJobIds =
-		viewerId && jobIds.length > 0
+	// lấy saved flags
+	const savedSet =
+		viewerId && candidateJobIds.length > 0
 			? new Set(
 					(
 						await prismaClient.freelancerSavedJob.findMany({
-							where: {
-								freelancerId: viewerId,
-								jobPostId: { in: jobIds }
-							},
+							where: { freelancerId: viewerId, jobPostId: { in: candidateJobIds } },
 							select: { jobPostId: true }
 						})
-					).map(entry => entry.jobPostId)
+					).map(r => r.jobPostId)
 			  )
 			: new Set<string>()
 
+	// Lấy match_feature cho pairs (jobId x viewerId)
+	let matchFeatureMap: Record<string, any> = {}
+	if (viewerId && candidateJobIds.length > 0) {
+		const feats = await prismaClient.matchFeature.findMany({
+			where: { jobId: { in: candidateJobIds }, freelancerId: viewerId },
+			select: {
+				jobId: true,
+				pMatch: true,
+				pFreelancerAccept: true,
+				similarityScore: true,
+				freelancerInviteAcceptRate: true,
+				hasPastCollaboration: true,
+				skillOverlapRatio: true
+			}
+		})
+		for (const f of feats) matchFeatureMap[f.jobId] = f
+	}
+
+	// Lấy freelancerStats fallback nếu cần
+	const freelancerStats = viewerId
+		? await prismaClient.freelancerStats.findUnique({ where: { freelancerId: viewerId } })
+		: null
+
+	const clamp01 = (v: number | null | undefined) =>
+		v === null || v === undefined || Number.isNaN(v) ? 0 : Math.max(0, Math.min(1, v))
+	const computeFallbackScore = (mf: any | undefined, job: any) => {
+		const sim = clamp01(mf?.similarityScore ?? job.metadata?.similarity_score ?? 0)
+		let acceptRate = 0
+		if (mf?.freelancerInviteAcceptRate != null) acceptRate = clamp01(mf.freelancerInviteAcceptRate)
+		else if (freelancerStats) {
+			const invites = Math.max(1, freelancerStats.invites ?? 0)
+			const accepts = freelancerStats.accepts ?? 0
+			acceptRate = clamp01(accepts / invites)
+		}
+		const pastBoost = mf?.hasPastCollaboration ? 0.05 : 0
+		// weights: 0.7 sim, 0.25 accept, 0.05 past
+		return clamp01(0.7 * sim + 0.25 * acceptRate + pastBoost)
+	}
+
+	// Build rows with unified score: prefer pMatch if available else fallback
+	type Row = { job: any; unifiedScore: number; source: 'p_match' | 'fallback' | 'none'; mf?: any }
+	const rows: Row[] = candidates.map(job => {
+		const mf = matchFeatureMap[job.id]
+		if (mf && mf.pMatch != null) return { job, unifiedScore: clamp01(mf.pMatch), source: 'p_match', mf }
+		const fallback = computeFallbackScore(mf, job)
+		return { job, unifiedScore: fallback, source: 'fallback', mf }
+	})
+
+	// sort desc by unifiedScore, tie-breaker by createdAt (or other)
+	rows.sort((a, b) => {
+		if (b.unifiedScore !== a.unifiedScore) return b.unifiedScore - a.unifiedScore
+		// newer first
+		return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime()
+	})
+
+	// paginate the sorted rows (apply page/limit)
+	const start = (page - 1) * limit
+	const pageRows = rows.slice(start, start + limit)
+
+	// record activities
 	await recordJobActivities(
-		jobIds.map(jobId => ({
-			jobId,
+		rows.slice(0, Math.min(50, rows.length)).map(r => ({
+			jobId: r.job.id,
 			actorId: viewerId ?? null,
 			actorRole: viewerId ? Role.FREELANCER : null,
 			action: 'FREELANCER_VIEW_JOB_SUMMARY',
-			metadata: {
-				scope: 'LIST',
-				page,
-				limit
-			}
+			metadata: { scope: 'LIST', page, limit, mlUsed: true }
 		}))
 	)
 
-	return {
-		data: items.map(job => serializeJobSummary(job, { isSaved: savedJobIds.has(job.id) })),
-		total,
-		page,
-		limit
-	}
+	// serialize and return with recommendation meta
+	const data = await Promise.all(
+		pageRows.map(async ({ job, unifiedScore, source, mf }) => {
+			const isSaved = savedSet.has(job.id)
+			const summary = serializeJobSummary(job, { isSaved })
+			const recommendation = {
+				source,
+				score: unifiedScore,
+				diagnostics: {
+					pMatch: mf?.pMatch ?? null,
+					similarityScore: mf?.similarityScore ?? job.metadata?.similarity_score ?? null,
+					pFreelancerAccept: mf?.pFreelancerAccept ?? null
+				}
+			}
+			return { ...summary, recommendation }
+		})
+	)
+
+	const total = totalCandidates // total of candidate set (we used cap; if you want full count use prisma count(baseWhere) separately)
+	return { data, total, page, limit }
 }
 
 const getJobPostDetail = async (jobId: string, viewerId?: string) => {
-        const moderationFilter = buildModerationSafeWhere()
+	const moderationFilter = buildModerationSafeWhere()
 
-        const job = await prismaClient.jobPost.findFirst({
-                where: {
-                        id: jobId,
-                        status: { in: [...PUBLIC_JOB_STATUS_LIST] },
-                        visibility: JobVisibility.PUBLIC,
-                        isDeleted: false,
-                        ...(moderationFilter ? { AND: moderationFilter } : {})
-                },
-                include: publicJobDetailInclude
-        })
+	const job = await prismaClient.jobPost.findFirst({
+		where: {
+			id: jobId,
+			status: { in: [...PUBLIC_JOB_STATUS_LIST] },
+			visibility: JobVisibility.PUBLIC,
+			isDeleted: false,
+			...(moderationFilter ? { AND: moderationFilter } : {})
+		},
+		include: publicJobDetailInclude
+	})
 
 	if (!job) {
 		throw new NotFoundException('Job post không tồn tại', ErrorCode.ITEM_NOT_FOUND)
