@@ -525,6 +525,54 @@ async function seedBulkMatchTimelines() {
   const interactions: Prisma.MatchInteractionCreateManyInput[] = []
   const invitationMap = new Map<string, InvitationSeed>()
   const matchInsights = new Map<string, { overlap: number; score: number; matchedSkills: string[] }>()
+  const proposalSeeds: {
+    pairKey: string
+    jobId: string
+    clientId: string
+    freelancerId: string
+    status: JobProposalStatus
+    submittedAt: Date
+    coverLetter: string
+    bidAmount: Prisma.Decimal
+    invitationKey?: string
+    needsInterviewThread?: boolean
+  }[] = []
+  const offerSeeds: {
+    pairKey: string
+    jobId: string
+    clientId: string
+    freelancerId: string
+    proposalKey: string
+    status: JobOfferStatus
+    sentAt: Date
+    respondedAt: Date
+    expireAt: Date
+    title: string
+    message: string
+    amount: Prisma.Decimal
+    invitationKey?: string
+  }[] = []
+  const contractSeeds: {
+    pairKey: string
+    jobId: string
+    clientId: string
+    freelancerId: string
+    proposalKey: string
+    offerKey: string
+    title: string
+    status: ContractStatus
+    signatureStatus: ContractSignatureStatus
+    signatureCompletedAt: Date
+  }[] = []
+  const chatSeeds: {
+    pairKey: string
+    subject: string
+    jobId: string
+    jobTitle: string
+    clientId: string
+    freelancerId: string
+    anchor: Date
+  }[] = []
   const jobIdsToReset = generatedJobs.map(job => job.id)
 
   const perJobTarget = Math.max(8, Math.ceil(targetInvitations / generatedJobs.length))
@@ -575,10 +623,17 @@ async function seedBulkMatchTimelines() {
 
     const isAccepted = acceptedKeys.has(pairKey)
     const declineChance = Math.max(0.3, Math.min(0.82, 0.62 - score * 0.25 + statusBias * 0.15))
+    const applicationTilt = hashStringToFloat(`${pairKey}:application`) + score * 0.3
 
     const defaultFlow = flows[0] ?? { name: 'invitation_accepted_to_hire', steps: [] }
     let flow: (typeof flows)[number] = defaultFlow
-    if (isAccepted) {
+    if (applicationTilt > 0.78) {
+      flow = flows.find(item => item.name === 'offer_declined_after_agreeing') ?? flows[5] ?? defaultFlow
+    } else if (applicationTilt > 0.62) {
+      flow = flows.find(item => item.name === 'application_interview_no_offer') ?? flows[4] ?? defaultFlow
+    } else if (applicationTilt > 0.48) {
+      flow = flows.find(item => item.name === 'application_declined') ?? flows[3] ?? defaultFlow
+    } else if (isAccepted) {
       flow = flows.find(item => item.name === 'invitation_accepted_to_hire') ?? flow
     } else if (statusBias < declineChance) {
       flow = flows.find(item => item.name === 'invitation_declined') ?? flows[1] ?? defaultFlow
@@ -659,9 +714,96 @@ async function seedBulkMatchTimelines() {
 
       occurredAt = new Date(occurredAt.getTime() + 5 * 60 * 1000)
     }
+
+    const anchorDate = new Date(Date.UTC(2024, 0, 5, (index % 18) + 2, 15))
+    const matchDetail = matchInsights.get(pairKey)
+    const baseCoverLetter = matchDetail?.matchedSkills.length
+      ? `I have shipped ${matchDetail.matchedSkills.slice(0, 2).join(', ')} projects similar to ${pair.job.title}. Ready to start immediately.`
+      : `Experienced adjacent to ${pair.job.title}; happy to propose a pragmatic solution.`
+
+    if (flow.name === 'invitation_accepted_to_hire' || flow.name.startsWith('application_') || flow.name.startsWith('offer_')) {
+      const status: JobProposalStatus = flow.name === 'application_declined'
+        ? JobProposalStatus.DECLINED
+        : flow.name === 'application_interview_no_offer'
+          ? JobProposalStatus.INTERVIEWING
+          : flow.name === 'offer_declined_after_agreeing'
+            ? JobProposalStatus.SHORTLISTED
+            : JobProposalStatus.HIRED
+
+      proposalSeeds.push({
+        pairKey,
+        jobId: pair.job.id,
+        clientId: pair.job.clientId,
+        freelancerId: pair.freelancer.id,
+        status,
+        submittedAt: anchorDate,
+        coverLetter: baseCoverLetter,
+        bidAmount: new Prisma.Decimal(4000 + overlap * 800 + Math.round(score * 2500)),
+        invitationKey: ['invitation_accepted_to_hire', 'invitation_declined', 'invitation_no_response'].includes(flow.name)
+          ? pairKey
+          : undefined,
+        needsInterviewThread: flow.steps.some(step => step.type === MatchInteractionType.PROPOSAL_INTERVIEWING)
+      })
+    }
+
+    if (flow.name === 'invitation_accepted_to_hire' || flow.name === 'offer_declined_after_agreeing') {
+      const accepted = flow.name === 'invitation_accepted_to_hire'
+      const respondedAt = new Date(anchorDate.getTime() + 36 * 60 * 60 * 1000)
+      const expireAt = new Date(anchorDate.getTime() + 4 * 24 * 60 * 60 * 1000)
+      const title = `${pair.job.title} offer`
+
+      offerSeeds.push({
+        pairKey,
+        jobId: pair.job.id,
+        clientId: pair.job.clientId,
+        freelancerId: pair.freelancer.id,
+        proposalKey: pairKey,
+        status: accepted ? JobOfferStatus.ACCEPTED : JobOfferStatus.DECLINED,
+        sentAt: new Date(anchorDate.getTime() + 24 * 60 * 60 * 1000),
+        respondedAt,
+        expireAt,
+        title,
+        message: accepted
+          ? `We would like you to lead ${pair.job.title}. This aligns well with your ${matchDetail?.matchedSkills.join(', ') ?? 'experience'}.`
+          : `Offer for ${pair.job.title} with flexible scope; please confirm availability.`,
+        amount: new Prisma.Decimal(5000 + overlap * 1200 + Math.round(statusBias * 1500)),
+        invitationKey: pairKey
+      })
+    }
+
+    if (flow.name === 'invitation_accepted_to_hire') {
+      contractSeeds.push({
+        pairKey,
+        jobId: pair.job.id,
+        clientId: pair.job.clientId,
+        freelancerId: pair.freelancer.id,
+        proposalKey: pairKey,
+        offerKey: pairKey,
+        title: `${pair.job.title} delivery contract`,
+        status: ContractStatus.ACTIVE,
+        signatureStatus: ContractSignatureStatus.COMPLETED,
+        signatureCompletedAt: new Date(anchorDate.getTime() + 38 * 60 * 60 * 1000)
+      })
+    }
+
+    if (flow.steps.some(step => step.type === MatchInteractionType.PROPOSAL_INTERVIEWING)) {
+      chatSeeds.push({
+        pairKey,
+        subject: `${pair.job.title} interview thread`,
+        jobTitle: pair.job.title,
+        jobId: pair.job.id,
+        clientId: pair.job.clientId,
+        freelancerId: pair.freelancer.id,
+        anchor: anchorDate
+      })
+    }
   }
 
   if (jobIdsToReset.length) {
+    await prisma.contract.deleteMany({ where: { jobPostId: { in: jobIdsToReset } } })
+    await prisma.jobOffer.deleteMany({ where: { jobId: { in: jobIdsToReset } } })
+    await prisma.jobProposal.deleteMany({ where: { jobId: { in: jobIdsToReset } } })
+    await prisma.chatThread.deleteMany({ where: { jobPostId: { in: jobIdsToReset }, type: ChatThreadType.PROJECT } })
     await prisma.jobInvitation.deleteMany({ where: { jobId: { in: jobIdsToReset } } })
     await prisma.matchInteraction.deleteMany({ where: { jobId: { in: jobIdsToReset } } })
   }
@@ -685,6 +827,159 @@ async function seedBulkMatchTimelines() {
 
   if (interactions.length) {
     await prisma.matchInteraction.createMany({ data: interactions })
+  }
+
+  if (proposalSeeds.length) {
+    const invitations = await prisma.jobInvitation.findMany({
+      where: { jobId: { in: jobIdsToReset } },
+      select: { id: true, jobId: true, freelancerId: true }
+    })
+    const invitationLookup = new Map<string, string>()
+    for (const invitation of invitations) {
+      invitationLookup.set(`${invitation.jobId}:${invitation.freelancerId}`, invitation.id)
+    }
+
+    for (const seed of proposalSeeds) {
+      const proposal = await prisma.jobProposal.upsert({
+        where: { jobId_freelancerId: { jobId: seed.jobId, freelancerId: seed.freelancerId } },
+        update: {
+          status: seed.status,
+          coverLetter: seed.coverLetter,
+          bidAmount: seed.bidAmount,
+          bidCurrency: 'USD',
+          invitationId: seed.invitationKey ? invitationLookup.get(seed.invitationKey) ?? null : null
+        },
+        create: {
+          jobId: seed.jobId,
+          freelancerId: seed.freelancerId,
+          status: seed.status,
+          submittedAt: seed.submittedAt,
+          coverLetter: seed.coverLetter,
+          bidAmount: seed.bidAmount,
+          bidCurrency: 'USD',
+          invitationId: seed.invitationKey ? invitationLookup.get(seed.invitationKey) ?? null : null
+        }
+      })
+
+      const offerPlan = offerSeeds.find(item => item.pairKey === seed.pairKey)
+      if (offerPlan) {
+        const offer = await prisma.jobOffer.upsert({
+          where: { jobId_freelancerId: { jobId: offerPlan.jobId, freelancerId: offerPlan.freelancerId } },
+          update: {
+            proposalId: proposal.id,
+            status: offerPlan.status,
+            title: offerPlan.title,
+            message: offerPlan.message,
+            currency: 'USD',
+            fixedPrice: offerPlan.amount,
+            sentAt: offerPlan.sentAt,
+            respondedAt: offerPlan.respondedAt,
+            expireAt: offerPlan.expireAt,
+            invitationId: offerPlan.invitationKey ? invitationLookup.get(offerPlan.invitationKey) ?? null : null
+          },
+          create: {
+            jobId: offerPlan.jobId,
+            clientId: offerPlan.clientId,
+            freelancerId: offerPlan.freelancerId,
+            proposalId: proposal.id,
+            status: offerPlan.status,
+            type: JobOfferType.FIXED_PRICE,
+            title: offerPlan.title,
+            message: offerPlan.message,
+            currency: 'USD',
+            fixedPrice: offerPlan.amount,
+            sentAt: offerPlan.sentAt,
+            respondedAt: offerPlan.respondedAt,
+            expireAt: offerPlan.expireAt,
+            invitationId: offerPlan.invitationKey ? invitationLookup.get(offerPlan.invitationKey) ?? null : null
+          }
+        })
+
+        const contractPlan = contractSeeds.find(item => item.pairKey === seed.pairKey)
+        if (contractPlan) {
+          await prisma.contract.upsert({
+            where: { proposalId: proposal.id },
+            update: {
+              jobPostId: contractPlan.jobId,
+              offerId: offer.id,
+              title: contractPlan.title,
+              currency: 'USD',
+              status: contractPlan.status,
+              signatureStatus: contractPlan.signatureStatus,
+              signatureCompletedAt: contractPlan.signatureCompletedAt
+            },
+            create: {
+              jobPostId: contractPlan.jobId,
+              clientId: contractPlan.clientId,
+              freelancerId: contractPlan.freelancerId,
+              proposalId: proposal.id,
+              offerId: offer.id,
+              title: contractPlan.title,
+              currency: 'USD',
+              status: contractPlan.status,
+              signatureStatus: contractPlan.signatureStatus,
+              signatureCompletedAt: contractPlan.signatureCompletedAt
+            }
+          })
+        }
+      }
+
+      const chatPlan = chatSeeds.find(item => item.pairKey === seed.pairKey)
+      if (chatPlan && seed.needsInterviewThread) {
+        const thread = await prisma.chatThread.create({
+          data: {
+            type: ChatThreadType.PROJECT,
+            jobPostId: chatPlan.jobId,
+            subject: chatPlan.subject,
+            participants: {
+              create: [
+                {
+                  userId: chatPlan.clientId,
+                  role: Role.CLIENT,
+                  joinedAt: chatPlan.anchor
+                },
+                {
+                  userId: chatPlan.freelancerId,
+                  role: Role.FREELANCER,
+                  joinedAt: new Date(chatPlan.anchor.getTime() + 5 * 60 * 1000)
+                }
+              ]
+            },
+            messages: {
+              create: [
+                {
+                  type: ChatMessageType.USER,
+                  senderId: chatPlan.clientId,
+                  senderRole: Role.CLIENT,
+                  sentAt: new Date(chatPlan.anchor.getTime() + 60 * 60 * 1000),
+                  body: `Hi, can we discuss ${matchInsights.get(seed.pairKey)?.matchedSkills.join(', ') ?? 'the scope'} for ${chatPlan.jobTitle}?`
+                },
+                {
+                  type: ChatMessageType.USER,
+                  senderId: chatPlan.freelancerId,
+                  senderRole: Role.FREELANCER,
+                  sentAt: new Date(chatPlan.anchor.getTime() + 90 * 60 * 1000),
+                  body: 'Yes, happy to walk through my approach and timeline.'
+                }
+              ]
+            }
+          }
+        })
+
+        const latestMessage = await prisma.chatMessage.findFirst({
+          where: { threadId: thread.id },
+          orderBy: { sentAt: 'desc' },
+          select: { id: true, sentAt: true }
+        })
+
+        if (latestMessage) {
+          await prisma.chatParticipant.updateMany({
+            where: { threadId: thread.id },
+            data: { lastReadMessageId: latestMessage.id, lastReadAt: latestMessage.sentAt }
+          })
+        }
+      }
+    }
   }
 }
 
