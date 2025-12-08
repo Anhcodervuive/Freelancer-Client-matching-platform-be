@@ -730,6 +730,10 @@ async function seedBulkMatchTimelines() {
             ? JobProposalStatus.SHORTLISTED
             : JobProposalStatus.HIRED
 
+      const invitationKey = ['invitation_accepted_to_hire', 'invitation_declined', 'invitation_no_response'].includes(flow.name)
+        ? pairKey
+        : undefined
+
       proposalSeeds.push({
         pairKey,
         jobId: pair.job.id,
@@ -739,10 +743,10 @@ async function seedBulkMatchTimelines() {
         submittedAt: anchorDate,
         coverLetter: baseCoverLetter,
         bidAmount: new Prisma.Decimal(4000 + overlap * 800 + Math.round(score * 2500)),
-        invitationKey: ['invitation_accepted_to_hire', 'invitation_declined', 'invitation_no_response'].includes(flow.name)
-          ? pairKey
-          : undefined,
-        needsInterviewThread: flow.steps.some(step => step.type === MatchInteractionType.PROPOSAL_INTERVIEWING)
+        ...(invitationKey ? { invitationKey } : {}),
+        ...(flow.steps.some(step => step.type === MatchInteractionType.PROPOSAL_INTERVIEWING)
+          ? { needsInterviewThread: true }
+          : {})
       })
     }
 
@@ -863,21 +867,8 @@ async function seedBulkMatchTimelines() {
 
       const offerPlan = offerSeeds.find(item => item.pairKey === seed.pairKey)
       if (offerPlan) {
-        const offer = await prisma.jobOffer.upsert({
-          where: { jobId_freelancerId: { jobId: offerPlan.jobId, freelancerId: offerPlan.freelancerId } },
-          update: {
-            proposalId: proposal.id,
-            status: offerPlan.status,
-            title: offerPlan.title,
-            message: offerPlan.message,
-            currency: 'USD',
-            fixedPrice: offerPlan.amount,
-            sentAt: offerPlan.sentAt,
-            respondedAt: offerPlan.respondedAt,
-            expireAt: offerPlan.expireAt,
-            invitationId: offerPlan.invitationKey ? invitationLookup.get(offerPlan.invitationKey) ?? null : null
-          },
-          create: {
+        const offer = await prisma.jobOffer.create({
+          data: {
             jobId: offerPlan.jobId,
             clientId: offerPlan.clientId,
             freelancerId: offerPlan.freelancerId,
