@@ -1,0 +1,49 @@
+[
+	{
+		"clientEmail": "linh.tran@client.test",
+		"specialtyId": "specialty_fullstack_dev",
+		"title": "Build B2B fintech account onboarding platform",
+		"description": "Design a multi-step onboarding for enterprise customers with KYC/AML, e-signature, and an internal approval dashboard. The system must provide full audit logging, be multi-tenant, and extend to multiple partner banks.",
+		"paymentMode": "FIXED_MILESTONE",
+		"budgetAmount": 25000,
+		"budgetCurrency": "USD",
+		"duration": "THREE_TO_SIX_MONTHS",
+		"experienceLevel": "EXPERT",
+		"locationType": "HYBRID",
+		"visibility": "PUBLIC",
+		"status": "PUBLISHED",
+		"preferredLocations": [
+			{ "country": "Vietnam", "timeZone": "GMT+7" },
+			{ "country": "Singapore", "timeZone": "GMT+8" }
+		],
+		"languages": [
+			{ "code": "en", "proficiency": "FLUENT" },
+			{ "code": "vi", "proficiency": "CONVERSATIONAL" }
+		],
+		"requiredSkills": ["skill_typescript", "skill_nodejs", "skill_react", "skill_graphql", "skill_postgresql"],
+		"screeningQuestions": [
+			{ "question": "Have you implemented eKYC/AML flows in Southeast Asia markets before?", "isRequired": true },
+			{ "question": "Describe how you design audit trails and fine-grained access controls.", "isRequired": true }
+		],
+		"customTerms": { "timezoneOverlapHours": 4, "securityPolicies": ["SOC2", "MFA-required"] }
+	},
+	{
+		"clientEmail": "minh.nguyen@client.test",
+		"specialtyId": "specialty_uiux",
+		"title": "Redesign E-commerce Checkout Flow",
+		"description": "We need a UX expert to redesign our checkout flow to reduce cart abandonment. Focus on mobile responsiveness and simplifying the payment steps.",
+		"paymentMode": "FIXED_SINGLE",
+		"budgetAmount": 5000,
+		"budgetCurrency": "USD",
+		"duration": "ONE_TO_THREE_MONTHS",
+		"experienceLevel": "INTERMEDIATE",
+		"locationType": "REMOTE",
+		"visibility": "PUBLIC",
+		"status": "PUBLISHED",
+		"preferredLocations": null,
+		"languages": [{ "code": "en", "proficiency": "FLUENT" }],
+		"requiredSkills": ["skill_figma", "skill_design_systems", "skill_html", "skill_css"],
+		"screeningQuestions": [{ "question": "Share your portfolio related to e-commerce.", "isRequired": true }],
+		"customTerms": { "tools": "Figma" }
+	}
+]
