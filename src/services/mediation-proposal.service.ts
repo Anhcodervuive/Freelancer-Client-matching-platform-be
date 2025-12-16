@@ -22,6 +22,7 @@ import type {
 	CreateMediationProposalInput,
 	RespondToMediationProposalInput
 } from '~/schema/mediation-evidence.schema'
+import mediationPaymentService, { type MediationPaymentResult } from './mediation-payment.service'
 
 // Include object for queries
 const mediationProposalInclude = {
@@ -357,17 +358,49 @@ const respondToMediationProposal = async (
 				}
 			})
 
-			// Update escrow status
+			// Update escrow status - keep as disputed until payments are processed
 			await tx.escrow.update({
 				where: { id: escrowId },
 				data: {
-					status: EscrowStatus.DISPUTED // Keep as disputed until payments are processed
+					status: EscrowStatus.DISPUTED
 				}
 			})
 		}
 
 		return updated
 	})
+
+	// Process payment if both parties accepted
+	if (updatedProposal.status === MediationProposalStatus.ACCEPTED_BY_ALL) {
+		try {
+			console.log('Processing mediation payment for proposal:', proposalId)
+			
+			// Process payment asynchronously to avoid blocking the response
+			setImmediate(async () => {
+				try {
+					const paymentResult = await mediationPaymentService.processMediationPayment({
+						proposalId: updatedProposal.id,
+						releaseAmount: Number(updatedProposal.releaseAmount),
+						refundAmount: Number(updatedProposal.refundAmount),
+						currency: updatedProposal.dispute.escrow.currency
+					})
+
+					if (paymentResult.success) {
+						console.log('Mediation payment processed successfully:', paymentResult)
+						// TODO: Send success notifications
+					} else {
+						console.error('Mediation payment failed:', paymentResult.errors)
+						// TODO: Send failure notifications and allow retry
+					}
+				} catch (error) {
+					console.error('Error processing mediation payment:', error)
+					// TODO: Send error notifications
+				}
+			})
+		} catch (error) {
+			console.error('Error initiating mediation payment:', error)
+		}
+	}
 
 	// TODO: Send notifications
 	// await sendMediationResponseNotifications(updatedProposal, userId, input.response)
@@ -482,7 +515,10 @@ const mediationProposalService = {
 	respondToMediationProposal,
 	getMediationProposal,
 	listMediationProposals,
-	deleteMediationProposal
+	deleteMediationProposal,
+	// Payment-related methods
+	getMediationPaymentStatus: mediationPaymentService.getMediationPaymentStatus,
+	retryMediationPayment: mediationPaymentService.retryMediationPayment
 }
 
 export default mediationProposalService

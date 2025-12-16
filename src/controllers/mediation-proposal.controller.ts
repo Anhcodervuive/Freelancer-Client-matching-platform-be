@@ -119,3 +119,32 @@ export const deleteMediationProposal = async (req: Request, res: Response) => {
 
 	return res.json(result)
 }
+
+export const getMediationPaymentStatus = async (req: Request, res: Response) => {
+	const user = req.user
+	if (!user) {
+		throw new BadRequestException('User not authenticated', ErrorCode.UNAUTHORIED)
+	}
+
+	const { proposalId } = req.params
+	if (!proposalId) {
+		throw new BadRequestException('Missing proposalId', ErrorCode.PARAM_QUERY_ERROR)
+	}
+
+	const result = await mediationProposalService.getMediationPaymentStatus(proposalId)
+
+	return res.json({ data: result })
+}
+
+export const retryMediationPayment = async (req: Request, res: Response) => {
+	const admin = ensureAdminUser(req)
+
+	const { proposalId } = req.params
+	if (!proposalId) {
+		throw new BadRequestException('Missing proposalId', ErrorCode.PARAM_QUERY_ERROR)
+	}
+
+	const result = await mediationProposalService.retryMediationPayment(proposalId)
+
+	return res.json({ data: result })
+}
