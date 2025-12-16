@@ -34,6 +34,8 @@ import freelancerPayoutRoute from './freelancer-payout.route'
 import platformTermsRoute from './platform-terms.route'
 import adminPlatformTermsRoute from './admin-platform-terms.route'
 import webhookRoute from './webhook.route'
+import mediationEvidenceRoute from './mediation-evidence.route'
+import mediationProposalRoute from './mediation-proposal.route'
 
 const rootRouter: Router = Router()
 
@@ -69,5 +71,7 @@ rootRouter.use('/admin/users', adminUserRoute)
 rootRouter.use('/admin/job-posts', adminJobPostRoute)
 rootRouter.use('/admin/platform-terms', adminPlatformTermsRoute)
 rootRouter.use('/arbitrator/disputes', arbitratorDisputeRoute)
+rootRouter.use('/mediation-evidence', mediationEvidenceRoute)
+rootRouter.use('/mediation-proposal', mediationProposalRoute)
 
 export default rootRouter

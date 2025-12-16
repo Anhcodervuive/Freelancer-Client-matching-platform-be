@@ -54,6 +54,37 @@ enum ArbitrationEvidenceSourceType {
   EXTERNAL_URL
 }
 
+enum MediationEvidenceSourceType {
+  MILESTONE_ATTACHMENT
+  CHAT_ATTACHMENT
+  ASSET
+  EXTERNAL_URL
+  DOCUMENT_UPLOAD
+  SCREENSHOT
+  CONTRACT_DOCUMENT
+}
+
+enum MediationEvidenceStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+enum MediationProposalStatus {
+  PENDING
+  ACCEPTED_BY_ALL
+  REJECTED
+  EXPIRED
+}
+
+enum MediationResponse {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 model User {
   id       String  @id @default(uuid())
   email    String  @unique
@@ -98,6 +129,13 @@ model User {
   bansAuthored                   UserBan[]                       @relation("UserBanAdmin")
   bansLifted                     UserBan[]                       @relation("UserBanLiftedBy")
   platformTermsAuthored          PlatformTerms[]                 @relation("PlatformTermsCreatedBy")
+  
+  // Mediation evidence relations
+  mediationEvidenceSubmissions     MediationEvidenceSubmission[] @relation("MediationEvidenceSubmittedBy")
+  mediationEvidenceReviews         MediationEvidenceSubmission[] @relation("MediationEvidenceReviewedBy")
+  mediationEvidenceComments        MediationEvidenceComment[]    @relation("MediationEvidenceCommentAuthor")
+  mediationEvidenceTemplatesCreated MediationEvidenceTemplate[]  @relation("MediationEvidenceTemplateCreatedBy")
+  mediationProposalsCreated        MediationProposal[]           @relation("MediationProposalProposedBy")
   contractAcceptanceLogs         ContractAcceptanceLog[]         @relation("ContractAcceptanceActor")
 
   @@index([email])
@@ -467,6 +505,7 @@ model Asset {
   milestoneResources             MilestoneResource[]
   arbitrationEvidenceItems       ArbitrationEvidenceItem[]       @relation("ArbitrationEvidenceAsset")
   arbitrationDecisionAttachments ArbitrationDecisionAttachment[]
+  mediationEvidenceItems         MediationEvidenceItem[]         @relation("MediationEvidenceAsset")
 
   @@index([provider, bucket, storageKey])
   @@index([status])
@@ -1578,6 +1617,10 @@ model Dispute {
   arbitrationFeePayments Payment[]                       @relation("DisputeArbitrationPayments")
   evidenceSubmissions    ArbitrationEvidenceSubmission[]
   decisionAttachments    ArbitrationDecisionAttachment[]
+  
+  // Mediation relations
+  mediationEvidenceSubmissions MediationEvidenceSubmission[]
+  mediationProposals           MediationProposal[]
 
   @@index([arbitratorId], name: "idx_dispute_arbitrator")
 }
@@ -2045,4 +2088,167 @@ model FreelancerSkillSelection {
   @@index([userId, isDeleted])
   @@index([skillId, isDeleted])
   @@map("freelancer_skill_selection")
+}
+// ===== MEDIATION EVIDENCE MODELS =====
+
+model MediationEvidenceSubmission {
+  id                String                    @id @default(cuid())
+  disputeId         String                    @map("dispute_id")
+  submittedById     String                    @map("submitted_by_id")
+  status            MediationEvidenceStatus   @default(DRAFT)
+  
+  // Thông tin submission
+  title             String?                   @db.VarChar(500)
+  description       String?                   @db.Text
+  submissionDeadline DateTime?                @map("submission_deadline")
+  
+  // Review info
+  submittedAt       DateTime?                 @map("submitted_at")
+  reviewedAt        DateTime?                 @map("reviewed_at")
+  reviewedById      String?                   @map("reviewed_by_id")
+  reviewNotes       String?                   @map("review_notes") @db.Text
+  
+  // Timestamps
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
+  
+  // Relations
+  dispute           Dispute                   @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  submittedBy       User                      @relation("MediationEvidenceSubmittedBy", fields: [submittedById], references: [id], onDelete: Cascade)
+  reviewedBy        User?                     @relation("MediationEvidenceReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  items             MediationEvidenceItem[]
+  comments          MediationEvidenceComment[]
+  
+  @@unique([disputeId, submittedById], name: "uq_mediation_evidence_per_user")
+  @@index([disputeId])
+  @@index([submittedById])
+  @@index([status])
+  @@map("mediation_evidence_submissions")
+}
+
+model MediationEvidenceItem {
+  id            String                        @id @default(cuid())
+  submissionId  String                        @map("submission_id")
+  
+  // Item info
+  label         String?                       @db.VarChar(255)
+  description   String?                       @db.Text
+  sourceType    MediationEvidenceSourceType   @map("source_type")
+  
+  // Source links
+  sourceId      String?                       @map("source_id")
+  assetId       String?                       @map("asset_id")
+  url           String?                       @db.VarChar(2048)
+  
+  // File metadata
+  fileName      String?                       @map("file_name") @db.VarChar(500)
+  fileSize      BigInt?                       @map("file_size")
+  mimeType      String?                       @map("mime_type") @db.VarChar(100)
+  
+  // Ordering
+  displayOrder  Int                           @default(0) @map("display_order")
+  
+  // Timestamps
+  createdAt     DateTime                      @default(now()) @map("created_at")
+  updatedAt     DateTime                      @updatedAt @map("updated_at")
+  
+  // Relations
+  submission    MediationEvidenceSubmission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  asset         Asset?                        @relation("MediationEvidenceAsset", fields: [assetId], references: [id], onDelete: SetNull)
+  comments      MediationEvidenceComment[]
+  
+  @@index([submissionId])
+  @@index([sourceType, sourceId])
+  @@index([assetId])
+  @@map("mediation_evidence_items")
+}
+
+model MediationEvidenceComment {
+  id           String                      @id @default(cuid())
+  submissionId String                      @map("submission_id")
+  itemId       String?                     @map("item_id")
+  
+  // Comment info
+  authorId     String                      @map("author_id")
+  authorRole   Role
+  content      String                      @db.Text
+  
+  // Timestamps
+  createdAt    DateTime                    @default(now()) @map("created_at")
+  updatedAt    DateTime                    @updatedAt @map("updated_at")
+  
+  // Relations
+  submission   MediationEvidenceSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  item         MediationEvidenceItem?      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  author       User                        @relation("MediationEvidenceCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  
+  @@index([submissionId])
+  @@index([itemId])
+  @@index([authorId])
+  @@map("mediation_evidence_comments")
+}
+
+model MediationEvidenceTemplate {
+  id                    String    @id @default(cuid())
+  
+  // Template info
+  name                  String    @db.VarChar(255)
+  description           String?   @db.Text
+  category              String?   @db.VarChar(100)
+  
+  // Template structure
+  requiredEvidenceTypes Json?     @map("required_evidence_types")
+  suggestedItems        Json?     @map("suggested_items")
+  instructions          String?   @db.Text
+  
+  // Status
+  isActive              Boolean   @default(true) @map("is_active")
+  
+  // Timestamps
+  createdAt             DateTime  @default(now()) @map("created_at")
+  createdById           String?   @map("created_by_id")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  createdBy             User?     @relation("MediationEvidenceTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  
+  @@index([category])
+  @@index([isActive])
+  @@map("mediation_evidence_templates")
+}
+
+model MediationProposal {
+  id                    String                  @id @default(cuid())
+  disputeId             String                  @map("dispute_id")
+  proposedById          String                  @map("proposed_by_id")
+  status                MediationProposalStatus @default(PENDING)
+  
+  // Proposal details
+  releaseAmount         Decimal                 @map("release_amount") @db.Decimal(15, 2)
+  refundAmount          Decimal                 @map("refund_amount") @db.Decimal(15, 2)
+  reasoning             String?                 @db.Text
+  
+  // Response deadline
+  responseDeadline      DateTime                @map("response_deadline")
+  
+  // Responses from parties
+  clientResponse        MediationResponse       @default(PENDING) @map("client_response")
+  freelancerResponse    MediationResponse       @default(PENDING) @map("freelancer_response")
+  clientRespondedAt     DateTime?               @map("client_responded_at")
+  freelancerRespondedAt DateTime?               @map("freelancer_responded_at")
+  clientResponseMessage String?                 @map("client_response_message") @db.Text
+  freelancerResponseMessage String?             @map("freelancer_response_message") @db.Text
+  
+  // Timestamps
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+  
+  // Relations
+  dispute               Dispute                 @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  proposedBy            User                    @relation("MediationProposalProposedBy", fields: [proposedById], references: [id])
+  
+  @@index([disputeId])
+  @@index([proposedById])
+  @@index([status])
+  @@map("mediation_proposals")
 }
