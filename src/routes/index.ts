@@ -36,6 +36,7 @@ import adminPlatformTermsRoute from './admin-platform-terms.route'
 import webhookRoute from './webhook.route'
 import mediationEvidenceRoute from './mediation-evidence.route'
 import mediationProposalRoute from './mediation-proposal.route'
+import dashboardStatsRoute from './dashboard-stats.route'
 
 const rootRouter: Router = Router()
 
@@ -73,5 +74,6 @@ rootRouter.use('/admin/platform-terms', adminPlatformTermsRoute)
 rootRouter.use('/arbitrator/disputes', arbitratorDisputeRoute)
 rootRouter.use('/mediation-evidence', mediationEvidenceRoute)
 rootRouter.use('/mediation-proposal', mediationProposalRoute)
+rootRouter.use('/dashboard-stats', dashboardStatsRoute)
 
 export default rootRouter
