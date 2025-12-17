@@ -1278,14 +1278,19 @@ const uploadMilestoneResourceFiles = async (
 
 const serializeMilestoneResource = (resource: MilestoneResourcePayload) => {
 	const originalName = extractOriginalName(resource.metadata)
+	const name = resource.name ?? originalName ?? null
+	const size = resource.size ?? resource.asset?.bytes ?? null
+	
 	return {
 		id: resource.id,
 		milestoneId: resource.milestoneId,
 		assetId: resource.assetId ?? null,
-		name: resource.name ?? originalName ?? null,
+		name: name,
+		fileName: name, // Include both for compatibility
 		url: resource.url ?? resource.asset?.url ?? null,
 		mimeType: resource.mimeType ?? resource.asset?.mimeType ?? null,
-		size: resource.size ?? resource.asset?.bytes ?? null,
+		size: size,
+		fileSize: size, // Include both for compatibility
 		createdAt: resource.createdAt,
 		updatedAt: resource.updatedAt,
 		asset: resource.asset
@@ -2417,7 +2422,32 @@ const listContractMilestones = async (user: ContractAuthUser, contractId: string
 	return milestones.map(serializeMilestone)
 }
 
-const listMilestoneResources = async (user: ContractAuthUser, contractId: string, milestoneId: string) => {
+
+
+// Type for combined milestone resources
+type CombinedMilestoneResource = {
+	id: string
+	milestoneId: string
+	assetId: string | null
+	name: string | null
+	fileName: string | null // For compatibility
+	url: string | null
+	mimeType: string | null
+	size: number | null
+	fileSize: number | null // For compatibility
+	createdAt: Date
+	updatedAt: Date
+	asset: {
+		id: string
+		kind: string | null
+		url: string | null
+		mimeType: string | null
+		bytes: number | null
+		status: string | null
+	} | null
+}
+
+const listMilestoneResources = async (user: ContractAuthUser, contractId: string, milestoneId: string): Promise<CombinedMilestoneResource[]> => {
 	await ensureContractAccess(contractId, user, { allowAdmin: true })
 
 	const milestone = await prismaClient.milestone.findFirst({
@@ -2430,6 +2460,25 @@ const listMilestoneResources = async (user: ContractAuthUser, contractId: string
 			resources: {
 				include: milestoneResourceInclude,
 				orderBy: { createdAt: 'desc' }
+			},
+			submissions: {
+				include: {
+					attachments: {
+						include: {
+							asset: {
+								select: {
+									id: true,
+									kind: true,
+									url: true,
+									mimeType: true,
+									bytes: true,
+									status: true
+								}
+							}
+						}
+					}
+				},
+				orderBy: { createdAt: 'desc' }
 			}
 		}
 	})
@@ -2438,7 +2487,45 @@ const listMilestoneResources = async (user: ContractAuthUser, contractId: string
 		throw new NotFoundException('Không tìm thấy milestone', ErrorCode.ITEM_NOT_FOUND)
 	}
 
-	return milestone.resources.map(resource => serializeMilestoneResource(resource))
+	console.log('listMilestoneResources - milestone found:', milestone.id)
+	console.log('listMilestoneResources - resources count:', milestone.resources.length)
+	console.log('listMilestoneResources - submissions count:', milestone.submissions.length)
+
+	// Combine resources and submission attachments
+	const allResources: CombinedMilestoneResource[] = []
+
+	// Add milestone resources
+	milestone.resources.forEach(resource => {
+		allResources.push(serializeMilestoneResource(resource))
+	})
+
+	// Add submission attachments as resources
+	milestone.submissions.forEach(submission => {
+		submission.attachments.forEach(attachment => {
+			const name = attachment.name ?? null
+			const size = attachment.size ?? null
+			
+			allResources.push({
+				id: attachment.id,
+				milestoneId: milestoneId,
+				assetId: attachment.assetId,
+				name: name,
+				fileName: name, // Include both for compatibility
+				url: attachment.url ?? attachment.asset?.url ?? null,
+				mimeType: attachment.mimeType ?? null,
+				size: size,
+				fileSize: size, // Include both for compatibility
+				createdAt: attachment.createdAt,
+				updatedAt: attachment.createdAt, // MilestoneSubmissionAttachment doesn't have updatedAt, use createdAt
+				asset: attachment.asset
+			})
+		})
+	})
+
+	console.log('listMilestoneResources - total resources:', allResources.length)
+	console.log('listMilestoneResources - combined resources:', JSON.stringify(allResources, null, 2))
+
+	return allResources
 }
 
 const listContractDisputes = async (user: ContractAuthUser, contractId: string) => {

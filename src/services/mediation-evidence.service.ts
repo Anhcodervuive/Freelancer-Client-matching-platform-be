@@ -153,13 +153,15 @@ const serializeMediationEvidenceSubmission = (submission: MediationEvidenceSubmi
 			firstName: submission.submittedBy.profile?.firstName || null,
 			lastName: submission.submittedBy.profile?.lastName || null
 		},
-		reviewedBy: submission.reviewedBy ? {
-			id: submission.reviewedBy.id,
-			email: submission.reviewedBy.email,
-			role: submission.reviewedBy.role,
-			firstName: submission.reviewedBy.profile?.firstName || null,
-			lastName: submission.reviewedBy.profile?.lastName || null
-		} : null,
+		reviewedBy: submission.reviewedBy
+			? {
+					id: submission.reviewedBy.id,
+					email: submission.reviewedBy.email,
+					role: submission.reviewedBy.role,
+					firstName: submission.reviewedBy.profile?.firstName || null,
+					lastName: submission.reviewedBy.profile?.lastName || null
+			  }
+			: null,
 		items: submission.items.map(item => ({
 			id: item.id,
 			label: item.label,
@@ -172,14 +174,16 @@ const serializeMediationEvidenceSubmission = (submission: MediationEvidenceSubmi
 			mimeType: item.mimeType,
 			displayOrder: item.displayOrder,
 			createdAt: item.createdAt.toISOString(),
-			asset: item.asset ? {
-				id: item.asset.id,
-				url: item.asset.url,
-				mimeType: item.asset.mimeType,
-				bytes: item.asset.bytes,
-				width: item.asset.width,
-				height: item.asset.height
-			} : null
+			asset: item.asset
+				? {
+						id: item.asset.id,
+						url: item.asset.url,
+						mimeType: item.asset.mimeType,
+						bytes: item.asset.bytes,
+						width: item.asset.width,
+						height: item.asset.height
+				  }
+				: null
 		})),
 		comments: submission.comments.map(comment => ({
 			id: comment.id,
@@ -193,10 +197,12 @@ const serializeMediationEvidenceSubmission = (submission: MediationEvidenceSubmi
 				firstName: comment.author.profile?.firstName || null,
 				lastName: comment.author.profile?.lastName || null
 			},
-			item: comment.item ? {
-				id: comment.item.id,
-				label: comment.item.label
-			} : null
+			item: comment.item
+				? {
+						id: comment.item.id,
+						label: comment.item.label
+				  }
+				: null
 		}))
 	}
 }
@@ -208,7 +214,7 @@ const createMediationEvidenceSubmission = async (
 	input: CreateMediationEvidenceSubmissionInput
 ) => {
 	console.log('Creating mediation evidence submission:', { disputeId, userId, userRole, input })
-	
+
 	// Ensure user has access to dispute
 	await ensureDisputeAccess(disputeId, userId, userRole)
 
@@ -236,7 +242,7 @@ const createMediationEvidenceSubmission = async (
 			status: MediationEvidenceStatus.DRAFT,
 			itemsCount: input.items.length
 		})
-		
+
 		const submission = await prismaClient.mediationEvidenceSubmission.create({
 			data: {
 				disputeId,
@@ -297,7 +303,7 @@ const updateMediationEvidenceSubmission = async (
 	}
 
 	// Update submission
-	const updatedSubmission = await prismaClient.$transaction(async (tx) => {
+	const updatedSubmission = await prismaClient.$transaction(async tx => {
 		// Update basic info
 		const updated = await tx.mediationEvidenceSubmission.update({
 			where: { id: submissionId },
@@ -341,11 +347,7 @@ const updateMediationEvidenceSubmission = async (
 
 	return serializeMediationEvidenceSubmission(finalSubmission!)
 }
-const submitMediationEvidence = async (
-	submissionId: string,
-	userId: string,
-	userRole: Role
-) => {
+const submitMediationEvidence = async (submissionId: string, userId: string, userRole: Role) => {
 	const submission = await prismaClient.mediationEvidenceSubmission.findUnique({
 		where: { id: submissionId },
 		include: { items: true }
@@ -402,9 +404,7 @@ const reviewMediationEvidence = async (
 		throw new BadRequestException('Can only review submitted evidence', ErrorCode.FORBIDDEN)
 	}
 
-	const newStatus = input.status === 'ACCEPTED' 
-		? MediationEvidenceStatus.ACCEPTED 
-		: MediationEvidenceStatus.REJECTED
+	const newStatus = input.status === 'ACCEPTED' ? MediationEvidenceStatus.ACCEPTED : MediationEvidenceStatus.REJECTED
 
 	const updatedSubmission = await prismaClient.mediationEvidenceSubmission.update({
 		where: { id: submissionId },
@@ -494,17 +494,15 @@ const addMediationEvidenceComment = async (
 			firstName: comment.author.profile?.firstName || null,
 			lastName: comment.author.profile?.lastName || null
 		},
-		item: comment.item ? {
-			id: comment.item.id,
-			label: comment.item.label
-		} : null
+		item: comment.item
+			? {
+					id: comment.item.id,
+					label: comment.item.label
+			  }
+			: null
 	}
 }
-const getMediationEvidenceSubmission = async (
-	submissionId: string,
-	userId: string,
-	userRole: Role
-) => {
+const getMediationEvidenceSubmission = async (submissionId: string, userId: string, userRole: Role) => {
 	const submission = await prismaClient.mediationEvidenceSubmission.findUnique({
 		where: { id: submissionId },
 		include: mediationEvidenceSubmissionInclude
@@ -520,11 +518,7 @@ const getMediationEvidenceSubmission = async (
 	return serializeMediationEvidenceSubmission(submission)
 }
 
-const listMediationEvidenceSubmissions = async (
-	query: MediationEvidenceQuery,
-	userId: string,
-	userRole: Role
-) => {
+const listMediationEvidenceSubmissions = async (query: MediationEvidenceQuery, userId: string, userRole: Role) => {
 	// Check access to dispute
 	await ensureDisputeAccess(query.disputeId, userId, userRole)
 
@@ -561,11 +555,7 @@ const listMediationEvidenceSubmissions = async (
 	}
 }
 
-const deleteMediationEvidenceSubmission = async (
-	submissionId: string,
-	userId: string,
-	userRole: Role
-) => {
+const deleteMediationEvidenceSubmission = async (submissionId: string, userId: string, userRole: Role) => {
 	const submission = await prismaClient.mediationEvidenceSubmission.findUnique({
 		where: { id: submissionId }
 	})

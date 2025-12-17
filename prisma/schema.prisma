@@ -1557,6 +1557,7 @@ enum DisputeStatus {
   RESOLVED_SPLIT
   CANCELED // rút dispute/không hợp lệ
   EXPIRED // quá hạn không phản hồi
+  CLOSED_FOR_EXTERNAL_RESOLUTION // đóng hồ sơ hòa giải, chuyển cơ quan có thẩm quyền
 }
 
 enum DisputeNegotiationStatus {
