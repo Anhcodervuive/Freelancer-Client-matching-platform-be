@@ -11,9 +11,9 @@ import disputeDocumentExportService from '~/services/dispute-document-export.ser
  */
 const getDisputeDocumentPackage = async (req: Request, res: Response) => {
   try {
-    // Only admins can export dispute documents
-    if (req.user?.role !== Role.ADMIN) {
-      throw new ForbiddenException('Only admins can export dispute documents', ErrorCode.FORBIDDEN)
+    // Allow admins, clients, and freelancers to export dispute documents
+    if (!req.user || !req.user.role || !['ADMIN', 'CLIENT', 'FREELANCER'].includes(req.user.role)) {
+      throw new ForbiddenException('Only authenticated users can export dispute documents', ErrorCode.FORBIDDEN)
     }
 
     const { disputeId } = req.params
@@ -23,12 +23,20 @@ const getDisputeDocumentPackage = async (req: Request, res: Response) => {
     }
 
     // Check if dispute is eligible for export
-    const isEligible = await disputeDocumentExportService.isEligibleForDocumentExport(disputeId)
+    const isEligible = await disputeDocumentExportService.isEligibleForDocumentExport(
+      disputeId, 
+      req.user.id, 
+      req.user.role
+    )
     if (!isEligible) {
       throw new BadRequestException('Dispute is not eligible for document export', ErrorCode.UNPROCESSABLE_ENTITY)
     }
 
-    const documentPackage = await disputeDocumentExportService.getDisputeDocumentPackage(disputeId)
+    const documentPackage = await disputeDocumentExportService.getDisputeDocumentPackage(
+      disputeId, 
+      req.user.id, 
+      req.user.role
+    )
 
     res.json({
       success: true,
@@ -65,7 +73,11 @@ const closeMediationForExternalResolution = async (req: Request, res: Response) 
     }
 
     // Check if dispute is eligible for closure
-    const isEligible = await disputeDocumentExportService.isEligibleForDocumentExport(disputeId)
+    const isEligible = await disputeDocumentExportService.isEligibleForDocumentExport(
+      disputeId, 
+      req.user.id, 
+      req.user.role
+    )
     if (!isEligible) {
       throw new BadRequestException('Dispute is not eligible for closure', ErrorCode.UNPROCESSABLE_ENTITY)
     }
@@ -92,9 +104,9 @@ const closeMediationForExternalResolution = async (req: Request, res: Response) 
  */
 const checkExportEligibility = async (req: Request, res: Response) => {
   try {
-    // Only admins can check eligibility
-    if (req.user?.role !== Role.ADMIN) {
-      throw new ForbiddenException('Only admins can check export eligibility', ErrorCode.FORBIDDEN)
+    // Allow admins, clients, and freelancers to check eligibility
+    if (!req.user || !req.user.role || !['ADMIN', 'CLIENT', 'FREELANCER'].includes(req.user.role)) {
+      throw new ForbiddenException('Only authenticated users can check export eligibility', ErrorCode.FORBIDDEN)
     }
 
     const { disputeId } = req.params
@@ -103,7 +115,11 @@ const checkExportEligibility = async (req: Request, res: Response) => {
       throw new BadRequestException('Dispute ID is required', ErrorCode.UNPROCESSABLE_ENTITY)
     }
 
-    const isEligible = await disputeDocumentExportService.isEligibleForDocumentExport(disputeId)
+    const isEligible = await disputeDocumentExportService.isEligibleForDocumentExport(
+      disputeId, 
+      req.user.id, 
+      req.user.role
+    )
 
     res.json({
       success: true,
