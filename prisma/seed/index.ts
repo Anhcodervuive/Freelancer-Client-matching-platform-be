@@ -4,10 +4,19 @@ import { seedPlatformTerms } from './platform-terms'
 import { seedPeople } from './people'
 import { seedJobs } from './jobs'
 import { seedInteractions } from './interactions'
+import { seedMLDiverseData } from './ml-diverse-data'
 
 /**
  * Cho phép chạy 1 phần:  `npm run seed -- taxonomy`
  * Nếu không truyền gì -> chạy full.
+ * 
+ * Available commands:
+ * - npm run seed                    # Run all seeds
+ * - npm run seed -- taxonomy        # Only taxonomy
+ * - npm run seed -- people          # Only people (clients + freelancers)
+ * - npm run seed -- jobs            # Only jobs
+ * - npm run seed -- interactions    # Only interactions
+ * - npm run seed -- ml-diverse      # Only ML diverse data (for ML training)
  */
 const only = new Set(process.argv.slice(2).map(s => s.toLowerCase()))
 
@@ -22,6 +31,9 @@ async function main() {
         if (shouldRun('people', 'users', 'sample-users')) await seedPeople()
         if (shouldRun('jobs', 'job-posts', 'jobposts')) await seedJobs()
         if (shouldRun('interactions', 'match-interactions', 'timeline')) await seedInteractions()
+        
+        // ML Diverse Data - Dữ liệu đa dạng cho training ML models
+        if (shouldRun('ml-diverse', 'ml', 'diverse', 'ml-data')) await seedMLDiverseData()
 }
 
 main()

@@ -27,6 +27,9 @@ type SeedSkill = {
 }
 
 const SKILLS: SeedSkill[] = [
+  // ============================================================================
+  // WEB DEVELOPMENT SKILLS
+  // ============================================================================
   { id: 'skill_javascript', slug: 'javascript', name: 'JavaScript', description: 'Programming language of the web.' },
   { id: 'skill_typescript', slug: 'typescript', name: 'TypeScript', description: 'Typed superset of JavaScript for large-scale apps.' },
   { id: 'skill_nodejs', slug: 'nodejs', name: 'Node.js', description: 'Runtime for building scalable server-side JavaScript applications.' },
@@ -105,7 +108,134 @@ const SKILLS: SeedSkill[] = [
   { id: 'skill_unreal', slug: 'unreal-engine', name: 'Unreal Engine', description: 'High-fidelity game engine from Epic Games.' },
   { id: 'skill_csharp', slug: 'c-sharp', name: 'C#', description: 'Modern object-oriented language from Microsoft.' },
   { id: 'skill_cpp', slug: 'c-plus-plus', name: 'C++', description: 'Compiled language for high-performance applications.' },
-  { id: 'skill_blender', slug: 'blender', name: 'Blender', description: 'Open-source 3D creation suite for modeling and animation.' }
+  { id: 'skill_blender', slug: 'blender', name: 'Blender', description: 'Open-source 3D creation suite for modeling and animation.' },
+
+  // ============================================================================
+  // ADDITIONAL SKILLS - Blockchain & Web3
+  // ============================================================================
+  { id: 'skill_solidity', slug: 'solidity', name: 'Solidity', description: 'Smart contract programming language for Ethereum.' },
+  { id: 'skill_web3js', slug: 'web3js', name: 'Web3.js', description: 'JavaScript library for interacting with Ethereum blockchain.' },
+  { id: 'skill_ethersjs', slug: 'ethersjs', name: 'Ethers.js', description: 'Complete Ethereum wallet implementation and utilities.' },
+  { id: 'skill_hardhat', slug: 'hardhat', name: 'Hardhat', description: 'Ethereum development environment for professionals.' },
+  { id: 'skill_rust', slug: 'rust', name: 'Rust', description: 'Systems programming language focused on safety and performance.' },
+  { id: 'skill_smart_contracts', slug: 'smart-contracts', name: 'Smart Contracts', description: 'Self-executing contracts with terms written in code.' },
+
+  // ============================================================================
+  // ADDITIONAL SKILLS - AI & NLP
+  // ============================================================================
+  { id: 'skill_nlp', slug: 'nlp', name: 'Natural Language Processing', description: 'Processing and analyzing human language data.' },
+  { id: 'skill_computer_vision', slug: 'computer-vision', name: 'Computer Vision', description: 'Enabling computers to interpret visual information.' },
+  { id: 'skill_deep_learning', slug: 'deep-learning', name: 'Deep Learning', description: 'Neural networks with multiple layers for complex patterns.' },
+  { id: 'skill_llm', slug: 'llm', name: 'Large Language Models', description: 'Working with GPT, BERT, and other transformer models.' },
+  { id: 'skill_langchain', slug: 'langchain', name: 'LangChain', description: 'Framework for developing LLM-powered applications.' },
+  { id: 'skill_huggingface', slug: 'huggingface', name: 'Hugging Face', description: 'Platform for machine learning models and datasets.' },
+  { id: 'skill_opencv', slug: 'opencv', name: 'OpenCV', description: 'Open source computer vision and machine learning library.' },
+  { id: 'skill_keras', slug: 'keras', name: 'Keras', description: 'High-level neural networks API for deep learning.' },
+
+  // ============================================================================
+  // ADDITIONAL SKILLS - Backend & Databases
+  // ============================================================================
+  { id: 'skill_php', slug: 'php', name: 'PHP', description: 'Server-side scripting language for web development.' },
+  { id: 'skill_laravel', slug: 'laravel', name: 'Laravel', description: 'PHP framework for elegant web application development.' },
+  { id: 'skill_ruby', slug: 'ruby', name: 'Ruby', description: 'Dynamic programming language focused on simplicity.' },
+  { id: 'skill_rails', slug: 'rails', name: 'Ruby on Rails', description: 'Full-stack web application framework for Ruby.' },
+  { id: 'skill_mysql', slug: 'mysql', name: 'MySQL', description: 'Popular open-source relational database management system.' },
+  { id: 'skill_elasticsearch', slug: 'elasticsearch', name: 'Elasticsearch', description: 'Distributed search and analytics engine.' },
+  { id: 'skill_kafka', slug: 'kafka', name: 'Apache Kafka', description: 'Distributed event streaming platform.' },
+  { id: 'skill_rabbitmq', slug: 'rabbitmq', name: 'RabbitMQ', description: 'Open source message broker software.' },
+  { id: 'skill_dynamodb', slug: 'dynamodb', name: 'DynamoDB', description: 'AWS managed NoSQL database service.' },
+  { id: 'skill_cassandra', slug: 'cassandra', name: 'Apache Cassandra', description: 'Distributed NoSQL database for high availability.' },
+  { id: 'skill_prisma', slug: 'prisma', name: 'Prisma', description: 'Next-generation ORM for Node.js and TypeScript.' },
+  { id: 'skill_sequelize', slug: 'sequelize', name: 'Sequelize', description: 'Promise-based Node.js ORM for SQL databases.' },
+
+  // ============================================================================
+  // ADDITIONAL SKILLS - DevOps & Infrastructure
+  // ============================================================================
+  { id: 'skill_ansible', slug: 'ansible', name: 'Ansible', description: 'Automation tool for configuration management.' },
+  { id: 'skill_jenkins', slug: 'jenkins', name: 'Jenkins', description: 'Open source automation server for CI/CD.' },
+  { id: 'skill_github_actions', slug: 'github-actions', name: 'GitHub Actions', description: 'CI/CD platform integrated with GitHub.' },
+  { id: 'skill_gitlab_ci', slug: 'gitlab-ci', name: 'GitLab CI/CD', description: 'Continuous integration built into GitLab.' },
+  { id: 'skill_prometheus', slug: 'prometheus', name: 'Prometheus', description: 'Open-source monitoring and alerting toolkit.' },
+  { id: 'skill_grafana', slug: 'grafana', name: 'Grafana', description: 'Open source analytics and monitoring solution.' },
+  { id: 'skill_nginx', slug: 'nginx', name: 'Nginx', description: 'High-performance web server and reverse proxy.' },
+  { id: 'skill_helm', slug: 'helm', name: 'Helm', description: 'Package manager for Kubernetes applications.' },
+  { id: 'skill_argocd', slug: 'argocd', name: 'ArgoCD', description: 'Declarative GitOps CD for Kubernetes.' },
+  { id: 'skill_pulumi', slug: 'pulumi', name: 'Pulumi', description: 'Infrastructure as code using general-purpose languages.' },
+
+  // ============================================================================
+  // ADDITIONAL SKILLS - Mobile & Cross-platform
+  // ============================================================================
+  { id: 'skill_swiftui', slug: 'swiftui', name: 'SwiftUI', description: 'Declarative UI framework for Apple platforms.' },
+  { id: 'skill_jetpack_compose', slug: 'jetpack-compose', name: 'Jetpack Compose', description: 'Modern Android UI toolkit.' },
+  { id: 'skill_xamarin', slug: 'xamarin', name: 'Xamarin', description: 'Cross-platform mobile development with .NET.' },
+  { id: 'skill_ionic', slug: 'ionic', name: 'Ionic', description: 'Cross-platform mobile app development framework.' },
+  { id: 'skill_capacitor', slug: 'capacitor', name: 'Capacitor', description: 'Cross-platform native runtime for web apps.' },
+  { id: 'skill_expo', slug: 'expo', name: 'Expo', description: 'Platform for making universal React applications.' },
+  { id: 'skill_firebase', slug: 'firebase', name: 'Firebase', description: 'Google platform for mobile and web app development.' },
+  { id: 'skill_realm', slug: 'realm', name: 'Realm', description: 'Mobile database for iOS and Android.' },
+
+  // ============================================================================
+  // ADDITIONAL SKILLS - Frontend & UI
+  // ============================================================================
+  { id: 'skill_sass', slug: 'sass', name: 'Sass/SCSS', description: 'CSS preprocessor for more maintainable stylesheets.' },
+  { id: 'skill_styled_components', slug: 'styled-components', name: 'Styled Components', description: 'CSS-in-JS library for React.' },
+  { id: 'skill_redux', slug: 'redux', name: 'Redux', description: 'Predictable state container for JavaScript apps.' },
+  { id: 'skill_zustand', slug: 'zustand', name: 'Zustand', description: 'Small, fast state management for React.' },
+  { id: 'skill_tanstack_query', slug: 'tanstack-query', name: 'TanStack Query', description: 'Powerful data synchronization for web apps.' },
+  { id: 'skill_storybook', slug: 'storybook', name: 'Storybook', description: 'UI component development environment.' },
+  { id: 'skill_webpack', slug: 'webpack', name: 'Webpack', description: 'Static module bundler for JavaScript applications.' },
+  { id: 'skill_vite', slug: 'vite', name: 'Vite', description: 'Next generation frontend build tool.' },
+  { id: 'skill_nuxtjs', slug: 'nuxtjs', name: 'Nuxt.js', description: 'Vue.js framework for server-side rendering.' },
+  { id: 'skill_remix', slug: 'remix', name: 'Remix', description: 'Full stack web framework for React.' },
+  { id: 'skill_astro', slug: 'astro', name: 'Astro', description: 'Static site builder for content-focused websites.' },
+
+  // ============================================================================
+  // ADDITIONAL SKILLS - Design & Creative
+  // ============================================================================
+  { id: 'skill_photoshop', slug: 'photoshop', name: 'Adobe Photoshop', description: 'Industry-standard image editing software.' },
+  { id: 'skill_after_effects', slug: 'after-effects', name: 'After Effects', description: 'Motion graphics and visual effects software.' },
+  { id: 'skill_premiere', slug: 'premiere', name: 'Adobe Premiere Pro', description: 'Professional video editing software.' },
+  { id: 'skill_sketch', slug: 'sketch', name: 'Sketch', description: 'Digital design toolkit for macOS.' },
+  { id: 'skill_invision', slug: 'invision', name: 'InVision', description: 'Digital product design platform.' },
+  { id: 'skill_prototyping', slug: 'prototyping', name: 'Prototyping', description: 'Creating interactive mockups and prototypes.' },
+  { id: 'skill_wireframing', slug: 'wireframing', name: 'Wireframing', description: 'Creating low-fidelity layouts and structures.' },
+  { id: 'skill_user_testing', slug: 'user-testing', name: 'User Testing', description: 'Evaluating products with real users.' },
+  { id: 'skill_accessibility', slug: 'accessibility', name: 'Accessibility (a11y)', description: 'Making digital products usable for everyone.' },
+  { id: 'skill_responsive_design', slug: 'responsive-design', name: 'Responsive Design', description: 'Designing for multiple screen sizes and devices.' },
+
+  // ============================================================================
+  // ADDITIONAL SKILLS - Project Management & Agile
+  // ============================================================================
+  { id: 'skill_scrum', slug: 'scrum', name: 'Scrum', description: 'Agile framework for managing complex projects.' },
+  { id: 'skill_kanban', slug: 'kanban', name: 'Kanban', description: 'Visual workflow management method.' },
+  { id: 'skill_jira', slug: 'jira', name: 'Jira', description: 'Project tracking and issue management tool.' },
+  { id: 'skill_confluence', slug: 'confluence', name: 'Confluence', description: 'Team collaboration and documentation platform.' },
+  { id: 'skill_notion', slug: 'notion', name: 'Notion', description: 'All-in-one workspace for notes and collaboration.' },
+  { id: 'skill_agile', slug: 'agile', name: 'Agile Methodology', description: 'Iterative approach to project management.' },
+  { id: 'skill_technical_writing', slug: 'technical-writing', name: 'Technical Writing', description: 'Creating clear technical documentation.' },
+  { id: 'skill_api_documentation', slug: 'api-documentation', name: 'API Documentation', description: 'Writing clear API references and guides.' },
+
+  // ============================================================================
+  // ADDITIONAL SKILLS - E-commerce & CMS
+  // ============================================================================
+  { id: 'skill_shopify', slug: 'shopify', name: 'Shopify', description: 'E-commerce platform for online stores.' },
+  { id: 'skill_woocommerce', slug: 'woocommerce', name: 'WooCommerce', description: 'WordPress e-commerce plugin.' },
+  { id: 'skill_magento', slug: 'magento', name: 'Magento', description: 'Open-source e-commerce platform.' },
+  { id: 'skill_wordpress', slug: 'wordpress', name: 'WordPress', description: 'Popular content management system.' },
+  { id: 'skill_strapi', slug: 'strapi', name: 'Strapi', description: 'Open-source headless CMS.' },
+  { id: 'skill_contentful', slug: 'contentful', name: 'Contentful', description: 'API-first content management platform.' },
+  { id: 'skill_sanity', slug: 'sanity', name: 'Sanity', description: 'Customizable content platform.' },
+  { id: 'skill_stripe', slug: 'stripe', name: 'Stripe Integration', description: 'Payment processing integration.' },
+  { id: 'skill_paypal', slug: 'paypal', name: 'PayPal Integration', description: 'PayPal payment gateway integration.' },
+
+  // ============================================================================
+  // ADDITIONAL SKILLS - IoT & Embedded
+  // ============================================================================
+  { id: 'skill_arduino', slug: 'arduino', name: 'Arduino', description: 'Open-source electronics platform.' },
+  { id: 'skill_raspberry_pi', slug: 'raspberry-pi', name: 'Raspberry Pi', description: 'Single-board computer for IoT projects.' },
+  { id: 'skill_embedded_c', slug: 'embedded-c', name: 'Embedded C', description: 'C programming for embedded systems.' },
+  { id: 'skill_mqtt', slug: 'mqtt', name: 'MQTT', description: 'Lightweight messaging protocol for IoT.' },
+  { id: 'skill_iot_protocols', slug: 'iot-protocols', name: 'IoT Protocols', description: 'Communication protocols for IoT devices.' }
 ]
 
 const TAXONOMY: SeedCategory[] = [
@@ -450,6 +580,207 @@ const TAXONOMY: SeedCategory[] = [
         description: 'Immersive applications for headsets and spatial devices.',
         sortOrder: 4,
         suggestedSkillSlugs: ['unity', 'unreal-engine', 'c-sharp', 'c-plus-plus']
+      }
+    ]
+  },
+  // ============================================================================
+  // NEW CATEGORY: Blockchain & Web3
+  // ============================================================================
+  {
+    id: 'category_blockchain',
+    slug: 'blockchain-web3',
+    name: 'Blockchain & Web3',
+    description: 'Decentralized applications, smart contracts, and cryptocurrency development.',
+    sortOrder: 9,
+    suggestedSkillSlugs: ['solidity', 'web3js', 'ethersjs', 'rust', 'smart-contracts', 'typescript'],
+    specialties: [
+      {
+        id: 'specialty_smart_contracts',
+        slug: 'smart-contract-development',
+        name: 'Smart Contract Development',
+        description: 'Writing and auditing smart contracts for blockchain platforms.',
+        sortOrder: 1,
+        suggestedSkillSlugs: ['solidity', 'hardhat', 'smart-contracts', 'typescript']
+      },
+      {
+        id: 'specialty_dapp_dev',
+        slug: 'dapp-development',
+        name: 'DApp Development',
+        description: 'Building decentralized applications with Web3 technologies.',
+        sortOrder: 2,
+        suggestedSkillSlugs: ['web3js', 'ethersjs', 'react', 'typescript', 'solidity']
+      },
+      {
+        id: 'specialty_defi',
+        slug: 'defi-development',
+        name: 'DeFi Development',
+        description: 'Building decentralized finance protocols and applications.',
+        sortOrder: 3,
+        suggestedSkillSlugs: ['solidity', 'smart-contracts', 'typescript', 'nodejs']
+      },
+      {
+        id: 'specialty_nft',
+        slug: 'nft-development',
+        name: 'NFT & Digital Assets',
+        description: 'Creating NFT marketplaces and digital asset platforms.',
+        sortOrder: 4,
+        suggestedSkillSlugs: ['solidity', 'react', 'nodejs', 'mongodb']
+      }
+    ]
+  },
+  // ============================================================================
+  // NEW CATEGORY: AI & Machine Learning (Expanded)
+  // ============================================================================
+  {
+    id: 'category_ai_ml',
+    slug: 'artificial-intelligence',
+    name: 'Artificial Intelligence',
+    description: 'Advanced AI systems including NLP, computer vision, and generative AI.',
+    sortOrder: 10,
+    suggestedSkillSlugs: ['python', 'tensorflow', 'pytorch', 'nlp', 'computer-vision', 'deep-learning', 'llm'],
+    specialties: [
+      {
+        id: 'specialty_nlp',
+        slug: 'natural-language-processing',
+        name: 'Natural Language Processing',
+        description: 'Building systems that understand and generate human language.',
+        sortOrder: 1,
+        suggestedSkillSlugs: ['nlp', 'python', 'tensorflow', 'huggingface', 'langchain']
+      },
+      {
+        id: 'specialty_computer_vision',
+        slug: 'computer-vision',
+        name: 'Computer Vision',
+        description: 'Image and video analysis using deep learning.',
+        sortOrder: 2,
+        suggestedSkillSlugs: ['computer-vision', 'opencv', 'tensorflow', 'pytorch', 'python']
+      },
+      {
+        id: 'specialty_llm_apps',
+        slug: 'llm-applications',
+        name: 'LLM Applications',
+        description: 'Building applications powered by large language models.',
+        sortOrder: 3,
+        suggestedSkillSlugs: ['llm', 'langchain', 'python', 'huggingface', 'rest-api']
+      },
+      {
+        id: 'specialty_ai_research',
+        slug: 'ai-research',
+        name: 'AI Research & Development',
+        description: 'Cutting-edge AI research and model development.',
+        sortOrder: 4,
+        suggestedSkillSlugs: ['deep-learning', 'pytorch', 'tensorflow', 'python', 'numpy']
+      }
+    ]
+  },
+  // ============================================================================
+  // NEW CATEGORY: E-commerce & CMS
+  // ============================================================================
+  {
+    id: 'category_ecommerce',
+    slug: 'ecommerce-cms',
+    name: 'E-commerce & CMS',
+    description: 'Online stores, content management systems, and digital commerce solutions.',
+    sortOrder: 11,
+    suggestedSkillSlugs: ['shopify', 'woocommerce', 'wordpress', 'strapi', 'stripe', 'react'],
+    specialties: [
+      {
+        id: 'specialty_shopify_dev',
+        slug: 'shopify-development',
+        name: 'Shopify Development',
+        description: 'Building and customizing Shopify stores and apps.',
+        sortOrder: 1,
+        suggestedSkillSlugs: ['shopify', 'javascript', 'react', 'graphql', 'stripe']
+      },
+      {
+        id: 'specialty_wordpress_dev',
+        slug: 'wordpress-development',
+        name: 'WordPress Development',
+        description: 'Custom WordPress themes, plugins, and solutions.',
+        sortOrder: 2,
+        suggestedSkillSlugs: ['wordpress', 'php', 'javascript', 'mysql', 'css']
+      },
+      {
+        id: 'specialty_headless_cms',
+        slug: 'headless-cms',
+        name: 'Headless CMS Development',
+        description: 'Building with Strapi, Contentful, and other headless CMS.',
+        sortOrder: 3,
+        suggestedSkillSlugs: ['strapi', 'contentful', 'sanity', 'graphql', 'react']
+      },
+      {
+        id: 'specialty_payment_integration',
+        slug: 'payment-integration',
+        name: 'Payment Integration',
+        description: 'Integrating payment gateways and financial services.',
+        sortOrder: 4,
+        suggestedSkillSlugs: ['stripe', 'paypal', 'nodejs', 'rest-api', 'postgresql']
+      }
+    ]
+  },
+  // ============================================================================
+  // NEW CATEGORY: IoT & Embedded Systems
+  // ============================================================================
+  {
+    id: 'category_iot',
+    slug: 'iot-embedded',
+    name: 'IoT & Embedded Systems',
+    description: 'Internet of Things devices, embedded systems, and hardware integration.',
+    sortOrder: 12,
+    suggestedSkillSlugs: ['arduino', 'raspberry-pi', 'embedded-c', 'mqtt', 'python', 'c-plus-plus'],
+    specialties: [
+      {
+        id: 'specialty_iot_dev',
+        slug: 'iot-development',
+        name: 'IoT Development',
+        description: 'Building connected devices and IoT solutions.',
+        sortOrder: 1,
+        suggestedSkillSlugs: ['arduino', 'raspberry-pi', 'mqtt', 'python', 'aws']
+      },
+      {
+        id: 'specialty_embedded_systems',
+        slug: 'embedded-systems',
+        name: 'Embedded Systems',
+        description: 'Programming microcontrollers and embedded devices.',
+        sortOrder: 2,
+        suggestedSkillSlugs: ['embedded-c', 'c-plus-plus', 'arduino', 'linux']
+      },
+      {
+        id: 'specialty_iot_cloud',
+        slug: 'iot-cloud-integration',
+        name: 'IoT Cloud Integration',
+        description: 'Connecting IoT devices to cloud platforms.',
+        sortOrder: 3,
+        suggestedSkillSlugs: ['aws', 'mqtt', 'python', 'nodejs', 'dynamodb']
+      }
+    ]
+  },
+  // ============================================================================
+  // NEW CATEGORY: Technical Writing & Documentation
+  // ============================================================================
+  {
+    id: 'category_tech_writing',
+    slug: 'technical-writing',
+    name: 'Technical Writing',
+    description: 'Documentation, API references, and technical content creation.',
+    sortOrder: 13,
+    suggestedSkillSlugs: ['technical-writing', 'api-documentation', 'git', 'confluence', 'notion'],
+    specialties: [
+      {
+        id: 'specialty_api_docs',
+        slug: 'api-documentation',
+        name: 'API Documentation',
+        description: 'Writing clear and comprehensive API documentation.',
+        sortOrder: 1,
+        suggestedSkillSlugs: ['api-documentation', 'rest-api', 'graphql', 'postman']
+      },
+      {
+        id: 'specialty_dev_docs',
+        slug: 'developer-documentation',
+        name: 'Developer Documentation',
+        description: 'Creating guides, tutorials, and SDK documentation.',
+        sortOrder: 2,
+        suggestedSkillSlugs: ['technical-writing', 'git', 'confluence', 'notion']
       }
     ]
   }
