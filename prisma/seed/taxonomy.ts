@@ -1,4 +1,5 @@
 import { prisma, runStep } from './_utils'
+import { ADDITIONAL_SKILLS, EXTRA_SKILLS_FOR_TEMPLATES } from './additional-skills'
 
 type SeedSpecialty = {
         id: string
@@ -786,7 +787,9 @@ const TAXONOMY: SeedCategory[] = [
   }
 ]
 
-const SKILL_BY_SLUG = new Map(SKILLS.map(skill => [skill.slug, skill]))
+const ALL_SKILLS = [...SKILLS, ...ADDITIONAL_SKILLS, ...EXTRA_SKILLS_FOR_TEMPLATES]
+
+const SKILL_BY_SLUG = new Map(ALL_SKILLS.map(skill => [skill.slug, skill]))
 
 function resolveSkillId(slug: string): string {
         const skill = SKILL_BY_SLUG.get(slug)
@@ -820,7 +823,7 @@ function buildSpecialtySkillData() {
 
 export async function seedTaxonomy() {
         await runStep('Skills', async () => {
-                await prisma.skill.createMany({ data: SKILLS, skipDuplicates: true })
+                await prisma.skill.createMany({ data: ALL_SKILLS, skipDuplicates: true })
         })
 
         await runStep('Categories', async () => {

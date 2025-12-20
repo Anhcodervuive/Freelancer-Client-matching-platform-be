@@ -150,78 +150,91 @@ const JOB_TEMPLATES = [
 ]
 
 
-// Freelancer Templates - 60+ diverse templates
+// Freelancer Templates - DIVERSE & UNIQUE (50 templates) - Using new skills from additional-skills.ts
 const FREELANCER_TEMPLATES = [
-  // Frontend (6)
-  { prefix: 'React', skills: ['skill_react', 'skill_typescript', 'skill_css', 'skill_tailwind', 'skill_redux'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
-  { prefix: 'Vue.js', skills: ['skill_vue', 'skill_typescript', 'skill_css', 'skill_nuxtjs'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
-  { prefix: 'Angular', skills: ['skill_angular', 'skill_typescript', 'skill_css', 'skill_sass', 'skill_graphql'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
-  { prefix: 'Next.js', skills: ['skill_nextjs', 'skill_react', 'skill_typescript', 'skill_tailwind', 'skill_prisma'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
-  { prefix: 'Svelte', skills: ['skill_svelte', 'skill_typescript', 'skill_css', 'skill_rest_api'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
-  { prefix: 'Frontend UI/UX', skills: ['skill_react', 'skill_css', 'skill_tailwind', 'skill_figma', 'skill_storybook'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
-  // Backend (6)
-  { prefix: 'Node.js', skills: ['skill_nodejs', 'skill_express', 'skill_postgresql', 'skill_typescript', 'skill_redis'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
-  { prefix: 'Python', skills: ['skill_python', 'skill_fastapi', 'skill_postgresql', 'skill_rest_api', 'skill_docker'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
-  { prefix: 'Go', skills: ['skill_golang', 'skill_postgresql', 'skill_docker', 'skill_kubernetes', 'skill_redis'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
-  { prefix: 'NestJS', skills: ['skill_nestjs', 'skill_typescript', 'skill_postgresql', 'skill_docker', 'skill_graphql'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
-  { prefix: 'Java Spring', skills: ['skill_java', 'skill_spring', 'skill_postgresql', 'skill_docker', 'skill_rest_api'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
-  { prefix: 'Django', skills: ['skill_python', 'skill_django', 'skill_postgresql', 'skill_rest_api', 'skill_docker'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
-  // Fullstack (4)
-  { prefix: 'Full-Stack JavaScript', skills: ['skill_react', 'skill_nodejs', 'skill_typescript', 'skill_postgresql', 'skill_tailwind'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
-  { prefix: 'MERN Stack', skills: ['skill_react', 'skill_nodejs', 'skill_mongodb', 'skill_express', 'skill_typescript'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
-  { prefix: 'Next.js Full-Stack', skills: ['skill_nextjs', 'skill_typescript', 'skill_postgresql', 'skill_prisma', 'skill_tailwind'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
-  { prefix: 'Python Full-Stack', skills: ['skill_python', 'skill_django', 'skill_react', 'skill_postgresql', 'skill_docker'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
-  // Mobile (4)
-  { prefix: 'Flutter', skills: ['skill_flutter', 'skill_rest_api', 'skill_firebase'], category: 'category_mobile_dev', specialty: 'specialty_cross_platform_mobile' },
-  { prefix: 'React Native', skills: ['skill_react_native', 'skill_typescript', 'skill_rest_api', 'skill_redux'], category: 'category_mobile_dev', specialty: 'specialty_cross_platform_mobile' },
-  { prefix: 'iOS Swift', skills: ['skill_swift', 'skill_ios', 'skill_rest_api', 'skill_ci_cd'], category: 'category_mobile_dev', specialty: 'specialty_native_ios' },
-  { prefix: 'Android Kotlin', skills: ['skill_kotlin', 'skill_android', 'skill_rest_api', 'skill_firebase'], category: 'category_mobile_dev', specialty: 'specialty_native_android' },
-  // DevOps (4)
-  { prefix: 'DevOps', skills: ['skill_docker', 'skill_kubernetes', 'skill_ci_cd', 'skill_linux', 'skill_terraform'], category: 'category_cloud_devops', specialty: 'specialty_infrastructure_code' },
-  { prefix: 'AWS Cloud', skills: ['skill_aws', 'skill_terraform', 'skill_docker', 'skill_linux', 'skill_kubernetes'], category: 'category_cloud_devops', specialty: 'specialty_cloud_architecture' },
-  { prefix: 'Kubernetes', skills: ['skill_kubernetes', 'skill_docker', 'skill_linux', 'skill_ci_cd'], category: 'category_cloud_devops', specialty: 'specialty_container_platforms' },
-  { prefix: 'SRE', skills: ['skill_observability', 'skill_linux', 'skill_docker', 'skill_kubernetes'], category: 'category_cloud_devops', specialty: 'specialty_sre' },
-  // Data/ML (4)
-  { prefix: 'Machine Learning', skills: ['skill_python', 'skill_scikit', 'skill_pandas', 'skill_tensorflow', 'skill_numpy'], category: 'category_data', specialty: 'specialty_machine_learning' },
-  { prefix: 'Deep Learning', skills: ['skill_python', 'skill_pytorch', 'skill_tensorflow', 'skill_pandas'], category: 'category_data', specialty: 'specialty_machine_learning' },
-  { prefix: 'Data Engineer', skills: ['skill_python', 'skill_sql', 'skill_airflow', 'skill_postgresql', 'skill_docker'], category: 'category_data', specialty: 'specialty_data_engineering' },
-  { prefix: 'Data Scientist', skills: ['skill_python', 'skill_pandas', 'skill_scikit', 'skill_tableau', 'skill_sql'], category: 'category_data', specialty: 'specialty_business_intelligence' },
-  // Design (2)
-  { prefix: 'UI/UX', skills: ['skill_figma', 'skill_ux_research', 'skill_design_systems'], category: 'category_design', specialty: 'specialty_uiux' },
-  { prefix: 'Product Designer', skills: ['skill_figma', 'skill_design_systems', 'skill_ux_research'], category: 'category_design', specialty: 'specialty_design_systems' },
-  // QA (4)
-  { prefix: 'QA Automation', skills: ['skill_playwright', 'skill_typescript', 'skill_ci_cd', 'skill_jest'], category: 'category_quality_assurance', specialty: 'specialty_test_automation' },
-  { prefix: 'Test Engineer', skills: ['skill_cypress', 'skill_javascript', 'skill_ci_cd'], category: 'category_quality_assurance', specialty: 'specialty_test_automation' },
-  { prefix: 'Performance Testing', skills: ['skill_performance_testing', 'skill_ci_cd', 'skill_linux'], category: 'category_quality_assurance', specialty: 'specialty_performance_testing' },
-  { prefix: 'API Testing', skills: ['skill_postman', 'skill_rest_api', 'skill_javascript'], category: 'category_quality_assurance', specialty: 'specialty_api_testing' },
-  // Blockchain (6)
-  { prefix: 'Solidity', skills: ['skill_solidity', 'skill_hardhat', 'skill_typescript'], category: 'category_blockchain', specialty: 'specialty_smart_contracts' },
-  { prefix: 'Web3', skills: ['skill_react', 'skill_ethersjs', 'skill_typescript', 'skill_solidity'], category: 'category_blockchain', specialty: 'specialty_dapp_dev' },
-  { prefix: 'DeFi', skills: ['skill_solidity', 'skill_hardhat', 'skill_typescript', 'skill_react'], category: 'category_blockchain', specialty: 'specialty_defi' },
-  { prefix: 'NFT', skills: ['skill_solidity', 'skill_react', 'skill_nodejs', 'skill_mongodb'], category: 'category_blockchain', specialty: 'specialty_nft' },
-  { prefix: 'Crypto Trading', skills: ['skill_python', 'skill_rest_api', 'skill_postgresql'], category: 'category_blockchain', specialty: 'specialty_dapp_dev' },
-  { prefix: 'Blockchain Analytics', skills: ['skill_react', 'skill_nodejs', 'skill_graphql'], category: 'category_blockchain', specialty: 'specialty_dapp_dev' },
-  // E-commerce (4)
-  { prefix: 'Shopify', skills: ['skill_shopify', 'skill_javascript', 'skill_css'], category: 'category_ecommerce', specialty: 'specialty_shopify_dev' },
-  { prefix: 'WordPress', skills: ['skill_wordpress', 'skill_php', 'skill_mysql'], category: 'category_ecommerce', specialty: 'specialty_wordpress_dev' },
-  { prefix: 'Magento', skills: ['skill_magento', 'skill_php', 'skill_mysql'], category: 'category_ecommerce', specialty: 'specialty_wordpress_dev' },
-  { prefix: 'Headless Commerce', skills: ['skill_strapi', 'skill_nodejs', 'skill_react'], category: 'category_ecommerce', specialty: 'specialty_headless_cms' },
-  // Cybersecurity (4)
-  { prefix: 'Security', skills: ['skill_pen_testing', 'skill_linux', 'skill_python'], category: 'category_cybersecurity', specialty: 'specialty_offensive_security' },
-  { prefix: 'Security Operations', skills: ['skill_incident_response', 'skill_linux', 'skill_python'], category: 'category_cybersecurity', specialty: 'specialty_security_operations' },
-  { prefix: 'Compliance', skills: ['skill_security_compliance', 'skill_linux', 'skill_docker'], category: 'category_cybersecurity', specialty: 'specialty_grc' },
-  { prefix: 'Threat Intelligence', skills: ['skill_python', 'skill_elasticsearch', 'skill_linux'], category: 'category_cybersecurity', specialty: 'specialty_security_operations' },
-  // Game Development (4)
-  { prefix: 'Unity', skills: ['skill_unity', 'skill_csharp'], category: 'category_game_dev', specialty: 'specialty_unity_dev' },
-  { prefix: 'Unreal', skills: ['skill_unreal', 'skill_cpp'], category: 'category_game_dev', specialty: 'specialty_unreal_dev' },
-  { prefix: 'VR/AR', skills: ['skill_unity', 'skill_csharp', 'skill_blender'], category: 'category_game_dev', specialty: 'specialty_vr_ar' },
-  { prefix: 'Game Backend', skills: ['skill_nodejs', 'skill_typescript', 'skill_redis'], category: 'category_game_dev', specialty: 'specialty_technical_art' },
-  // IoT (2)
-  { prefix: 'IoT', skills: ['skill_python', 'skill_mqtt', 'skill_aws'], category: 'category_iot', specialty: 'specialty_iot_dev' },
-  { prefix: 'Embedded Systems', skills: ['skill_embedded_c', 'skill_cpp', 'skill_arduino'], category: 'category_iot', specialty: 'specialty_embedded_systems' },
-  // Technical Writing (2)
-  { prefix: 'Technical Writer', skills: ['skill_api_documentation', 'skill_technical_writing'], category: 'category_tech_writing', specialty: 'specialty_api_docs' },
-  { prefix: 'Documentation Specialist', skills: ['skill_technical_writing', 'skill_git'], category: 'category_tech_writing', specialty: 'specialty_dev_docs' },
+  // Frontend Specialists (12 unique combinations) - Using NEW skills
+  { prefix: 'Senior React Architect', skills: ['skill_react', 'skill_typescript', 'skill_tanstack_query', 'skill_zustand', 'skill_vitest'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'Vue.js Performance Expert', skills: ['skill_vue', 'skill_nuxtjs', 'skill_vite', 'skill_pinia', 'skill_vitest'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'Angular Enterprise Consultant', skills: ['skill_angular', 'skill_rxjs', 'skill_ngrx', 'skill_jasmine', 'skill_karma'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'Next.js E-commerce Specialist', skills: ['skill_nextjs', 'skill_stripe', 'skill_prisma', 'skill_shadcn', 'skill_vercel'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'Svelte Innovation Developer', skills: ['skill_svelte', 'skill_sveltekit', 'skill_vite', 'skill_tailwind'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'Frontend Accessibility Expert', skills: ['skill_react', 'skill_accessibility', 'skill_testing_library', 'skill_axe', 'skill_figma'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'Progressive Web App Builder', skills: ['skill_pwa', 'skill_workbox', 'skill_lighthouse', 'skill_webpack'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'Component Library Architect', skills: ['skill_storybook', 'skill_radix_ui', 'skill_stitches', 'skill_chromatic'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'Micro-Frontend Specialist', skills: ['skill_module_federation', 'skill_single_spa', 'skill_webpack', 'skill_lerna'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'Animation & Motion Designer', skills: ['skill_framer_motion', 'skill_gsap', 'skill_lottie', 'skill_rive'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'JAMstack Developer', skills: ['skill_astro', 'skill_eleventy', 'skill_netlify', 'skill_cloudflare'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+  { prefix: 'Frontend Performance Optimizer', skills: ['skill_lighthouse', 'skill_webpack', 'skill_esbuild', 'skill_turbopack'], category: 'category_web_dev', specialty: 'specialty_frontend_dev' },
+
+  // Backend Specialists (12 unique combinations) - Using NEW skills
+  { prefix: 'Node.js Microservices Architect', skills: ['skill_nestjs', 'skill_trpc', 'skill_rabbitmq', 'skill_consul', 'skill_jaeger'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'Python AI Backend Engineer', skills: ['skill_fastapi', 'skill_celery', 'skill_sqlalchemy', 'skill_alembic', 'skill_pytest'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'Go Concurrency Expert', skills: ['skill_gin', 'skill_fiber', 'skill_gorm', 'skill_nats', 'skill_grpc'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'GraphQL API Specialist', skills: ['skill_graphql', 'skill_apollo', 'skill_hasura', 'skill_prisma', 'skill_dataloader'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'Java Enterprise Solutions Lead', skills: ['skill_spring', 'skill_quarkus', 'skill_hibernate', 'skill_kafka', 'skill_hazelcast'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'Django Scalability Engineer', skills: ['skill_django', 'skill_celery', 'skill_channels', 'skill_gunicorn', 'skill_nginx'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'Event-Driven Architecture Expert', skills: ['skill_kafka', 'skill_rabbitmq', 'skill_nats', 'skill_eventstore', 'skill_debezium'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'High-Performance API Developer', skills: ['skill_rust', 'skill_actix', 'skill_tokio', 'skill_serde', 'skill_diesel'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'Serverless Backend Specialist', skills: ['skill_aws', 'skill_lambda', 'skill_dynamodb', 'skill_sqs', 'skill_step_functions'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'Real-time Systems Engineer', skills: ['skill_socketio', 'skill_redis', 'skill_pusher', 'skill_ably'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'PHP Modern Stack Developer', skills: ['skill_laravel', 'skill_livewire', 'skill_inertia', 'skill_horizon', 'skill_vapor'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+  { prefix: 'Elixir Distributed Systems Expert', skills: ['skill_elixir', 'skill_phoenix', 'skill_ecto', 'skill_otp', 'skill_liveview'], category: 'category_web_dev', specialty: 'specialty_backend_dev' },
+
+  // Fullstack Engineers (8 unique combinations) - Using NEW skills
+  { prefix: 'MERN Stack Architect', skills: ['skill_react', 'skill_express', 'skill_mongodb', 'skill_mongoose', 'skill_jwt'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
+  { prefix: 'Next.js Full-Stack Engineer', skills: ['skill_nextjs', 'skill_prisma', 'skill_planetscale', 'skill_clerk', 'skill_uploadthing'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
+  { prefix: 'T3 Stack Specialist', skills: ['skill_nextjs', 'skill_trpc', 'skill_drizzle', 'skill_nextauth', 'skill_zod'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
+  { prefix: 'Django + React Expert', skills: ['skill_django', 'skill_drf', 'skill_react', 'skill_celery', 'skill_pytest'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
+  { prefix: 'SaaS Platform Developer', skills: ['skill_nextjs', 'skill_stripe', 'skill_supabase', 'skill_resend', 'skill_inngest'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
+  { prefix: 'E-commerce Full-Stack Lead', skills: ['skill_medusa', 'skill_shopify', 'skill_saleor', 'skill_stripe', 'skill_algolia'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
+  { prefix: 'Remix Full-Stack Developer', skills: ['skill_remix', 'skill_fly_io', 'skill_sqlite', 'skill_tailwind', 'skill_playwright'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
+  { prefix: 'Headless CMS Expert', skills: ['skill_strapi', 'skill_sanity', 'skill_contentful', 'skill_graphql', 'skill_nextjs'], category: 'category_web_dev', specialty: 'specialty_fullstack_dev' },
+
+  // Mobile Specialists (6 unique combinations) - Using NEW skills
+  { prefix: 'Flutter Cross-Platform Lead', skills: ['skill_flutter', 'skill_riverpod', 'skill_bloc', 'skill_hive', 'skill_firebase'], category: 'category_mobile_dev', specialty: 'specialty_cross_platform_mobile' },
+  { prefix: 'React Native Performance Expert', skills: ['skill_react_native', 'skill_reanimated', 'skill_mmkv', 'skill_flashlist', 'skill_expo'], category: 'category_mobile_dev', specialty: 'specialty_cross_platform_mobile' },
+  { prefix: 'iOS SwiftUI Specialist', skills: ['skill_swiftui', 'skill_combine', 'skill_core_data', 'skill_swift_concurrency', 'skill_xctest'], category: 'category_mobile_dev', specialty: 'specialty_native_ios' },
+  { prefix: 'Android Jetpack Compose Expert', skills: ['skill_jetpack_compose', 'skill_kotlin_coroutines', 'skill_room', 'skill_hilt', 'skill_retrofit'], category: 'category_mobile_dev', specialty: 'specialty_native_android' },
+  { prefix: 'Mobile DevOps Engineer', skills: ['skill_fastlane', 'skill_bitrise', 'skill_codemagic', 'skill_firebase_distribution'], category: 'category_mobile_dev', specialty: 'specialty_mobile_devops' },
+  { prefix: 'Cross-Platform Desktop Developer', skills: ['skill_tauri', 'skill_electron', 'skill_rust', 'skill_typescript'], category: 'category_mobile_dev', specialty: 'specialty_cross_platform_mobile' },
+
+  // DevOps & Cloud (6 unique combinations) - Using NEW skills
+  { prefix: 'Kubernetes Platform Engineer', skills: ['skill_kubernetes', 'skill_helm', 'skill_argocd', 'skill_crossplane', 'skill_kustomize'], category: 'category_cloud_devops', specialty: 'specialty_container_platforms' },
+  { prefix: 'AWS Solutions Architect', skills: ['skill_aws', 'skill_cdk', 'skill_sam', 'skill_cloudformation', 'skill_step_functions'], category: 'category_cloud_devops', specialty: 'specialty_cloud_architecture' },
+  { prefix: 'Site Reliability Engineer', skills: ['skill_opentelemetry', 'skill_datadog', 'skill_pagerduty', 'skill_runbook', 'skill_chaos_engineering'], category: 'category_cloud_devops', specialty: 'specialty_sre' },
+  { prefix: 'Infrastructure as Code Expert', skills: ['skill_terraform', 'skill_pulumi', 'skill_cdktf', 'skill_atlantis', 'skill_spacelift'], category: 'category_cloud_devops', specialty: 'specialty_infrastructure_code' },
+  { prefix: 'GitOps Pipeline Architect', skills: ['skill_argocd', 'skill_flux', 'skill_tekton', 'skill_github_actions', 'skill_dagger'], category: 'category_cloud_devops', specialty: 'specialty_infrastructure_code' },
+  { prefix: 'Service Mesh Engineer', skills: ['skill_istio', 'skill_linkerd', 'skill_envoy', 'skill_cilium', 'skill_ebpf'], category: 'category_cloud_devops', specialty: 'specialty_container_platforms' },
+
+  // Data & AI Specialists (8 unique combinations) - Using NEW skills
+  { prefix: 'MLOps Engineer', skills: ['skill_mlflow', 'skill_kubeflow', 'skill_bentoml', 'skill_seldon', 'skill_feast'], category: 'category_data', specialty: 'specialty_mlops' },
+  { prefix: 'Deep Learning Researcher', skills: ['skill_pytorch', 'skill_jax', 'skill_wandb', 'skill_lightning', 'skill_hydra'], category: 'category_data', specialty: 'specialty_machine_learning' },
+  { prefix: 'Data Pipeline Architect', skills: ['skill_airflow', 'skill_dagster', 'skill_prefect', 'skill_dbt', 'skill_great_expectations'], category: 'category_data', specialty: 'specialty_data_engineering' },
+  { prefix: 'Computer Vision Engineer', skills: ['skill_opencv', 'skill_yolo', 'skill_detectron', 'skill_mmdetection', 'skill_albumentations'], category: 'category_data', specialty: 'specialty_machine_learning' },
+  { prefix: 'LLM Application Developer', skills: ['skill_langchain', 'skill_llamaindex', 'skill_openai_api', 'skill_pinecone', 'skill_chromadb'], category: 'category_ai_ml', specialty: 'specialty_llm_apps' },
+  { prefix: 'AI Agent Builder', skills: ['skill_autogen', 'skill_crewai', 'skill_semantic_kernel', 'skill_langchain', 'skill_anthropic'], category: 'category_ai_ml', specialty: 'specialty_llm_apps' },
+  { prefix: 'Vector Database Specialist', skills: ['skill_pinecone', 'skill_weaviate', 'skill_qdrant', 'skill_milvus', 'skill_pgvector'], category: 'category_data', specialty: 'specialty_data_engineering' },
+  { prefix: 'Business Intelligence Analyst', skills: ['skill_tableau', 'skill_looker', 'skill_metabase', 'skill_dbt', 'skill_snowflake'], category: 'category_data', specialty: 'specialty_business_intelligence' },
+
+  // Blockchain & Web3 (6 unique combinations) - Using NEW skills
+  { prefix: 'Smart Contract Auditor', skills: ['skill_solidity', 'skill_foundry', 'skill_slither', 'skill_mythril', 'skill_echidna'], category: 'category_blockchain', specialty: 'specialty_smart_contracts' },
+  { prefix: 'DeFi Protocol Developer', skills: ['skill_solidity', 'skill_hardhat', 'skill_openzeppelin', 'skill_chainlink', 'skill_uniswap'], category: 'category_blockchain', specialty: 'specialty_defi' },
+  { prefix: 'Web3 Frontend Developer', skills: ['skill_wagmi', 'skill_rainbowkit', 'skill_viem', 'skill_ethersjs', 'skill_thirdweb'], category: 'category_blockchain', specialty: 'specialty_dapp_dev' },
+  { prefix: 'NFT Platform Builder', skills: ['skill_solidity', 'skill_ipfs', 'skill_the_graph', 'skill_opensea', 'skill_alchemy'], category: 'category_blockchain', specialty: 'specialty_nft' },
+  { prefix: 'Solana Developer', skills: ['skill_rust', 'skill_anchor', 'skill_solana', 'skill_metaplex', 'skill_phantom'], category: 'category_blockchain', specialty: 'specialty_smart_contracts' },
+  { prefix: 'Cross-Chain Developer', skills: ['skill_cosmos', 'skill_polkadot', 'skill_layerzero', 'skill_wormhole', 'skill_axelar'], category: 'category_blockchain', specialty: 'specialty_dapp_dev' },
+
+  // Security Specialists (4 unique combinations) - Using NEW skills
+  { prefix: 'Application Security Engineer', skills: ['skill_owasp', 'skill_burp_suite', 'skill_snyk', 'skill_sonarqube', 'skill_semgrep'], category: 'category_cybersecurity', specialty: 'specialty_application_security' },
+  { prefix: 'Cloud Security Architect', skills: ['skill_aws_security', 'skill_vault', 'skill_opa', 'skill_falco', 'skill_trivy'], category: 'category_cybersecurity', specialty: 'specialty_defensive_security' },
+  { prefix: 'Identity & Access Expert', skills: ['skill_keycloak', 'skill_auth0', 'skill_okta', 'skill_oauth', 'skill_saml'], category: 'category_cybersecurity', specialty: 'specialty_defensive_security' },
+  { prefix: 'Penetration Tester', skills: ['skill_burp_suite', 'skill_metasploit', 'skill_nmap', 'skill_kali', 'skill_cobalt_strike'], category: 'category_cybersecurity', specialty: 'specialty_offensive_security' },
+
+  // QA & Testing (4 unique combinations) - Using NEW skills
+  { prefix: 'E2E Test Automation Lead', skills: ['skill_playwright', 'skill_cypress', 'skill_webdriverio', 'skill_allure', 'skill_percy'], category: 'category_quality_assurance', specialty: 'specialty_test_automation' },
+  { prefix: 'Performance Testing Expert', skills: ['skill_k6', 'skill_gatling', 'skill_locust', 'skill_artillery', 'skill_grafana'], category: 'category_quality_assurance', specialty: 'specialty_performance_testing' },
+  { prefix: 'Mobile QA Engineer', skills: ['skill_appium', 'skill_detox', 'skill_maestro', 'skill_xcuitest', 'skill_espresso'], category: 'category_quality_assurance', specialty: 'specialty_test_automation' },
+  { prefix: 'API Testing Specialist', skills: ['skill_postman', 'skill_newman', 'skill_karate', 'skill_rest_assured', 'skill_pact'], category: 'category_quality_assurance', specialty: 'specialty_api_testing' },
 ]
 
 const SCREENING_QUESTIONS = [
@@ -252,10 +265,20 @@ const SCREENING_QUESTIONS = [
 // SEED FUNCTIONS
 // ============================================================================
 
-async function seedMLDiverseClients(count: number = 50): Promise<string[]> {
+async function seedMLDiverseClients(count: number = 25): Promise<string[]> {
   const clientIds: string[] = []
   const random = seededRandom(12345)
   const companySizes = [CompanySize.JUST_ME, CompanySize.TWO_TO_NINE, CompanySize.TEN_TO_NINETY, CompanySize.HUNDRED_TO_K, CompanySize.MORE_THAN_K]
+
+  // Company description templates for diversity
+  const companyDescriptions = [
+    (name: string) => `${name} is a forward-thinking technology company focused on innovation and excellence.`,
+    (name: string) => `${name} specializes in cutting-edge solutions for modern businesses. We value quality and collaboration.`,
+    (name: string) => `At ${name}, we build scalable products that make a difference. Join our mission to transform industries.`,
+    (name: string) => `${name} is rapidly growing and looking for top talent to help us achieve our ambitious goals.`,
+    (name: string) => `${name} combines technical expertise with creative vision to deliver exceptional results for our clients.`,
+    (name: string) => `${name} is an established leader in our field, committed to pushing boundaries and setting new standards.`,
+  ]
 
   for (let i = 1; i <= count; i++) {
     const firstName = pickOne(FIRST_NAMES, random)
@@ -264,6 +287,8 @@ async function seedMLDiverseClients(count: number = 50): Promise<string[]> {
     const companyName = `${pickOne(COMPANY_NAMES, random)} ${pickOne(COMPANY_SUFFIXES, random)}`
     const companySize = pickOne(companySizes, random)
     const email = `ml.diverse.client${i}@client.test`
+    const descTemplate = pickOne(companyDescriptions, random)
+    const description = descTemplate(companyName)
 
     const user = await prisma.user.upsert({
       where: { email },
@@ -284,7 +309,7 @@ async function seedMLDiverseClients(count: number = 50): Promise<string[]> {
               create: {
                 companyName,
                 size: companySize,
-                description: `${companyName} is looking for talented freelancers.`
+                description
               }
             }
           }
@@ -296,7 +321,7 @@ async function seedMLDiverseClients(count: number = 50): Promise<string[]> {
   return clientIds
 }
 
-async function seedMLDiverseFreelancers(count: number = 150): Promise<string[]> {
+async function seedMLDiverseFreelancers(count: number = 50): Promise<string[]> {
   const freelancerIds: string[] = []
   const random = seededRandom(67890)
   const allSkills = await prisma.skill.findMany({ select: { id: true } })
@@ -308,6 +333,16 @@ async function seedMLDiverseFreelancers(count: number = 150): Promise<string[]> 
   const allSpecialties = await prisma.specialty.findMany({ select: { id: true } })
   const specialtyIds = new Set(allSpecialties.map(s => s.id))
 
+  // Bio templates for diversity
+  const bioTemplates = [
+    (title: string, skills: string[], years: number) => `${title} with ${years}+ years of experience. Specialized in ${skills.slice(0, 2).join(' and ')}. Passionate about building scalable solutions.`,
+    (title: string, skills: string[], years: number) => `Experienced ${title} focused on ${skills[0]?.replace('skill_', '')} and modern development practices. ${years} years in the industry.`,
+    (title: string, skills: string[], years: number) => `Senior ${title} with expertise in ${skills.slice(0, 3).join(', ')}. Delivered 50+ successful projects over ${years} years.`,
+    (title: string, skills: string[], years: number) => `Freelance ${title} specializing in ${skills.slice(1, 3).join(' & ')}. ${years}+ years of remote collaboration experience.`,
+    (title: string, skills: string[], years: number) => `${title} passionate about ${skills[0]?.replace('skill_', '')} ecosystem. ${years} years building production-ready applications.`,
+    (title: string, skills: string[], years: number) => `Full-time ${title} with deep knowledge in ${skills.slice(0, 2).join(' + ')}. ${years} years of continuous learning and innovation.`,
+  ]
+
   for (let i = 1; i <= count; i++) {
     const template = pickOne(FREELANCER_TEMPLATES, random)
     const firstName = pickOne(FIRST_NAMES, random)
@@ -315,7 +350,10 @@ async function seedMLDiverseFreelancers(count: number = 150): Promise<string[]> 
     const location = pickOne(LOCATIONS, random)
     const email = `ml.diverse.freelancer${i}@freelancer.test`
     const validSkills = template.skills.filter(s => skillIds.has(s))
-    const title = `${template.prefix} Developer`
+    const title = template.prefix // Use the full descriptive title
+    const years = Math.floor(random() * 8) + 2 // 2-10 years experience
+    const bioTemplate = pickOne(bioTemplates, random)
+    const bio = bioTemplate(title, validSkills, years)
 
     const user = await prisma.user.upsert({
       where: { email },
@@ -335,7 +373,7 @@ async function seedMLDiverseFreelancers(count: number = 150): Promise<string[]> 
             freelancer: {
               create: {
                 title,
-                bio: `Experienced ${template.prefix} developer with expertise in ${validSkills.slice(0, 2).join(', ')}.`
+                bio
               }
             }
           }
@@ -372,7 +410,7 @@ async function seedMLDiverseFreelancers(count: number = 150): Promise<string[]> 
 }
 
 
-async function seedMLDiverseJobs(clientIds: string[], count: number = 200): Promise<string[]> {
+async function seedMLDiverseJobs(clientIds: string[], count: number = 100): Promise<string[]> {
   const jobIds: string[] = []
   const random = seededRandom(11111)
   const allSkills = await prisma.skill.findMany({ select: { id: true } })
@@ -385,6 +423,16 @@ async function seedMLDiverseJobs(clientIds: string[], count: number = 200): Prom
   const locTypes = [JobLocationType.REMOTE, JobLocationType.HYBRID, JobLocationType.ON_SITE]
   const durations = [JobDurationCommitment.LESS_THAN_ONE_MONTH, JobDurationCommitment.ONE_TO_THREE_MONTHS, JobDurationCommitment.THREE_TO_SIX_MONTHS, JobDurationCommitment.MORE_THAN_SIX_MONTHS]
 
+  // Description templates for diversity
+  const descriptionTemplates = [
+    (title: string, skills: string[]) => `We are seeking a talented professional to ${title.toLowerCase()}. The ideal candidate should have strong experience with ${skills.slice(0, 2).join(' and ')}. This is an exciting opportunity to work on cutting-edge technology.`,
+    (title: string, skills: string[]) => `Looking for an expert to ${title.toLowerCase()}. Must be proficient in ${skills.slice(0, 3).join(', ')}. Join our innovative team and make an impact.`,
+    (title: string, skills: string[]) => `${title} - We need someone who can deliver high-quality results using ${skills.slice(0, 2).join(' & ')}. Great opportunity for growth and learning.`,
+    (title: string, skills: string[]) => `Exciting project alert! We're looking to ${title.toLowerCase()}. Required skills: ${skills.slice(0, 3).join(', ')}. Competitive compensation and flexible work environment.`,
+    (title: string, skills: string[]) => `Join us to ${title.toLowerCase()}. We value expertise in ${skills.slice(0, 2).join(' + ')} and a passion for clean code. Long-term collaboration potential.`,
+    (title: string, skills: string[]) => `${title} needed for an innovative project. Strong background in ${skills.slice(0, 3).join(', ')} required. Work with a talented international team.`,
+  ]
+
   for (let i = 1; i <= count; i++) {
     const template = pickOne(JOB_TEMPLATES, random)
     const clientId = pickOne(clientIds, random)
@@ -393,6 +441,8 @@ async function seedMLDiverseJobs(clientIds: string[], count: number = 200): Prom
     const budgetMax = template.budget[1] ?? 20000
     const budget = budgetMin + Math.floor(random() * (budgetMax - budgetMin))
     const jobId = `ml_diverse_job_${i}`
+    const descTemplate = pickOne(descriptionTemplates, random)
+    const description = descTemplate(template.title, validSkills)
     
     // Use existing specialty or fallback to a default one
     const specialtyId = specialtyIds.has(template.specialty) ? template.specialty : Array.from(specialtyIds)[0]
@@ -405,7 +455,7 @@ async function seedMLDiverseJobs(clientIds: string[], count: number = 200): Prom
         id: jobId,
         clientId,
         title: template.title,
-        description: `We are looking for an experienced developer to ${template.title.toLowerCase()}. This is a great opportunity to work on an exciting project.`,
+        description,
         specialtyId,
         experienceLevel: pickOne(expLevels, random),
         locationType: pickOne(locTypes, random),
@@ -450,7 +500,7 @@ async function seedMLDiverseInteractions(clientIds: string[], freelancerIds: str
   const sources = [MatchInteractionSource.SEARCH, MatchInteractionSource.RECOMMENDATION, MatchInteractionSource.DIRECT]
 
   let count = 0
-  const maxInteractions = 2000
+  const maxInteractions = 500 // Reduced for quality over quantity
 
   for (const jobId of jobIds) {
     if (count >= maxInteractions) break
@@ -459,8 +509,8 @@ async function seedMLDiverseInteractions(clientIds: string[], freelancerIds: str
     const job = await prisma.jobPost.findUnique({ where: { id: jobId }, select: { clientId: true } })
     if (!job) continue
 
-    // Create 1-3 interactions per job
-    const numInteractions = Math.floor(random() * 3) + 1
+    // Create 2-5 interactions per job (more realistic)
+    const numInteractions = Math.floor(random() * 4) + 2
     const selectedFreelancers = pickRandom(freelancerIds, numInteractions, random)
 
     for (const freelancerId of selectedFreelancers) {
@@ -490,11 +540,18 @@ async function seedMLDiverseInteractions(clientIds: string[], freelancerIds: str
       // Create proposal for PROPOSAL_SUBMITTED
       if (interactionType === MatchInteractionType.PROPOSAL_SUBMITTED) {
         const proposalStatuses = [JobProposalStatus.SUBMITTED, JobProposalStatus.SHORTLISTED, JobProposalStatus.DECLINED]
+        const coverLetters = [
+          `I am excited to apply for this position. I have relevant experience and would love to contribute to your project.`,
+          `Your project aligns perfectly with my expertise. I'm confident I can deliver high-quality results within your timeline.`,
+          `I've worked on similar projects and understand the challenges involved. Let's discuss how I can help you succeed.`,
+          `This opportunity matches my skills perfectly. I'm available to start immediately and committed to excellence.`,
+          `I bring extensive experience in this domain and a track record of successful project delivery.`,
+        ]
         await prisma.jobProposal.create({
           data: {
             jobId,
             freelancerId,
-            coverLetter: `I am excited to apply for this position. I have relevant experience and skills.`,
+            coverLetter: pickOne(coverLetters, random),
             status: pickOne(proposalStatuses, random),
           }
         }).catch(() => {})
@@ -503,12 +560,19 @@ async function seedMLDiverseInteractions(clientIds: string[], freelancerIds: str
       // Create invitation for INVITATION_SENT
       if (interactionType === MatchInteractionType.INVITATION_SENT) {
         const invitationStatuses = [JobInvitationStatus.SENT, JobInvitationStatus.ACCEPTED, JobInvitationStatus.DECLINED]
+        const inviteMessages = [
+          `We think you would be a great fit for our project. Your skills match exactly what we're looking for.`,
+          `Your profile impressed us! We'd love to discuss this opportunity with you in more detail.`,
+          `We have an exciting project that matches your expertise. Are you available for a quick chat?`,
+          `Your experience in this area is exactly what we need. We'd like to invite you to apply.`,
+          `We've reviewed your portfolio and believe you're the right person for this job. Interested?`,
+        ]
         await prisma.jobInvitation.create({
           data: {
             jobId,
             clientId: job.clientId,
             freelancerId,
-            message: `We think you would be a great fit for our project.`,
+            message: pickOne(inviteMessages, random),
             status: pickOne(invitationStatuses, random),
           }
         }).catch(() => {})
@@ -522,19 +586,24 @@ async function seedMLDiverseInteractions(clientIds: string[], freelancerIds: str
 // ============================================================================
 
 export async function seedMLDiverseData(): Promise<void> {
-  console.log('\n🎯 Seeding ML Diverse Data...\n')
+  console.log('\n🎯 Seeding ML Diverse Data (Quality over Quantity)...\n')
 
-  const clientIds = await runStep('Creating ML Diverse Clients (200)', () => seedMLDiverseClients(200))
-  const freelancerIds = await runStep('Creating ML Diverse Freelancers (500)', () => seedMLDiverseFreelancers(500))
-  const jobIds = await runStep('Creating ML Diverse Jobs (800)', () => seedMLDiverseJobs(clientIds, 800))
-  await runStep('Creating ML Diverse Interactions (2000)', () => seedMLDiverseInteractions(clientIds, freelancerIds, jobIds))
+  const clientIds = await runStep('Creating ML Diverse Clients (25)', () => seedMLDiverseClients(25))
+  const freelancerIds = await runStep('Creating ML Diverse Freelancers (50)', () => seedMLDiverseFreelancers(50))
+  const jobIds = await runStep('Creating ML Diverse Jobs (100)', () => seedMLDiverseJobs(clientIds, 100))
+  await runStep('Creating ML Diverse Interactions (500)', () => seedMLDiverseInteractions(clientIds, freelancerIds, jobIds))
 
   console.log('\n✅ ML Diverse Data seeding completed!')
-  console.log(`   - ${clientIds.length} Clients`)
-  console.log(`   - ${freelancerIds.length} Freelancers`)
-  console.log(`   - ${jobIds.length} Jobs`)
+  console.log(`   - ${clientIds.length} Clients (diverse company profiles)`)
+  console.log(`   - ${freelancerIds.length} Freelancers (unique titles & skills)`)
+  console.log(`   - ${jobIds.length} Jobs (varied descriptions & requirements)`)
   console.log('\n📧 Test Accounts:')
-  console.log('   Clients: ml.diverse.client{1-200}@client.test')
-  console.log('   Freelancers: ml.diverse.freelancer{1-500}@freelancer.test')
+  console.log('   Clients: ml.diverse.client{1-25}@client.test')
+  console.log('   Freelancers: ml.diverse.freelancer{1-50}@freelancer.test')
   console.log('   Password: TestPassword!123')
+  console.log('\n🎯 Focus: Quality & Diversity over Quantity')
+  console.log('   - Unique freelancer titles (no more generic "X Developer")')
+  console.log('   - Diverse skill combinations (minimal overlap)')
+  console.log('   - Varied job descriptions & company profiles')
+  console.log('   - Realistic bio & cover letter templates')
 }

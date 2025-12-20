@@ -1,33 +1,85 @@
-# ML Diverse Seed Data Guide - FIXED & READY ✅
+# ML Diverse Seed Data Guide - QUALITY FOCUSED ✅
 
-## ✅ STATUS: ALL ERRORS FIXED - READY TO RUN
+## ✅ STATUS: OPTIMIZED FOR QUALITY & DIVERSITY
 
-**All TypeScript compilation errors have been resolved:**
-- ✅ Fixed foreign key constraint issues with specialty IDs
-- ✅ Fixed budget array access with proper null handling  
-- ✅ Updated all specialty references to match taxonomy
-- ✅ Validated all skill, category, and specialty IDs exist
-- ✅ No more TypeScript compilation errors
+**Focus: Quality over Quantity - Unique & Realistic Data**
+- ✅ **50 Unique Freelancer Templates** with descriptive titles (no more generic "X Developer")
+- ✅ **Minimal Skill Overlap** - each freelancer has unique skill combinations
+- ✅ **Diverse Bio Templates** - 6 different bio patterns with experience levels
+- ✅ **Varied Job Descriptions** - 6 different description templates
+- ✅ **Realistic Company Profiles** - diverse company descriptions
+- ✅ **All TypeScript errors fixed** and skills validated
 
 ## Tổng quan
 
-File `prisma/seed/ml-diverse-data.ts` tạo dữ liệu đa dạng cho việc train ML models với quy mô lớn:
+File `prisma/seed/ml-diverse-data.ts` tạo dữ liệu **chất lượng cao và đa dạng** cho việc train ML models:
 
-### Số lượng dữ liệu (EXPANDED)
-- **200 Clients** - Khách hàng từ nhiều quốc gia, company sizes khác nhau
-- **500 Freelancers** - Freelancers với skills đa dạng, 60+ templates
-- **800 Jobs** - Jobs với 100+ templates thực tế, skill requirements đa dạng
-- **2000+ Interactions** - Views, proposals, invitations với patterns có ý nghĩa
+### Số lượng dữ liệu (QUALITY FOCUSED)
+- **25 Clients** - Diverse company profiles with unique descriptions
+- **50 Freelancers** - Unique titles & skill combinations (minimal overlap)
+- **100 Jobs** - Varied descriptions & requirements
+- **500+ Interactions** - Quality interactions with diverse patterns
 
 ### Đặc điểm quan trọng cho ML Training
 
-1. **Skill Diversity**: Mỗi job/freelancer có 4-7 skills (tăng từ 3-7)
-2. **Template Diversity**: 100+ job templates, 60+ freelancer templates
-3. **Category Coverage**: 13 categories, 50+ specialties, 150+ skills
-4. **Realistic Patterns**: 
-   - Logical skill combinations (React + TypeScript + Tailwind)
-   - Proper title-skill matching (React Developer có React skills)
-   - Budget ranges phù hợp với complexity ($2K-$80K)
+1. **Unique Freelancer Titles**: 
+   - ❌ Old: "React Developer", "Vue.js Developer", "Angular Developer"
+   - ✅ New: "Senior React Architect", "Vue.js Performance Expert", "Angular Enterprise Consultant"
+
+2. **Diverse Skill Combinations**: 
+   - Each freelancer has 4-5 unique skills
+   - Minimal overlap between freelancers (max 20% overlap)
+   - Realistic skill pairings (React + TypeScript + Tailwind)
+
+3. **Varied Bio Templates**: 6 different patterns
+   - Experience-focused: "X years of experience..."
+   - Expertise-focused: "Specialized in Y and Z..."
+   - Project-focused: "Delivered 50+ successful projects..."
+   - Remote-focused: "X years of remote collaboration..."
+   - Passion-focused: "Passionate about X ecosystem..."
+   - Innovation-focused: "X years of continuous learning..."
+
+4. **Diverse Job Descriptions**: 6 different templates
+   - Professional: "We are seeking a talented professional..."
+   - Expert-focused: "Looking for an expert to..."
+   - Direct: "X needed - We need someone who..."
+   - Exciting: "Exciting project alert! We're looking..."
+   - Collaborative: "Join us to... We value expertise..."
+   - International: "X needed for innovative project..."
+
+## Freelancer Templates (50 Unique Combinations)
+
+### Frontend Specialists (12)
+- Senior React Architect, Vue.js Performance Expert, Angular Enterprise Consultant
+- Next.js E-commerce Specialist, Svelte Innovation Developer
+- Frontend Accessibility Expert, Progressive Web App Builder
+- Component Library Architect, Micro-Frontend Specialist
+- Animation & Motion Designer, JAMstack Developer, Frontend Performance Optimizer
+
+### Backend Specialists (12)
+- Node.js Microservices Architect, Python AI Backend Engineer, Go Concurrency Expert
+- GraphQL API Specialist, Java Enterprise Solutions Lead, Django Scalability Engineer
+- Event-Driven Architecture Expert, High-Performance API Developer
+- Serverless Backend Specialist, Real-time Systems Engineer
+- PHP Modern Stack Developer, Ruby Performance Optimizer
+
+### Fullstack Engineers (8)
+- MERN Stack Architect, Next.js Full-Stack Engineer, T3 Stack Specialist
+- Django + React Expert, SaaS Platform Developer, E-commerce Full-Stack Lead
+- Remix Full-Stack Developer, JAMstack + Headless CMS Expert
+
+### Mobile Specialists (6)
+- Flutter Cross-Platform Lead, React Native Performance Expert
+- iOS SwiftUI Specialist, Android Jetpack Compose Expert
+- Mobile DevOps Engineer, Hybrid App Architect
+
+### DevOps & Cloud (6)
+- Kubernetes Platform Engineer, AWS Solutions Architect, Site Reliability Engineer
+- Infrastructure as Code Expert, CI/CD Pipeline Architect, Multi-Cloud Engineer
+
+### Data & AI Specialists (6)
+- MLOps Engineer, Deep Learning Researcher, Data Pipeline Architect
+- Computer Vision Engineer, NLP & LLM Specialist, Business Intelligence Analyst
 
 ## Cách sử dụng
 
@@ -53,141 +105,52 @@ npm run seed -- taxonomy
 npm run seed -- ml-diverse
 ```
 
-## Cấu trúc dữ liệu (EXPANDED)
-
-### Job Templates (100+ templates)
-- **Frontend Development (10)**: React dashboards, Vue.js CRMs, Angular enterprise, Next.js e-commerce
-- **Backend Development (10)**: Node.js APIs, Python FastAPI, Go microservices, NestJS architecture
-- **Fullstack Development (8)**: SaaS applications, booking platforms, social media platforms
-- **Mobile Development (8)**: Flutter e-commerce, React Native social, native iOS/Android apps
-- **Cloud & DevOps (6)**: Kubernetes deployments, AWS infrastructure, CI/CD pipelines
-- **Data Science & AI (6)**: PyTorch models, ETL pipelines, Power BI dashboards
-- **Blockchain & Web3 (8)**: Solidity contracts, DeFi protocols, NFT marketplaces
-- **E-commerce & CMS (6)**: Shopify themes, WooCommerce plugins, headless commerce
-- **Cybersecurity (6)**: Penetration testing, security monitoring, compliance frameworks
-- **Game Development (6)**: Unity games, Unreal Engine, VR experiences
-- **Quality Assurance (6)**: Playwright testing, Cypress automation, API testing
-- **Product Design (4)**: UI/UX design, design systems, UX research
-- **IoT & Embedded (4)**: Device management, embedded firmware, smart home
-- **Technical Writing (4)**: API documentation, developer guides
-
-### Freelancer Templates (60+ templates)
-Tương ứng với các specialty, với titles logic:
-- "React Developer" → có React, TypeScript, CSS skills
-- "Python Backend Developer" → có Python, FastAPI, PostgreSQL skills
-- "Flutter Mobile Developer" → có Flutter, REST API, Firebase skills
-
-### Locations (12 countries)
-- San Francisco, New York (USA)
-- London (UK), Berlin (Germany)
-- Singapore, Tokyo (Asia)
-- Ho Chi Minh City (Vietnam)
-- Sydney (Australia), Toronto (Canada)
-- Dubai (UAE), Seoul (South Korea), Mumbai (India)
-
 ## Features cho ML Training
 
 ### Rich Feature Set
 | Feature Category | Examples |
 |------------------|----------|
-| **Job Features** | Title, description, 4-7 skills, budget ($2K-$80K), location type, experience level |
-| **Freelancer Features** | Title, bio, 4-7 skills, specialties, location, experience |
-| **Interaction Features** | Type (view/proposal/invitation), source, match scores (0.5-0.95) |
-| **Screening Features** | 20 diverse screening questions, language requirements |
-| **Contextual Features** | Company size, project duration, geographic distribution |
+| **Unique Titles** | "Senior React Architect", "Python AI Backend Engineer", "MLOps Engineer" |
+| **Skill Diversity** | 4-5 skills per freelancer, minimal overlap, realistic combinations |
+| **Bio Variety** | 6 different bio templates with 2-10 years experience |
+| **Job Descriptions** | 6 different description templates for variety |
+| **Company Profiles** | 6 different company description patterns |
+| **Interaction Quality** | 2-5 interactions per job, diverse cover letters & invite messages |
 
 ### Realistic Patterns
-- **High Skill Match**: React developer + React job → high interaction probability
-- **Budget Alignment**: Complex projects (blockchain, AI) → higher budgets
-- **Experience Matching**: Entry-level freelancers → entry-level projects
-- **Geographic Considerations**: Timezone-friendly matching patterns
-
-## Job Categories & Skills Coverage
-
-### Programming Languages (20+)
-JavaScript, TypeScript, Python, Go, Java, Rust, Solidity, Swift, Kotlin, C#, C++, PHP, Ruby
-
-### Frontend Frameworks (15+)
-React, Vue.js, Angular, Next.js, Svelte, Nuxt.js, Remix, Astro
-
-### Backend Frameworks (15+)
-Express.js, NestJS, Django, FastAPI, Spring Boot, Laravel, Ruby on Rails
-
-### Databases (10+)
-PostgreSQL, MongoDB, Redis, MySQL, Elasticsearch, DynamoDB, Cassandra
-
-### Cloud & DevOps (20+)
-AWS, Azure, GCP, Docker, Kubernetes, Terraform, CI/CD, Ansible, Jenkins, Prometheus
-
-### Design & Creative (10+)
-Figma, Adobe XD, Sketch, Photoshop, After Effects, Illustrator
-
-### Testing Tools (10+)
-Cypress, Playwright, Jest, Selenium, Postman, Performance Testing
-
-### Blockchain & Web3 (8+)
-Solidity, Web3.js, Ethers.js, Hardhat, Smart Contracts
-
-### Mobile Development (10+)
-Flutter, React Native, Swift, Kotlin, SwiftUI, Jetpack Compose, Expo
-
-### AI & Machine Learning (15+)
-TensorFlow, PyTorch, scikit-learn, Pandas, NumPy, Hugging Face, LangChain
-
-## Interaction Patterns
-
-### Realistic Match Scoring
-- **0.9-0.95**: Perfect skill match + experience alignment
-- **0.7-0.89**: Good skill overlap + compatible experience
-- **0.5-0.69**: Some skill overlap + mixed compatibility
-- **Below 0.5**: Poor match (filtered out)
-
-### Proposal & Invitation Patterns
-- **High Match Jobs**: 60-90% proposal acceptance rate
-- **Medium Match Jobs**: 30-58% acceptance rate  
-- **Screening Questions**: Relevant to job requirements
-- **Geographic Factors**: Remote-friendly vs location-specific
+- **Skill Matching**: React Architect + React jobs → high interaction probability
+- **Experience Levels**: 2-10 years experience with realistic bio patterns
+- **Title Logic**: "GraphQL API Specialist" has GraphQL + Node.js + TypeScript skills
+- **Budget Alignment**: Complex roles (MLOps, Blockchain) → higher budgets
+- **Geographic Distribution**: 12 countries with realistic freelancer distribution
 
 ## Email Patterns
 
 ```
-Clients:     ml.diverse.client{1-200}@client.test
-Freelancers: ml.diverse.freelancer{1-500}@freelancer.test
+Clients:     ml.diverse.client{1-25}@client.test
+Freelancers: ml.diverse.freelancer{1-50}@freelancer.test
 Password:    TestPassword!123
 ```
 
 ## Demo Scenarios Enabled
 
-1. **Skill-based Matching**: React developer finding React + TypeScript projects
-2. **Budget Filtering**: Projects within freelancer's rate range
-3. **Experience Matching**: Junior developers with entry-level projects
-4. **Location Preferences**: Remote vs on-site vs hybrid filtering
-5. **Specialty Focus**: Blockchain experts finding DeFi and smart contract work
-6. **Multi-skill Projects**: Fullstack roles requiring diverse skill combinations
-7. **Screening Process**: Jobs with relevant screening questions
-8. **Language Requirements**: English proficiency matching
-
-## Technical Implementation
-
-### ✅ Fixed Issues
-- **Foreign Key Constraints**: All specialty IDs validated against taxonomy
-- **TypeScript Errors**: Proper null handling for budget arrays
-- **Skill References**: All skill IDs exist in taxonomy  
-- **Category Mapping**: Correct category-specialty relationships
-
-### Performance Features
-- **Seeded Random**: Deterministic results for reproducible datasets
-- **Batch Operations**: Efficient creation of large datasets
-- **Upsert Patterns**: Safe re-running without duplicates
-- **Validation**: All foreign key references checked before creation
+1. **Unique Skill Matching**: "Senior React Architect" finding React + TypeScript projects
+2. **Specialized Roles**: "MLOps Engineer" finding ML infrastructure projects
+3. **Experience Matching**: Senior developers (8+ years) with complex projects
+4. **Technology Focus**: "Vue.js Performance Expert" finding Vue.js optimization work
+5. **Cross-platform Expertise**: "Flutter Cross-Platform Lead" finding mobile projects
+6. **Enterprise Solutions**: "Java Enterprise Solutions Lead" finding enterprise projects
 
 ## Lưu ý
 
-1. **✅ Ready to Run**: No more compilation errors, all dependencies satisfied
-2. **Reproducibility**: Sử dụng seeded random để kết quả nhất quán
-3. **Skip duplicates**: Có thể chạy lại mà không tạo duplicate
-4. **Dependencies**: Cần chạy `taxonomy` trước để có skills/specialties
-5. **Scale**: Tạo 200 clients, 500 freelancers, 800 jobs, 2000+ interactions
+1. **✅ Quality over Quantity**: 50 unique freelancers vs 500 similar ones
+2. **✅ Minimal Skill Overlap**: Each freelancer has unique skill combinations
+3. **✅ Realistic Titles**: Descriptive, professional titles that match skills
+4. **✅ Diverse Content**: Bio, job descriptions, company profiles all varied
+5. **✅ Ready to Run**: No compilation errors, all dependencies satisfied
+6. **Reproducibility**: Sử dụng seeded random để kết quả nhất quán
+7. **Skip duplicates**: Có thể chạy lại mà không tạo duplicate
+8. **Dependencies**: Cần chạy `taxonomy` trước để có skills/specialties
 
 ## Run Command
 
@@ -196,7 +159,14 @@ npm run seed -- ml-diverse
 ```
 
 **Expected Output:**
-- ✅ 200 ML Diverse Clients created
-- ✅ 500 ML Diverse Freelancers created  
-- ✅ 800 ML Diverse Jobs created
-- ✅ 2000+ ML Diverse Interactions created
+- ✅ 25 ML Diverse Clients created (unique company profiles)
+- ✅ 50 ML Diverse Freelancers created (unique titles & skills)
+- ✅ 100 ML Diverse Jobs created (varied descriptions)
+- ✅ 500+ ML Diverse Interactions created (quality interactions)
+
+**Key Improvements:**
+- 🎯 **Unique freelancer titles** (no more generic "X Developer")
+- 🎯 **Minimal skill overlap** between freelancers
+- 🎯 **Diverse bio & description templates**
+- 🎯 **Realistic experience levels** (2-10 years)
+- 🎯 **Quality over quantity** approach
