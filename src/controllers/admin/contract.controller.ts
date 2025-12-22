@@ -40,3 +40,12 @@ export const getContractStats = async (req: Request, res: Response) => {
 	
 	res.status(StatusCodes.OK).json(result)
 }
+
+export const getContractPaymentDetails = async (req: Request, res: Response) => {
+	requireAdmin(req)
+	
+	const { contractId } = AdminContractDetailParamsSchema.parse(req.params)
+	const result = await adminContractService.getContractPaymentDetails(contractId)
+	
+	res.status(StatusCodes.OK).json(result)
+}

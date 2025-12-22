@@ -30,11 +30,10 @@ export const uploadPortfolioMedia = makeMulter({
         maxFiles: 15
 })
 
-// Preset: tài liệu chung (PDF/ZIP/DOCX/PNG/JPG…)
+// Preset: tài liệu chung - cho phép tất cả file types
 export const uploadAnyFiles = makeMulter({
         allowed: [
-                /^image\/(jpeg|png|webp|avif)$/,
-		/^application\/(pdf|zip|x-zip-compressed|msword|vnd.openxmlformats-officedocument\.wordprocessingml\.document)$/
+                /.*/ // Cho phép tất cả MIME types
 	],
 	maxSizeMB: 20,
 	maxFiles: 20

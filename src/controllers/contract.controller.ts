@@ -114,6 +114,24 @@ export const getContractDetail = async (req: Request, res: Response) => {
 	return res.status(StatusCodes.OK).json(contract)
 }
 
+export const getContractPaymentDetails = async (req: Request, res: Response) => {
+	const user = req.user
+	const userId = user?.id
+	const { contractId } = req.params
+
+	if (!userId) {
+		throw new UnauthorizedException('Bạn cần đăng nhập để xem thông tin thanh toán', ErrorCode.UNAUTHORIED)
+	}
+
+	if (!contractId) {
+		throw new BadRequestException('Thiếu tham số contractId', ErrorCode.PARAM_QUERY_ERROR)
+	}
+
+	const result = await contractService.getContractPaymentDetails({ id: userId, role: user?.role ?? null }, contractId)
+
+	return res.status(StatusCodes.OK).json(result)
+}
+
 export const acceptContractTerms = async (req: Request, res: Response) => {
 	const user = req.user
 	const userId = user?.id

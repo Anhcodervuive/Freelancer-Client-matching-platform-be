@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LMS Architecture Proposal</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            color: #333;
+        }
+
+        h1 {
+            color: #1a365d;
+            border-bottom: 3px solid #3182ce;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            color: #2c5282;
+            margin-top: 30px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 5px;
+        }
+
+        h3 {
+            color: #2d3748;
+        }
+
+        pre {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        th,
+        td {
+            border: 1px solid #e2e8f0;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background: #edf2f7;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background: #f7fafc;
+        }
+
+        .header-info {
+            background: #ebf8ff;
+            border-left: 4px solid #3182ce;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 20px 0;
+        }
+
+        @media print {
+            body {
+                padding: 20px;
+            }
+
+            pre {
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>LMS Architecture Proposal</h1>
+    <div class="header-info">
+        <strong>Project:</strong> Build Online Learning Platform with Video Streaming<br>
+        <strong>Document Type:</strong> Technical Architecture Proposal<br>
+        <strong>Version:</strong> 1.0
+    </div>
+
+    <h2>1. System Overview</h2>
+    <pre>
+┌─────────────────────────────────────────────────────────────────┐
+│                        CLIENT LAYER                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   Web App    │  │  Mobile App  │  │  Admin Panel │          │
+│  │  (Next.js)   │  │    (PWA)     │  │  (Next.js)   │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        API GATEWAY                               │
+│                    (AWS API Gateway)                             │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      APPLICATION LAYER                           │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                    NestJS Backend                         │  │
+│  │  ┌────────────┐ ┌────────────┐ ┌────────────┐           │  │
+│  │  │   Auth     │ │  Courses   │ │   Video    │           │  │
+│  │  │  Module    │ │  Module    │ │  Module    │           │  │
+│  │  └────────────┘ └────────────┘ └────────────┘           │  │
+│  │  ┌────────────┐ ┌────────────┐ ┌────────────┐           │  │
+│  │  │   Quiz     │ │ Analytics  │ │   Users    │           │  │
+│  │  │  Module    │ │  Module    │ │  Module    │           │  │
+│  │  └────────────┘ └────────────┘ └────────────┘           │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        DATA LAYER                                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  PostgreSQL  │  │    Redis     │  │ Elasticsearch│          │
+│  │  (Primary)   │  │   (Cache)    │  │  (Search)    │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+    </pre>
+
+    <hr>
+
+    <h2>2. Video Streaming Architecture</h2>
+    <pre>
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Upload    │────▶│     S3      │────▶│ MediaConvert│
+│   Video     │     │   (Raw)     │     │ (Transcode) │
+└─────────────┘     └─────────────┘     └─────────────┘
+                                               │
+                                               ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Player    │◀────│ CloudFront  │◀────│     S3      │
+│   (HLS)     │     │   (CDN)     │     │ (Processed) │
+└─────────────┘     └─────────────┘     └─────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │  DRM Server │
+                    │  (Pallycon) │
+                    └─────────────┘
+    </pre>
+
+    <h3>Video Quality Levels:</h3>
+    <ul>
+        <li>360p (500 kbps) - Mobile/Low bandwidth</li>
+        <li>480p (1000 kbps) - Standard</li>
+        <li>720p (2500 kbps) - HD</li>
+        <li>1080p (5000 kbps) - Full HD</li>
+    </ul>
+
+    <hr>
+
+    <h2>3. Database Schema (Key Tables)</h2>
+
+    <h3>Users & Authentication</h3>
+    <ul>
+        <li><code>users</code> - User accounts</li>
+        <li><code>profiles</code> - User profiles</li>
+        <li><code>roles</code> - Role definitions</li>
+        <li><code>permissions</code> - Permission matrix</li>
+    </ul>
+
+    <h3>Courses & Content</h3>
+    <ul>
+        <li><code>courses</code> - Course information</li>
+        <li><code>modules</code> - Course modules</li>
+        <li><code>lessons</code> - Individual lessons</li>
+        <li><code>videos</code> - Video metadata</li>
+        <li><code>attachments</code> - Downloadable files</li>
+    </ul>
+
+    <h3>Learning & Progress</h3>
+    <ul>
+        <li><code>enrollments</code> - User enrollments</li>
+        <li><code>progress</code> - Learning progress</li>
+        <li><code>quiz_attempts</code> - Quiz submissions</li>
+        <li><code>certificates</code> - Generated certificates</li>
+    </ul>
+
+    <hr>
+
+    <h2>4. Tech Stack</h2>
+    <table>
+        <tr>
+            <th>Layer</th>
+            <th>Technology</th>
+        </tr>
+        <tr>
+            <td>Frontend</td>
+            <td>Next.js 14, TypeScript, Tailwind CSS</td>
+        </tr>
+        <tr>
+            <td>Backend</td>
+            <td>NestJS, GraphQL, Prisma</td>
+        </tr>
+        <tr>
+            <td>Database</td>
+            <td>PostgreSQL 15</td>
+        </tr>
+        <tr>
+            <td>Cache</td>
+            <td>Redis</td>
+        </tr>
+        <tr>
+            <td>Search</td>
+            <td>Elasticsearch</td>
+        </tr>
+        <tr>
+            <td>Video</td>
+            <td>AWS MediaConvert, CloudFront</td>
+        </tr>
+        <tr>
+            <td>DRM</td>
+            <td>Pallycon (Widevine + FairPlay)</td>
+        </tr>
+        <tr>
+            <td>Storage</td>
+            <td>AWS S3</td>
+        </tr>
+        <tr>
+            <td>Auth</td>
+            <td>JWT + Refresh Token</td>
+        </tr>
+        <tr>
+            <td>Deployment</td>
+            <td>AWS ECS, RDS</td>
+        </tr>
+    </table>
+
+    <hr>
+
+    <h2>5. Timeline Estimate</h2>
+    <table>
+        <tr>
+            <th>Phase</th>
+            <th>Duration</th>
+            <th>Deliverables</th>
+        </tr>
+        <tr>
+            <td>Phase 1</td>
+            <td>6 weeks</td>
+            <td>Core LMS, Course Management</td>
+        </tr>
+        <tr>
+            <td>Phase 2</td>
+            <td>4 weeks</td>
+            <td>Video Streaming, DRM</td>
+        </tr>
+        <tr>
+            <td>Phase 3</td>
+            <td>4 weeks</td>
+            <td>Interactive Content, Assessment</td>
+        </tr>
+        <tr>
+            <td>Phase 4</td>
+            <td>2 weeks</td>
+            <td>Testing, Deployment</td>
+        </tr>
+    </table>
+    <p><strong>Total: 16 weeks (~4 months)</strong></p>
+
+    <hr>
+
+    <h2>6. Contact</h2>
+    <p>
+        <strong>Freelancer:</strong> Nguyễn Văn A<br>
+        <strong>Email:</strong> freelancer@demo.com<br>
+        <strong>Portfolio:</strong> https://portfolio.demo.com
+    </p>
+</body>
+
+</html>

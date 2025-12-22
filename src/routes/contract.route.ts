@@ -12,6 +12,7 @@ import {
         confirmArbitrationFee,
         getMilestoneDispute,
         getContractDetail,
+        getContractPaymentDetails,
         acceptContractTerms,
         sendContractSignatureEnvelope,
         syncContractSignatureEnvelope,
@@ -42,6 +43,7 @@ const router = Router()
 
 router.get('/', authenticateMiddleware, errorHandler(listContracts))
 router.get('/:contractId', authenticateMiddleware, errorHandler(getContractDetail))
+router.get('/:contractId/payments', authenticateMiddleware, errorHandler(getContractPaymentDetails))
 router.post('/:contractId/terms/accept', authenticateMiddleware, errorHandler(acceptContractTerms))
 router.post(
         '/:contractId/signatures/docusign/send',

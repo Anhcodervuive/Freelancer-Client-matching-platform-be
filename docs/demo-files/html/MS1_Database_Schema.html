@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LMS Database Schema - Milestone 1</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            color: #333;
+        }
+
+        h1 {
+            color: #1a365d;
+            border-bottom: 3px solid #3182ce;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            color: #2c5282;
+            margin-top: 30px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 5px;
+        }
+
+        pre {
+            background: #1a202c;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .keyword {
+            color: #63b3ed;
+        }
+
+        .type {
+            color: #68d391;
+        }
+
+        .string {
+            color: #f6ad55;
+        }
+
+        .comment {
+            color: #718096;
+            font-style: italic;
+        }
+
+        .header-info {
+            background: #ebf8ff;
+            border-left: 4px solid #3182ce;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 20px 0;
+        }
+
+        @media print {
+            body {
+                padding: 15px;
+            }
+
+            pre {
+                font-size: 10px;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>LMS DATABASE SCHEMA v1.0</h1>
+    <div class="header-info">
+        <strong>Milestone:</strong> 1 - Core LMS Foundation & Course Management<br>
+        <strong>Database:</strong> PostgreSQL 15<br>
+        <strong>Version:</strong> 1.0
+    </div>
+
+    <h2>1. USERS & AUTHENTICATION</h2>
+    <pre>
+<span class="comment">-- Users table</span>
+<span class="keyword">CREATE TABLE</span> users (
+    id <span class="type">UUID</span> <span class="keyword">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+    email <span class="type">VARCHAR(255)</span> <span class="keyword">UNIQUE NOT NULL</span>,
+    password_hash <span class="type">VARCHAR(255)</span> <span class="keyword">NOT NULL</span>,
+    first_name <span class="type">VARCHAR(100)</span>,
+    last_name <span class="type">VARCHAR(100)</span>,
+    avatar_url <span class="type">VARCHAR(500)</span>,
+    role <span class="type">VARCHAR(50)</span> <span class="keyword">DEFAULT</span> <span class="string">'student'</span>,
+    status <span class="type">VARCHAR(50)</span> <span class="keyword">DEFAULT</span> <span class="string">'active'</span>,
+    email_verified_at <span class="type">TIMESTAMP</span>,
+    last_login_at <span class="type">TIMESTAMP</span>,
+    created_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP,
+    updated_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP
+);
+
+<span class="comment">-- Refresh tokens for JWT</span>
+<span class="keyword">CREATE TABLE</span> refresh_tokens (
+    id <span class="type">UUID</span> <span class="keyword">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+    user_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> users(id) <span class="keyword">ON DELETE CASCADE</span>,
+    token <span class="type">VARCHAR(500)</span> <span class="keyword">NOT NULL</span>,
+    expires_at <span class="type">TIMESTAMP</span> <span class="keyword">NOT NULL</span>,
+    created_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP
+);
+
+<span class="comment">-- Password reset tokens</span>
+<span class="keyword">CREATE TABLE</span> password_resets (
+    id <span class="type">UUID</span> <span class="keyword">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+    user_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> users(id) <span class="keyword">ON DELETE CASCADE</span>,
+    token <span class="type">VARCHAR(255)</span> <span class="keyword">NOT NULL</span>,
+    expires_at <span class="type">TIMESTAMP</span> <span class="keyword">NOT NULL</span>,
+    used_at <span class="type">TIMESTAMP</span>,
+    created_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP
+);
+    </pre>
+
+    <h2>2. COURSES & CONTENT</h2>
+    <pre>
+<span class="comment">-- Categories for courses</span>
+<span class="keyword">CREATE TABLE</span> categories (
+    id <span class="type">UUID</span> <span class="keyword">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+    name <span class="type">VARCHAR(255)</span> <span class="keyword">NOT NULL</span>,
+    slug <span class="type">VARCHAR(255)</span> <span class="keyword">UNIQUE NOT NULL</span>,
+    description <span class="type">TEXT</span>,
+    parent_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> categories(id),
+    icon_url <span class="type">VARCHAR(500)</span>,
+    sort_order <span class="type">INT</span> <span class="keyword">DEFAULT</span> 0,
+    is_active <span class="type">BOOLEAN</span> <span class="keyword">DEFAULT</span> true,
+    created_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP,
+    updated_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP
+);
+
+<span class="comment">-- Main courses table</span>
+<span class="keyword">CREATE TABLE</span> courses (
+    id <span class="type">UUID</span> <span class="keyword">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+    title <span class="type">VARCHAR(255)</span> <span class="keyword">NOT NULL</span>,
+    slug <span class="type">VARCHAR(255)</span> <span class="keyword">UNIQUE NOT NULL</span>,
+    description <span class="type">TEXT</span>,
+    short_description <span class="type">VARCHAR(500)</span>,
+    thumbnail_url <span class="type">VARCHAR(500)</span>,
+    preview_video_url <span class="type">VARCHAR(500)</span>,
+    instructor_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> users(id),
+    category_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> categories(id),
+    level <span class="type">VARCHAR(50)</span> <span class="keyword">DEFAULT</span> <span class="string">'beginner'</span>,
+    language <span class="type">VARCHAR(10)</span> <span class="keyword">DEFAULT</span> <span class="string">'en'</span>,
+    price <span class="type">DECIMAL(10,2)</span> <span class="keyword">DEFAULT</span> 0,
+    currency <span class="type">VARCHAR(3)</span> <span class="keyword">DEFAULT</span> <span class="string">'USD'</span>,
+    duration_hours <span class="type">INT</span> <span class="keyword">DEFAULT</span> 0,
+    status <span class="type">VARCHAR(50)</span> <span class="keyword">DEFAULT</span> <span class="string">'draft'</span>,
+    is_featured <span class="type">BOOLEAN</span> <span class="keyword">DEFAULT</span> false,
+    published_at <span class="type">TIMESTAMP</span>,
+    created_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP,
+    updated_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP
+);
+
+<span class="comment">-- Course modules</span>
+<span class="keyword">CREATE TABLE</span> modules (
+    id <span class="type">UUID</span> <span class="keyword">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+    course_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> courses(id) <span class="keyword">ON DELETE CASCADE</span>,
+    title <span class="type">VARCHAR(255)</span> <span class="keyword">NOT NULL</span>,
+    description <span class="type">TEXT</span>,
+    sort_order <span class="type">INT</span> <span class="keyword">DEFAULT</span> 0,
+    is_published <span class="type">BOOLEAN</span> <span class="keyword">DEFAULT</span> false,
+    created_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP,
+    updated_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP
+);
+
+<span class="comment">-- Individual lessons</span>
+<span class="keyword">CREATE TABLE</span> lessons (
+    id <span class="type">UUID</span> <span class="keyword">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+    module_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> modules(id) <span class="keyword">ON DELETE CASCADE</span>,
+    title <span class="type">VARCHAR(255)</span> <span class="keyword">NOT NULL</span>,
+    description <span class="type">TEXT</span>,
+    content_type <span class="type">VARCHAR(50)</span> <span class="keyword">DEFAULT</span> <span class="string">'video'</span>,
+    duration_minutes <span class="type">INT</span> <span class="keyword">DEFAULT</span> 0,
+    sort_order <span class="type">INT</span> <span class="keyword">DEFAULT</span> 0,
+    is_preview <span class="type">BOOLEAN</span> <span class="keyword">DEFAULT</span> false,
+    is_published <span class="type">BOOLEAN</span> <span class="keyword">DEFAULT</span> false,
+    created_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP,
+    updated_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP
+);
+
+<span class="comment">-- Video metadata</span>
+<span class="keyword">CREATE TABLE</span> videos (
+    id <span class="type">UUID</span> <span class="keyword">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+    lesson_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> lessons(id) <span class="keyword">ON DELETE CASCADE</span>,
+    title <span class="type">VARCHAR(255)</span>,
+    original_url <span class="type">VARCHAR(500)</span>,
+    hls_url <span class="type">VARCHAR(500)</span>,
+    thumbnail_url <span class="type">VARCHAR(500)</span>,
+    duration_seconds <span class="type">INT</span>,
+    file_size_bytes <span class="type">BIGINT</span>,
+    status <span class="type">VARCHAR(50)</span> <span class="keyword">DEFAULT</span> <span class="string">'processing'</span>,
+    transcoding_job_id <span class="type">VARCHAR(255)</span>,
+    created_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP,
+    updated_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP
+);
+    </pre>
+
+    <h2>3. ENROLLMENTS & PROGRESS</h2>
+    <pre>
+<span class="comment">-- User enrollments</span>
+<span class="keyword">CREATE TABLE</span> enrollments (
+    id <span class="type">UUID</span> <span class="keyword">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+    user_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> users(id) <span class="keyword">ON DELETE CASCADE</span>,
+    course_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> courses(id) <span class="keyword">ON DELETE CASCADE</span>,
+    status <span class="type">VARCHAR(50)</span> <span class="keyword">DEFAULT</span> <span class="string">'active'</span>,
+    enrolled_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP,
+    completed_at <span class="type">TIMESTAMP</span>,
+    expires_at <span class="type">TIMESTAMP</span>,
+    progress_percent <span class="type">DECIMAL(5,2)</span> <span class="keyword">DEFAULT</span> 0,
+    <span class="keyword">UNIQUE</span>(user_id, course_id)
+);
+
+<span class="comment">-- Lesson progress tracking</span>
+<span class="keyword">CREATE TABLE</span> lesson_progress (
+    id <span class="type">UUID</span> <span class="keyword">PRIMARY KEY DEFAULT</span> gen_random_uuid(),
+    user_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> users(id) <span class="keyword">ON DELETE CASCADE</span>,
+    lesson_id <span class="type">UUID</span> <span class="keyword">REFERENCES</span> lessons(id) <span class="keyword">ON DELETE CASCADE</span>,
+    status <span class="type">VARCHAR(50)</span> <span class="keyword">DEFAULT</span> <span class="string">'not_started'</span>,
+    progress_percent <span class="type">DECIMAL(5,2)</span> <span class="keyword">DEFAULT</span> 0,
+    time_spent_seconds <span class="type">INT</span> <span class="keyword">DEFAULT</span> 0,
+    last_position_seconds <span class="type">INT</span> <span class="keyword">DEFAULT</span> 0,
+    started_at <span class="type">TIMESTAMP</span>,
+    completed_at <span class="type">TIMESTAMP</span>,
+    updated_at <span class="type">TIMESTAMP</span> <span class="keyword">DEFAULT</span> CURRENT_TIMESTAMP,
+    <span class="keyword">UNIQUE</span>(user_id, lesson_id)
+);
+    </pre>
+
+    <h2>4. INDEXES</h2>
+    <pre>
+<span class="keyword">CREATE INDEX</span> idx_users_email <span class="keyword">ON</span> users(email);
+<span class="keyword">CREATE INDEX</span> idx_users_role <span class="keyword">ON</span> users(role);
+<span class="keyword">CREATE INDEX</span> idx_courses_status <span class="keyword">ON</span> courses(status);
+<span class="keyword">CREATE INDEX</span> idx_courses_instructor <span class="keyword">ON</span> courses(instructor_id);
+<span class="keyword">CREATE INDEX</span> idx_courses_category <span class="keyword">ON</span> courses(category_id);
+<span class="keyword">CREATE INDEX</span> idx_modules_course <span class="keyword">ON</span> modules(course_id);
+<span class="keyword">CREATE INDEX</span> idx_lessons_module <span class="keyword">ON</span> lessons(module_id);
+<span class="keyword">CREATE INDEX</span> idx_enrollments_user <span class="keyword">ON</span> enrollments(user_id);
+<span class="keyword">CREATE INDEX</span> idx_enrollments_course <span class="keyword">ON</span> enrollments(course_id);
+<span class="keyword">CREATE INDEX</span> idx_lesson_progress_user <span class="keyword">ON</span> lesson_progress(user_id);
+    </pre>
+
+    <hr>
+    <p style="text-align: center; color: #718096; font-size: 12px;">
+        LMS Database Schema v1.0 | Milestone 1 Deliverable
+    </p>
+</body>
+
+</html>

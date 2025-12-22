@@ -1,0 +1,52 @@
+=====================================================
+HƯỚNG DẪN CHUYỂN FILE HTML SANG WORD/PDF
+=====================================================
+
+Các file HTML đã được tạo trong thư mục này:
+1. LMS_Architecture_Proposal.html
+2. Project_Requirements_Detail.html  
+3. MS1_Database_Schema.html
+4. MS1_Test_Accounts.html
+
+-----------------------------------------------------
+CÁCH 1: CHUYỂN SANG PDF (Khuyến nghị)
+-----------------------------------------------------
+1. Mở file .html bằng trình duyệt (Chrome, Edge, Firefox)
+2. Nhấn Ctrl + P (hoặc File > Print)
+3. Chọn "Save as PDF" hoặc "Microsoft Print to PDF"
+4. Nhấn Save
+
+-----------------------------------------------------
+CÁCH 2: CHUYỂN SANG WORD (.docx)
+-----------------------------------------------------
+Cách 2a - Copy/Paste:
+1. Mở file .html bằng trình duyệt
+2. Nhấn Ctrl + A (chọn tất cả)
+3. Nhấn Ctrl + C (copy)
+4. Mở Microsoft Word
+5. Nhấn Ctrl + V (paste)
+6. Lưu file .docx
+
+Cách 2b - Mở trực tiếp trong Word:
+1. Mở Microsoft Word
+2. File > Open
+3. Chọn "All Files (*.*)" ở dropdown
+4. Chọn file .html
+5. Word sẽ tự động convert
+6. Lưu lại dưới dạng .docx
+
+-----------------------------------------------------
+CÁCH 3: SỬ DỤNG CÔNG CỤ ONLINE
+-----------------------------------------------------
+- https://www.ilovepdf.com/html-to-pdf
+- https://cloudconvert.com/html-to-docx
+- https://www.zamzar.com/convert/html-to-doc/
+
+-----------------------------------------------------
+LƯU Ý
+-----------------------------------------------------
+- File HTML đã được format đẹp, có thể in trực tiếp
+- Khi in PDF, chọn "Background graphics" để giữ màu sắc
+- Nếu cần chỉnh sửa, nên dùng Word
+
+=====================================================

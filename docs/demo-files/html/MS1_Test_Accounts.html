@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LMS Test Accounts - Milestone 1</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            color: #333;
+        }
+
+        h1 {
+            color: #1a365d;
+            border-bottom: 3px solid #3182ce;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            color: #2c5282;
+            margin-top: 30px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 5px;
+        }
+
+        .header-info {
+            background: #ebf8ff;
+            border-left: 4px solid #3182ce;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .account-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        .account-card h3 {
+            margin-top: 0;
+            color: #2d3748;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        .credential {
+            display: flex;
+            margin: 8px 0;
+        }
+
+        .credential-label {
+            width: 100px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .credential-value {
+            font-family: 'Consolas', monospace;
+            background: #edf2f7;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .api-section {
+            background: #1a202c;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+        }
+
+        .api-section code {
+            color: #68d391;
+        }
+
+        .warning {
+            background: #fffaf0;
+            border-left: 4px solid #ed8936;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 20px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        th,
+        td {
+            border: 1px solid #e2e8f0;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background: #edf2f7;
+        }
+
+        @media print {
+            body {
+                padding: 15px;
+            }
+
+            .api-section {
+                background: #f7fafc;
+                color: #333;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>LMS PLATFORM - TEST ACCOUNTS</h1>
+    <div class="header-info">
+        <strong>Milestone:</strong> 1 - Core LMS Foundation<br>
+        <strong>Staging URL:</strong> https://staging.lms-demo.com<br>
+        <strong>API Base URL:</strong> https://api.staging.lms-demo.com/v1
+    </div>
+
+    <h2>Test Accounts</h2>
+
+    <div class="account-card">
+        <h3>🔐 ADMIN ACCOUNT</h3>
+        <div class="credential">
+            <span class="credential-label">Email:</span>
+            <span class="credential-value">admin@lms-demo.com</span>
+        </div>
+        <div class="credential">
+            <span class="credential-label">Password:</span>
+            <span class="credential-value">Admin@123</span>
+        </div>
+        <div class="credential">
+            <span class="credential-label">Role:</span>
+            <span class="credential-value">Administrator</span>
+        </div>
+        <p style="margin-top: 10px; color: #718096; font-size: 14px;">
+            <strong>Access:</strong> Full system access, user management, course management, analytics
+        </p>
+    </div>
+
+    <div class="account-card">
+        <h3>👨‍🏫 INSTRUCTOR ACCOUNT</h3>
+        <div class="credential">
+            <span class="credential-label">Email:</span>
+            <span class="credential-value">instructor@lms-demo.com</span>
+        </div>
+        <div class="credential">
+            <span class="credential-label">Password:</span>
+            <span class="credential-value">Instructor@123</span>
+        </div>
+        <div class="credential">
+            <span class="credential-label">Role:</span>
+            <span class="credential-value">Instructor</span>
+        </div>
+        <p style="margin-top: 10px; color: #718096; font-size: 14px;">
+            <strong>Access:</strong> Create/edit own courses, view enrolled students, grade assignments
+        </p>
+    </div>
+
+    <div class="account-card">
+        <h3>👨‍🎓 STUDENT ACCOUNTS</h3>
+        <table>
+            <tr>
+                <th>Email</th>
+                <th>Password</th>
+                <th>Role</th>
+            </tr>
+            <tr>
+                <td><code>student1@lms-demo.com</code></td>
+                <td><code>Student@123</code></td>
+                <td>Student</td>
+            </tr>
+            <tr>
+                <td><code>student2@lms-demo.com</code></td>
+                <td><code>Student@123</code></td>
+                <td>Student</td>
+            </tr>
+        </table>
+        <p style="margin-top: 10px; color: #718096; font-size: 14px;">
+            <strong>Access:</strong> Browse courses, enroll, watch videos, take quizzes, view progress
+        </p>
+    </div>
+
+    <hr>
+
+    <h2>API Testing</h2>
+
+    <div class="api-section">
+        <strong>Authentication:</strong>
+        POST /auth/login
+        Body: { "email": "...", "password": "..." }
+        Response: { "accessToken": "...", "refreshToken": "..." }
+
+        <strong>Use accessToken in header:</strong>
+        Authorization: Bearer &lt;accessToken&gt;
+    </div>
+
+    <h3>Sample API Endpoints</h3>
+    <table>
+        <tr>
+            <th>Method</th>
+            <th>Endpoint</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td><code>GET</code></td>
+            <td>/courses</td>
+            <td>List all courses</td>
+        </tr>
+        <tr>
+            <td><code>GET</code></td>
+            <td>/courses/:id</td>
+            <td>Get course detail</td>
+        </tr>
+        <tr>
+            <td><code>POST</code></td>
+            <td>/courses</td>
+            <td>Create course (instructor)</td>
+        </tr>
+        <tr>
+            <td><code>PUT</code></td>
+            <td>/courses/:id</td>
+            <td>Update course</td>
+        </tr>
+        <tr>
+            <td><code>GET</code></td>
+            <td>/users/me</td>
+            <td>Get current user</td>
+        </tr>
+        <tr>
+            <td><code>GET</code></td>
+            <td>/enrollments</td>
+            <td>Get user enrollments</td>
+        </tr>
+    </table>
+
+    <hr>
+
+    <h2>Important Notes</h2>
+    <div class="warning">
+        <strong>⚠️ Security Notes:</strong>
+        <ul style="margin: 10px 0 0 0;">
+            <li>Passwords will expire after 90 days</li>
+            <li>Session timeout: 24 hours</li>
+            <li>Max login attempts: 5 (then locked for 15 mins)</li>
+            <li>All test data will be reset weekly</li>
+        </ul>
+    </div>
+
+    <h2>Support</h2>
+    <p>
+        If you encounter any issues:<br>
+        <strong>Email:</strong> support@lms-demo.com<br>
+        <strong>Slack:</strong> #lms-project-support
+    </p>
+
+    <hr>
+    <p style="text-align: center; color: #718096; font-size: 12px;">
+        LMS Test Accounts | Milestone 1 Deliverable
+    </p>
+</body>
+
+</html>
