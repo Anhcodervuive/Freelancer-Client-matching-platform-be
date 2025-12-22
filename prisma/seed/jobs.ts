@@ -893,51 +893,8 @@ const BASE_JOB_POSTS: JobSeed[] = [
         }
 ]
 
-function generateJobSeeds(count: number): JobSeed[] {
-        const specialties = [
-                { id: 'specialty_fullstack_dev', skills: ['skill_typescript', 'skill_nodejs', 'skill_sql'] },
-                { id: 'specialty_machine_learning', skills: ['skill_python', 'skill_machine_learning', 'skill_data_engineering'] },
-                { id: 'specialty_data_engineering', skills: ['skill_data_engineering', 'skill_airflow', 'skill_sql'] },
-                { id: 'specialty_uiux', skills: ['skill_figma', 'skill_design_systems', 'skill_html'] }
-        ]
-
-        return Array.from({ length: count }, (_, index) => {
-                const idx = index + 1
-                const specialty = specialties[index % specialties.length]!
-                const clientIndex = (index % 25) + 1
-                const publishedAt = new Date(Date.UTC(2024, 0, 1 + index))
-
-                return {
-                        clientEmail: `ml.client${clientIndex}@client.test`,
-                        specialtyId: specialty.id,
-                        title: `Generated ML job ${idx}`,
-                        description:
-                                'Synthetic posting to diversify ML training data across invitations, applications, and offer outcomes.',
-                        paymentMode: JobPaymentMode.FIXED_SINGLE,
-                        budgetAmount: 6000 + idx * 10,
-                        budgetCurrency: 'USD',
-                        duration: JobDurationCommitment.ONE_TO_THREE_MONTHS,
-                        experienceLevel: idx % 2 === 0 ? JobExperienceLevel.INTERMEDIATE : JobExperienceLevel.EXPERT,
-                        locationType: idx % 3 === 0 ? JobLocationType.REMOTE : JobLocationType.HYBRID,
-                        preferredLocations: idx % 3 === 0 ? null : [{ country: 'Vietnam', timeZone: 'GMT+7' }],
-                        visibility: JobVisibility.PUBLIC,
-                        status: JobStatus.PUBLISHED,
-                        publishedAt,
-                        languages: [{ code: 'en', proficiency: LanguageProficiency.FLUENT }],
-                        requiredSkills: specialty.skills,
-                        screeningQuestions: [
-                                { question: `What is your most relevant work sample for Generated ML job ${idx}?`, isRequired: true },
-                                { question: 'How do you communicate progress and unblock risks?' }
-                        ],
-                        customTerms: { dataset: 'ml-bulk', slot: idx }
-                }
-        })
-}
-
-const JOB_POSTS: JobSeed[] = [
-        ...BASE_JOB_POSTS,
-        ...generateJobSeeds(Math.max(0, 300 - BASE_JOB_POSTS.length))
-]
+// Removed generateJobSeeds - use ml-diverse-data.ts instead for ML training data
+const JOB_POSTS: JobSeed[] = [...BASE_JOB_POSTS]
 
 export async function seedJobs() {
         const [skills, specialties] = await Promise.all([

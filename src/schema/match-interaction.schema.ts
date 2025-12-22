@@ -2,18 +2,15 @@ import { z } from 'zod'
 
 import { MatchInteractionSource, MatchInteractionType } from '~/generated/prisma'
 
-const uuidSchema = z.string().uuid()
-const cuidSchema = z.string().cuid()
-
 export const RecordMatchInteractionSchema = z
         .object({
                 type: z.nativeEnum(MatchInteractionType),
                 source: z.nativeEnum(MatchInteractionSource).optional(),
-                jobId: cuidSchema.optional(),
-                freelancerId: uuidSchema.optional(),
-                clientId: uuidSchema.optional(),
-                proposalId: cuidSchema.optional(),
-                invitationId: cuidSchema.optional(),
+                jobId: z.string().min(1).optional(),
+                freelancerId: z.string().min(1).optional(),
+                clientId: z.string().min(1).optional(),
+                proposalId: z.string().min(1).optional(),
+                invitationId: z.string().min(1).optional(),
                 occurredAt: z.coerce.date().optional(),
                 metadata: z.record(z.string(), z.any()).optional()
         })

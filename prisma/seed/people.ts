@@ -196,27 +196,8 @@ const BASE_CLIENTS: ClientSeed[] = [
         }
 ]
 
-function generateClients(count: number): ClientSeed[] {
-        return Array.from({ length: count }, (_, index) => {
-                const idx = index + 1
-                return {
-                        email: `ml.client${idx}@client.test`,
-                        firstName: `Client${idx}`,
-                        lastName: 'Data',
-                        phoneNumber: `+84-90-000-${String(1000 + idx).slice(-4)}`,
-                        country: 'Vietnam',
-                        city: 'Ho Chi Minh City',
-                        district: 'District 3',
-                        address: `${10 + idx} Trần Quang Khải`,
-                        companyName: `Dataset Labs ${idx}`,
-                        websiteUrl: `https://dataset-labs-${idx}.example.com`,
-                        size: CompanySize.TEN_TO_NINETY,
-                        description: 'Synthetic hiring client for ML interaction seeding.'
-                }
-        })
-}
-
-const CLIENTS: ClientSeed[] = [...BASE_CLIENTS, ...generateClients(25)]
+// Removed generateClients - use ml-diverse-data.ts instead for ML training data
+const CLIENTS: ClientSeed[] = [...BASE_CLIENTS]
 
 const BASE_FREELANCERS: FreelancerSeed[] = [
         {
@@ -752,42 +733,8 @@ const BASE_FREELANCERS: FreelancerSeed[] = [
         }
 ]
 
-function generateFreelancers(count: number): FreelancerSeed[] {
-        return Array.from({ length: count }, (_, index) => {
-                const idx = index + 1
-                const baseSkill = idx % 3 === 0 ? 'skill_react' : idx % 3 === 1 ? 'skill_python' : 'skill_typescript'
-                const baseSpecialty = idx % 3 === 0 ? 'specialty_frontend_dev' : idx % 3 === 1 ? 'specialty_machine_learning' : 'specialty_fullstack_dev'
-
-                return {
-                        email: `ml.freelancer${idx}@freelancer.test`,
-                        firstName: `Freelancer${idx}`,
-                        lastName: 'ML',
-                        phoneNumber: `+84-91-555-${String(2000 + idx).slice(-4)}`,
-                        country: 'Vietnam',
-                        city: 'Ho Chi Minh City',
-                        district: 'District 10',
-                        address: `${50 + idx} Le Hong Phong`,
-                        title: `Product builder ${idx}`,
-                        bio: 'Ships production features with metrics instrumentation and interview-friendly collaboration.',
-                        links: [`https://portfolio-${idx}.example.com`],
-                        categories: ['category_web_dev'],
-                        specialties: [baseSpecialty],
-                        skills: ['skill_nodejs', baseSkill, 'skill_sql'],
-                        languages: [
-                                { code: 'en', proficiency: LanguageProficiency.FLUENT },
-                                { code: 'vi', proficiency: LanguageProficiency.NATIVE }
-                        ],
-                        educations: [
-                                { schoolName: 'UIT HCM', degreeTitle: 'BSc Software Engineering', startYear: 2015, endYear: 2019 }
-                        ]
-                }
-        })
-}
-
-const FREELANCERS: FreelancerSeed[] = [
-        ...BASE_FREELANCERS,
-        ...generateFreelancers(Math.max(0, 70 - BASE_FREELANCERS.length))
-]
+// Removed generateFreelancers - use ml-diverse-data.ts instead for ML training data
+const FREELANCERS: FreelancerSeed[] = [...BASE_FREELANCERS]
 
 export async function seedPeople() {
         const [categories, specialties, skills] = await Promise.all([

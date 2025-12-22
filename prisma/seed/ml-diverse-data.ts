@@ -6,7 +6,8 @@
 import {
   JobDurationCommitment, JobExperienceLevel, JobLocationType, JobPaymentMode,
   JobStatus, JobVisibility, Prisma, Role, CompanySize, JobInvitationStatus,
-  JobProposalStatus, MatchInteractionType, MatchInteractionSource, LanguageProficiency
+  JobProposalStatus, MatchInteractionType, MatchInteractionSource, LanguageProficiency,
+  JobOfferStatus
 } from '../../src/generated/prisma'
 import bcrypt from 'bcrypt'
 import { prisma, runStep } from './_utils'
@@ -461,6 +462,7 @@ async function seedMLDiverseJobs(clientIds: string[], count: number = 100): Prom
         locationType: pickOne(locTypes, random),
         paymentMode: JobPaymentMode.FIXED_SINGLE,
         budgetAmount: budget,
+        budgetCurrency: 'USD',
         duration: pickOne(durations, random),
         status: JobStatus.PUBLISHED,
         visibility: JobVisibility.PUBLIC,
@@ -499,29 +501,58 @@ async function seedMLDiverseInteractions(clientIds: string[], freelancerIds: str
   const interactionTypes = [MatchInteractionType.JOB_VIEW, MatchInteractionType.PROFILE_VIEW, MatchInteractionType.PROPOSAL_SUBMITTED, MatchInteractionType.INVITATION_SENT]
   const sources = [MatchInteractionSource.SEARCH, MatchInteractionSource.RECOMMENDATION, MatchInteractionSource.DIRECT]
 
-  let count = 0
-  const maxInteractions = 500 // Reduced for quality over quantity
+  let interactionCount = 0
+  let proposalCount = 0
+  let invitationCount = 0
 
+  // Cover letter templates - more variety
+  const coverLetters = [
+    `I am excited to apply for this position. I have relevant experience and would love to contribute to your project.`,
+    `Your project aligns perfectly with my expertise. I'm confident I can deliver high-quality results within your timeline.`,
+    `I've worked on similar projects and understand the challenges involved. Let's discuss how I can help you succeed.`,
+    `This opportunity matches my skills perfectly. I'm available to start immediately and committed to excellence.`,
+    `I bring extensive experience in this domain and a track record of successful project delivery.`,
+    `Looking at your requirements, I believe my background makes me an ideal candidate for this role.`,
+    `I'm passionate about this type of work and have delivered similar projects successfully in the past.`,
+    `Your project caught my attention. I'd love to discuss how my skills can contribute to your success.`,
+    `With my experience in this field, I can help you achieve your project goals efficiently.`,
+    `I'm confident I can add value to your project. Let me know if you'd like to discuss further.`,
+  ]
+
+  const inviteMessages = [
+    `We think you would be a great fit for our project. Your skills match exactly what we're looking for.`,
+    `Your profile impressed us! We'd love to discuss this opportunity with you in more detail.`,
+    `We have an exciting project that matches your expertise. Are you available for a quick chat?`,
+    `Your experience in this area is exactly what we need. We'd like to invite you to apply.`,
+    `We've reviewed your portfolio and believe you're the right person for this job. Interested?`,
+    `Based on your skills, we think you'd be perfect for our upcoming project.`,
+    `We're impressed by your background and would like to invite you to consider our project.`,
+    `Your expertise aligns well with our needs. Would you be interested in learning more?`,
+  ]
+
+  // Create interactions for each job with multiple freelancers
   for (const jobId of jobIds) {
-    if (count >= maxInteractions) break
-    
-    // Get job's client
     const job = await prisma.jobPost.findUnique({ where: { id: jobId }, select: { clientId: true } })
     if (!job) continue
 
-    // Create 2-5 interactions per job (more realistic)
-    const numInteractions = Math.floor(random() * 4) + 2
+    // Each job gets 5-12 interactions (more realistic)
+    const numInteractions = Math.floor(random() * 8) + 5
     const selectedFreelancers = pickRandom(freelancerIds, numInteractions, random)
 
     for (const freelancerId of selectedFreelancers) {
-      if (count >= maxInteractions) break
-      count++
-
       const interactionType = pickOne(interactionTypes, random)
       const source = pickOne(sources, random)
-      const matchScore = 0.5 + random() * 0.45
+      
+      // Generate realistic match scores based on interaction type
+      let matchScore: number
+      if (interactionType === MatchInteractionType.PROPOSAL_SUBMITTED) {
+        matchScore = 0.6 + random() * 0.35 // Higher scores for proposals
+      } else if (interactionType === MatchInteractionType.INVITATION_SENT) {
+        matchScore = 0.65 + random() * 0.3 // Higher scores for invitations
+      } else {
+        matchScore = 0.3 + random() * 0.6 // Varied scores for views
+      }
 
-      // Get profile for the freelancer
       const profile = await prisma.profile.findUnique({ where: { userId: freelancerId } })
       if (!profile) continue
 
@@ -533,52 +564,112 @@ async function seedMLDiverseInteractions(clientIds: string[], freelancerIds: str
           freelancerId,
           type: interactionType,
           source,
-          metadata: { generated: true, matchScore }
+          metadata: { generated: true, matchScore: Math.round(matchScore * 100) / 100 }
         }
-      }).catch(() => {}) // Ignore duplicates
+      }).catch(() => {})
+      interactionCount++
 
-      // Create proposal for PROPOSAL_SUBMITTED
+      // Create proposal for PROPOSAL_SUBMITTED - with balanced statuses
       if (interactionType === MatchInteractionType.PROPOSAL_SUBMITTED) {
-        const proposalStatuses = [JobProposalStatus.SUBMITTED, JobProposalStatus.SHORTLISTED, JobProposalStatus.DECLINED]
-        const coverLetters = [
-          `I am excited to apply for this position. I have relevant experience and would love to contribute to your project.`,
-          `Your project aligns perfectly with my expertise. I'm confident I can deliver high-quality results within your timeline.`,
-          `I've worked on similar projects and understand the challenges involved. Let's discuss how I can help you succeed.`,
-          `This opportunity matches my skills perfectly. I'm available to start immediately and committed to excellence.`,
-          `I bring extensive experience in this domain and a track record of successful project delivery.`,
-        ]
+        // Balanced distribution: 40% SUBMITTED, 35% SHORTLISTED, 25% DECLINED
+        const statusRoll = random()
+        let status: JobProposalStatus
+        if (statusRoll < 0.4) status = JobProposalStatus.SUBMITTED
+        else if (statusRoll < 0.75) status = JobProposalStatus.SHORTLISTED
+        else status = JobProposalStatus.DECLINED
+
         await prisma.jobProposal.create({
           data: {
             jobId,
             freelancerId,
             coverLetter: pickOne(coverLetters, random),
-            status: pickOne(proposalStatuses, random),
+            status,
           }
         }).catch(() => {})
+        proposalCount++
       }
 
-      // Create invitation for INVITATION_SENT
+      // Create invitation for INVITATION_SENT - with balanced statuses
       if (interactionType === MatchInteractionType.INVITATION_SENT) {
-        const invitationStatuses = [JobInvitationStatus.SENT, JobInvitationStatus.ACCEPTED, JobInvitationStatus.DECLINED]
-        const inviteMessages = [
-          `We think you would be a great fit for our project. Your skills match exactly what we're looking for.`,
-          `Your profile impressed us! We'd love to discuss this opportunity with you in more detail.`,
-          `We have an exciting project that matches your expertise. Are you available for a quick chat?`,
-          `Your experience in this area is exactly what we need. We'd like to invite you to apply.`,
-          `We've reviewed your portfolio and believe you're the right person for this job. Interested?`,
-        ]
+        // Balanced distribution: 30% SENT, 40% ACCEPTED, 30% DECLINED
+        const statusRoll = random()
+        let status: JobInvitationStatus
+        if (statusRoll < 0.3) status = JobInvitationStatus.SENT
+        else if (statusRoll < 0.7) status = JobInvitationStatus.ACCEPTED
+        else status = JobInvitationStatus.DECLINED
+
         await prisma.jobInvitation.create({
           data: {
             jobId,
             clientId: job.clientId,
             freelancerId,
             message: pickOne(inviteMessages, random),
-            status: pickOne(invitationStatuses, random),
+            status,
           }
         }).catch(() => {})
+        invitationCount++
       }
     }
   }
+
+  console.log(`   Created ${interactionCount} interactions, ${proposalCount} proposals, ${invitationCount} invitations`)
+}
+
+// Create Job Offers for p_match training (balanced ACCEPTED/DECLINED/SENT)
+async function seedMLDiverseJobOffers(clientIds: string[], freelancerIds: string[], jobIds: string[]): Promise<void> {
+  const random = seededRandom(33333)
+  let offerCount = 0
+  let acceptedCount = 0
+
+  // Create offers for ~30% of job-freelancer pairs to have balanced p_match data
+  for (const jobId of jobIds) {
+    const job = await prisma.jobPost.findUnique({ 
+      where: { id: jobId }, 
+      select: { clientId: true, title: true, budgetAmount: true } 
+    })
+    if (!job) continue
+
+    // Each job gets 1-3 offers
+    const numOffers = Math.floor(random() * 3) + 1
+    const selectedFreelancers = pickRandom(freelancerIds, numOffers, random)
+
+    for (const freelancerId of selectedFreelancers) {
+      // Balanced distribution: 40% ACCEPTED, 30% SENT, 30% DECLINED
+      const statusRoll = random()
+      let status: JobOfferStatus
+      let isResponded = false
+      if (statusRoll < 0.4) {
+        status = JobOfferStatus.ACCEPTED
+        acceptedCount++
+        isResponded = true
+      } else if (statusRoll < 0.7) {
+        status = JobOfferStatus.SENT
+      } else {
+        status = JobOfferStatus.DECLINED
+        isResponded = true
+      }
+
+      const budget = job.budgetAmount ? Number(job.budgetAmount) : 10000
+
+      await prisma.jobOffer.create({
+        data: {
+          jobId,
+          clientId: job.clientId,
+          freelancerId,
+          title: job.title || 'Project Offer',
+          message: `We would like to offer you this project. Looking forward to working with you!`,
+          currency: 'USD',
+          fixedPrice: budget,
+          status,
+          sentAt: new Date(),
+          respondedAt: isResponded ? new Date() : null,
+        }
+      }).catch(() => {})
+      offerCount++
+    }
+  }
+
+  console.log(`   Created ${offerCount} job offers (${acceptedCount} accepted for p_match=1)`)
 }
 
 // ============================================================================
@@ -586,24 +677,25 @@ async function seedMLDiverseInteractions(clientIds: string[], freelancerIds: str
 // ============================================================================
 
 export async function seedMLDiverseData(): Promise<void> {
-  console.log('\n🎯 Seeding ML Diverse Data (Quality over Quantity)...\n')
+  console.log('\n🎯 Seeding ML Diverse Data (Large Scale for ML Training)...\n')
 
-  const clientIds = await runStep('Creating ML Diverse Clients (25)', () => seedMLDiverseClients(25))
-  const freelancerIds = await runStep('Creating ML Diverse Freelancers (50)', () => seedMLDiverseFreelancers(50))
-  const jobIds = await runStep('Creating ML Diverse Jobs (100)', () => seedMLDiverseJobs(clientIds, 100))
-  await runStep('Creating ML Diverse Interactions (500)', () => seedMLDiverseInteractions(clientIds, freelancerIds, jobIds))
+  const clientIds = await runStep('Creating ML Diverse Clients (50)', () => seedMLDiverseClients(50))
+  const freelancerIds = await runStep('Creating ML Diverse Freelancers (100)', () => seedMLDiverseFreelancers(100))
+  const jobIds = await runStep('Creating ML Diverse Jobs (300)', () => seedMLDiverseJobs(clientIds, 300))
+  await runStep('Creating ML Diverse Interactions', () => seedMLDiverseInteractions(clientIds, freelancerIds, jobIds))
+  await runStep('Creating ML Diverse Job Offers (for p_match)', () => seedMLDiverseJobOffers(clientIds, freelancerIds, jobIds))
 
   console.log('\n✅ ML Diverse Data seeding completed!')
   console.log(`   - ${clientIds.length} Clients (diverse company profiles)`)
   console.log(`   - ${freelancerIds.length} Freelancers (unique titles & skills)`)
   console.log(`   - ${jobIds.length} Jobs (varied descriptions & requirements)`)
   console.log('\n📧 Test Accounts:')
-  console.log('   Clients: ml.diverse.client{1-25}@client.test')
-  console.log('   Freelancers: ml.diverse.freelancer{1-50}@freelancer.test')
+  console.log('   Clients: ml.diverse.client{1-50}@client.test')
+  console.log('   Freelancers: ml.diverse.freelancer{1-100}@freelancer.test')
   console.log('   Password: TestPassword!123')
-  console.log('\n🎯 Focus: Quality & Diversity over Quantity')
-  console.log('   - Unique freelancer titles (no more generic "X Developer")')
-  console.log('   - Diverse skill combinations (minimal overlap)')
-  console.log('   - Varied job descriptions & company profiles')
-  console.log('   - Realistic bio & cover letter templates')
+  console.log('\n🎯 ML Training Data:')
+  console.log('   - ~2500+ interactions for training')
+  console.log('   - ~600+ job offers (40% ACCEPTED for p_match=1)')
+  console.log('   - Balanced proposal statuses (40% submitted, 35% shortlisted, 25% declined)')
+  console.log('   - Balanced invitation statuses (30% sent, 40% accepted, 30% declined)')
 }

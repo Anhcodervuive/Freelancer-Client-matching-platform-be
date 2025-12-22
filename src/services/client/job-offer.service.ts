@@ -119,13 +119,20 @@ const ensureNoExistingOfferForFreelancerOnJob = async (
                 return
         }
 
+        const now = new Date()
+
         const existingOffer = await prismaClient.jobOffer.findFirst({
                 where: {
                         clientId,
                         freelancerId,
                         jobId,
                         isDeleted: false,
-                        status: { notIn: [JobOfferStatus.DRAFT, JobOfferStatus.DECLINED, JobOfferStatus.WITHDRAWN] },
+                        status: { notIn: [JobOfferStatus.DRAFT, JobOfferStatus.DECLINED, JobOfferStatus.WITHDRAWN, JobOfferStatus.EXPIRED] },
+                        // Chỉ block nếu offer chưa hết hạn hoặc không có expireAt
+                        OR: [
+                                { expireAt: null },
+                                { expireAt: { gt: now } }
+                        ],
                         ...(excludeOfferId
                                 ? {
                                           id: {
@@ -139,7 +146,7 @@ const ensureNoExistingOfferForFreelancerOnJob = async (
 
         if (existingOffer) {
                 throw new BadRequestException(
-                        'Bạn đã tạo offer cho freelancer này trong công việc này, vui lòng chỉnh sửa offer hiện có',
+                        'Bạn đã tạo offer cho freelancer này trong công việc này và offer đó chưa hết hạn, vui lòng chỉnh sửa offer hiện có',
                         ErrorCode.PARAM_QUERY_ERROR
                 )
         }
