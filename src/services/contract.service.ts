@@ -3348,6 +3348,9 @@ const openMilestoneDispute = async (
 				include: {
 					dispute: true
 				}
+			},
+			submissions: {
+				select: { id: true }
 			}
 		}
 	})
@@ -3358,6 +3361,14 @@ const openMilestoneDispute = async (
 
 	if (milestoneRecord.status === MilestoneStatus.CANCELED) {
 		throw new BadRequestException('Milestone đã bị hủy', ErrorCode.PARAM_QUERY_ERROR)
+	}
+
+	// Check if milestone has at least one submission
+	if (!milestoneRecord.submissions || milestoneRecord.submissions.length === 0) {
+		throw new BadRequestException(
+			'Milestone phải có ít nhất một lần nộp bài (submission) trước khi mở tranh chấp',
+			ErrorCode.PARAM_QUERY_ERROR
+		)
 	}
 
 	const escrow = milestoneRecord.escrow

@@ -1789,9 +1789,11 @@ const joinDispute = async (adminId: string, disputeId: string, payload: AdminJoi
 	const now = new Date()
 	const joinedAt = now.toISOString()
 
-	if (!disputeRecord.responseDeadline || disputeRecord.responseDeadline > now) {
-		throw new BadRequestException('Tranh chấp chưa hết hạn thương lượng trực tiếp', ErrorCode.PARAM_QUERY_ERROR)
-	}
+	// NOTE: Commented out for demo purposes - allows admin to join dispute immediately
+	// Original logic: Admin can only join after responseDeadline has passed (5 days)
+	// if (!disputeRecord.responseDeadline || disputeRecord.responseDeadline > now) {
+	// 	throw new BadRequestException('Tranh chấp chưa hết hạn thương lượng trực tiếp', ErrorCode.PARAM_QUERY_ERROR)
+	// }
 
 	if (disputeRecord.chatAccessLogs.length > 0) {
 		throw new BadRequestException('Bạn đã tham gia tranh chấp này trước đó', ErrorCode.PARAM_QUERY_ERROR)

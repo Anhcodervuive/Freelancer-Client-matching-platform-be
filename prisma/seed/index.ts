@@ -6,6 +6,7 @@ import { seedJobs } from './jobs'
 import { seedInteractions } from './interactions'
 import { seedMLDiverseData } from './ml-diverse-data'
 import { seedDemoUsers } from './demo-users'
+import { seedDemoExtraJobs } from './demo-extra-jobs'
 
 /**
  * Cho phép chạy 1 phần:  `npm run seed -- taxonomy`
@@ -19,6 +20,7 @@ import { seedDemoUsers } from './demo-users'
  * - npm run seed -- interactions    # Only interactions
  * - npm run seed -- ml-diverse      # Only ML diverse data (for ML training)
  * - npm run seed -- demo            # Only demo users (premium quality accounts)
+ * - npm run seed -- demo-extra-jobs # Only extra jobs for demo client
  */
 const only = new Set(process.argv.slice(2).map(s => s.toLowerCase()))
 
@@ -39,6 +41,9 @@ async function main() {
         
         // Demo Users - Premium quality accounts for demo/presentation
         if (shouldRun('demo', 'demo-users', 'demousers')) await seedDemoUsers()
+        
+        // Demo Extra Jobs - Thêm jobs cho demo client
+        if (shouldRun('demo-extra-jobs', 'extra-jobs', 'extrajobs')) await seedDemoExtraJobs()
 }
 
 main()
