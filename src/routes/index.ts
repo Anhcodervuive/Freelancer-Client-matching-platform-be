@@ -29,6 +29,7 @@ import contractRoute from './contract.route'
 import adminDisputeRoute from './admin-dispute.route'
 import adminUserRoute from './admin-user.route'
 import adminJobPostRoute from './admin-job-post.route'
+import adminContractRoute from './admin-contract.route'
 import arbitratorDisputeRoute from './arbitrator-dispute.route'
 import freelancerPayoutRoute from './freelancer-payout.route'
 import platformTermsRoute from './platform-terms.route'
@@ -71,6 +72,7 @@ rootRouter.use('/webhooks', webhookRoute)
 rootRouter.use('/admin/disputes', adminDisputeRoute)
 rootRouter.use('/admin/users', adminUserRoute)
 rootRouter.use('/admin/job-posts', adminJobPostRoute)
+rootRouter.use('/admin/contracts', adminContractRoute)
 rootRouter.use('/admin/platform-terms', adminPlatformTermsRoute)
 rootRouter.use('/arbitrator/disputes', arbitratorDisputeRoute)
 rootRouter.use('/mediation-evidence', mediationEvidenceRoute)
