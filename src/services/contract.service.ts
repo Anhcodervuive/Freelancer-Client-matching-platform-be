@@ -4727,10 +4727,14 @@ const payMilestone = async (
 				cardExpMonth: options.existingPayment?.cardExpMonth ?? fallbackCardFromPaymentMethod.expMonth,
 				cardExpYear: options.existingPayment?.cardExpYear ?? fallbackCardFromPaymentMethod.expYear,
 				cardFingerprint: options.existingPayment?.cardFingerprint ?? null,
-				idemKey: options.idempotencyKey ?? null
+				idemKey: options.idempotencyKey ?? null,
+				payerId: clientUserId,
+				payerRole: Role.CLIENT
 			},
 			update: {
 				status: PaymentStatus.REQUIRES_ACTION,
+				payerId: clientUserId,
+				payerRole: Role.CLIENT,
 				...(options.idempotencyKey ? { idemKey: options.idempotencyKey } : {})
 			}
 		})
@@ -4798,7 +4802,9 @@ const payMilestone = async (
 					cardExpMonth,
 					cardExpYear,
 					cardFingerprint,
-					idemKey: options.idempotencyKey ?? null
+					idemKey: options.idempotencyKey ?? null,
+					payerId: clientUserId,
+					payerRole: Role.CLIENT
 				},
 				update: {
 					status: PaymentStatus.SUCCEEDED,
@@ -4808,6 +4814,8 @@ const payMilestone = async (
 					cardExpMonth,
 					cardExpYear,
 					cardFingerprint,
+					payerId: clientUserId,
+					payerRole: Role.CLIENT,
 					...(options.idempotencyKey ? { idemKey: options.idempotencyKey } : {})
 				}
 			})
