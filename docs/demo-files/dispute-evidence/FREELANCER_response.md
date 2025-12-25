@@ -1,128 +1,104 @@
 # DISPUTE RESPONSE - FREELANCER SIDE
-## Milestone 3: DRM Protection & Security
+## Milestone 2: Video Streaming Infrastructure
 
 ---
 
 ## 📋 RESPONSE TO DISPUTE
-**DRM Protection không hoạt động đúng theo yêu cầu - Milestone 3**
+**Video Streaming không đạt yêu cầu - Milestone 2**
 
 ---
 
-## ✅ PHẢN HỒI VẤN ĐỀ 1: Widevine DRM
+## ⚠️ PHẢN HỒI VẤN ĐỀ 1: Adaptive Bitrate Streaming
 
 ### Giải thích:
-DRM đã được implement đúng với Pallycon license server. Video DownloadHelper extension chỉ download được **encrypted segments**, KHÔNG thể play được.
+MediaConvert đã được config output 4 quality levels (360p, 480p, 720p, 1080p). Tuy nhiên, video test của client chỉ có **720p source** → không thể upscale lên 1080p (đây là limitation kỹ thuật chuẩn).
 
 ### Bằng chứng:
-1. **File:** `drm_license_request_screenshot.png`
-   - Screenshot Network tab filter "license"
-   - Cho thấy license request được gửi đến Pallycon server
-   - Response 200 OK với license key
+1. **File:** `mediaconvert_job_config.png`
+   - Screenshot AWS MediaConvert job template
+   - Cho thấy 4 output presets đã được config
 
-2. **File:** `downloaded_video_test.mp4`
-   - Video được download bằng extension
-   - Khi mở bằng VLC: "Codec not found" error
-   - Chứng minh video đã được encrypt
+2. **File:** `hls_manifest_sample.m3u8`
+   - Master playlist với 4 quality levels
+   - Chứng minh transcoding hoạt động đúng
 
-3. **File:** `widevine_test_report.pdf`
-   - Test report từ Pallycon dashboard
-   - Cho thấy DRM hoạt động đúng
+3. **File:** `source_video_info.png`
+   - MediaInfo của video client upload
+   - Resolution: 1280x720 (720p source)
+   - Không thể tạo 1080p từ 720p source
 
 ### Kết luận:
-✅ Widevine DRM đã implement đúng. Extension download chỉ lấy được encrypted data.
+⚠️ Adaptive bitrate hoạt động đúng. Video source 720p không thể có 1080p output - đây là limitation kỹ thuật hợp lý, không phải bug.
 
 ---
 
-## ✅ PHẢN HỒI VẤN ĐỀ 2: Signed URLs
+## ✅ PHẢN HỒI VẤN ĐỀ 2: Video Upload
 
 ### Giải thích:
-Signed URLs được config expire sau **2 giờ (7200 seconds)**. Test của client có thể bị ảnh hưởng bởi:
-- Browser cache
-- Timezone khác nhau
-- CDN cache
+Upload video > 500MB cần config timeout phía nginx/server. Tôi đã gửi hướng dẫn config trong documentation. Progress bar issue đã được fix trong commit ngày 20/12.
 
 ### Bằng chứng:
-1. **File:** `cloudfront_signed_url_config.png`
-   - Screenshot CloudFront config
-   - Policy: `"DateLessThan": {"AWS:EpochTime": <current_time + 7200>}`
+1. **File:** `nginx_config_guide.pdf`
+   - Hướng dẫn config `client_max_body_size` và `proxy_read_timeout`
+   - Đã gửi trong documentation package
 
-2. **File:** `signed_url_test_log.txt`
-   - Log test signed URL expiration
-   - URL expire đúng sau 2 giờ
+2. **File:** `upload_fix_commit.png`
+   - Screenshot commit fix progress bar
+   - Commit hash: abc123
+   - Date: 20/12/2024
 
-### Về IP Restriction:
-- **KHÔNG có trong scope ban đầu**
-- Xem file: `original_contract_scope.pdf` - Section 3.2
-- IP restriction là feature bổ sung, cần estimate riêng
+3. **File:** `upload_test_success.mp4`
+   - Video demo upload 800MB thành công trên staging
+   - Progress bar hiển thị chính xác
 
 ### Kết luận:
-✅ Signed URLs hoạt động đúng. IP restriction không trong scope.
+✅ Upload đã fix. Client cần config nginx theo hướng dẫn.
 
 ---
 
-## ⚠️ PHẢN HỒI VẤN ĐỀ 3: FairPlay và Watermarking
-
-### 3.1 FairPlay cho Safari/iOS
-
-**Giải thích:**
-FairPlay DRM yêu cầu **Apple Developer Certificate** từ CLIENT. Tôi đã request certificate từ ngày 15/12/2024 nhưng chưa nhận được.
-
-**Bằng chứng:**
-- **File:** `email_request_certificate.png`
-  - Email gửi ngày 15/12/2024
-  - Yêu cầu: Apple Developer Certificate (.cer) và Private Key
-  - Chưa có response từ client
-
-**Timeline:**
-| Date | Action |
-|------|--------|
-| 15/12 | Email request certificate |
-| 17/12 | Follow-up email |
-| 19/12 | Vẫn chưa nhận được |
-
-### 3.2 Watermarking
-
-**Giải thích:**
-Watermarking là feature của **Milestone 5 (User Management & Analytics)**, KHÔNG phải Milestone 3.
-
-**Bằng chứng:**
-- **File:** `milestone_breakdown.pdf`
-  - Page 3: Milestone 3 scope - DRM only
-  - Page 5: Milestone 5 scope - includes watermarking
-
-### 3.3 Anti-screen recording
-
-**Giải thích:**
-Anti-screen recording **KHÔNG có trong requirements ban đầu**. Đây là feature bổ sung.
-
-**Bằng chứng:**
-- **File:** `original_requirements.pdf`
-  - Search "screen recording" - 0 results
-  - Search "anti-piracy" - chỉ mention DRM
-
-### Kết luận:
-⚠️ FairPlay pending do thiếu certificate từ client. Watermarking thuộc Milestone 5.
-
----
-
-## ✅ PHẢN HỒI VẤN ĐỀ 4: Documentation
+## ⚠️ PHẢN HỒI VẤN ĐỀ 3: Resume Playback
 
 ### Giải thích:
-Documentation đã được gửi qua email ngày 18/12/2024.
+Feature này hoạt động đúng trên **staging environment**. Có thể client test trên local mà chưa config đúng API endpoint hoặc database connection.
 
 ### Bằng chứng:
-- **File:** `email_documentation_sent.png`
-  - Email ngày 18/12/2024, 15:30
-  - Attachments: DRM_Setup_Guide.pdf, API_Documentation.pdf
-  - Recipient: client@demo.com
+1. **File:** `resume_playback_working.mp4`
+   - Screen recording demo resume playback trên staging
+   - Xem đến 5:30 → refresh → video tiếp tục từ 5:30
 
-### Files đã gửi:
-1. DRM_Setup_Guide.pdf (15 pages)
-2. API_Documentation.pdf (8 pages)
-3. Troubleshooting_FAQ.pdf (5 pages)
+2. **File:** `database_timestamp_records.png`
+   - Screenshot database table `video_progress`
+   - Cho thấy timestamp được lưu đúng
+
+3. **File:** `api_logs_resume.txt`
+   - API logs cho thấy endpoint `/api/videos/:id/position` hoạt động
 
 ### Kết luận:
-✅ Documentation đã gửi. Có thể client chưa check email hoặc vào spam.
+⚠️ Resume playback hoạt động trên staging. Cần verify environment của client.
+
+---
+
+## ✅ PHẢN HỒI VẤN ĐỀ 4: CloudFront CDN
+
+### Giải thích:
+CloudFront đã setup với 4 edge locations. Cache headers có trong response. Signed URLs hoạt động - có thể client copy URL sau khi đã expired.
+
+### Bằng chứng:
+1. **File:** `cloudfront_distribution_config.png`
+   - Screenshot CloudFront distribution settings
+   - Origin: S3 bucket
+   - Price class: PriceClass_200
+
+2. **File:** `cache_headers_proof.png`
+   - Screenshot response headers với `X-Cache: Hit from cloudfront`
+   - `Cache-Control: max-age=86400`
+
+3. **File:** `signed_url_test.mp4`
+   - Video demo signed URL expire sau 2 giờ
+   - URL cũ trả về 403 Forbidden
+
+### Kết luận:
+✅ CloudFront hoạt động đúng. Client có thể test sai cách hoặc cache browser.
 
 ---
 
@@ -130,17 +106,16 @@ Documentation đã được gửi qua email ngày 18/12/2024.
 
 ### Đề xuất 1: Họp online clarify
 - Thời gian: 30 phút
-- Mục đích: Demo trực tiếp DRM functionality
+- Mục đích: Demo trực tiếp trên staging environment
 - Platform: Google Meet / Zoom
 
-### Đề xuất 2: Client cung cấp certificate
-- Apple Developer Certificate cho FairPlay
-- Deadline: 3 ngày
-- Sau khi nhận, implement FairPlay trong 5 ngày
+### Đề xuất 2: Hỗ trợ setup environment
+- Hỗ trợ client config nginx
+- Verify database connection
+- Check API endpoints
 
-### Đề xuất 3: Clarify scope
-- Watermarking: Confirm thuộc Milestone 5
-- Anti-screen recording: Estimate riêng nếu cần
+### Đề xuất 3: Cung cấp video source 1080p
+- Client cung cấp video source >= 1080p để test adaptive bitrate đầy đủ
 
 ---
 
@@ -148,15 +123,16 @@ Documentation đã được gửi qua email ngày 18/12/2024.
 
 | # | File Name | Description | Size |
 |---|-----------|-------------|------|
-| 1 | drm_license_request_screenshot.png | Network tab với license request | 400 KB |
-| 2 | downloaded_video_test.mp4 | Video encrypted không play được | 5 MB |
-| 3 | widevine_test_report.pdf | Test report từ Pallycon | 1 MB |
-| 4 | cloudfront_signed_url_config.png | CloudFront config | 300 KB |
-| 5 | signed_url_test_log.txt | Log test URL expiration | 50 KB |
-| 6 | original_contract_scope.pdf | Contract scope document | 500 KB |
-| 7 | email_request_certificate.png | Email yêu cầu certificate | 200 KB |
-| 8 | milestone_breakdown.pdf | Chi tiết scope từng milestone | 400 KB |
-| 9 | email_documentation_sent.png | Proof đã gửi documentation | 200 KB |
+| 1 | mediaconvert_job_config.png | AWS MediaConvert config | 400 KB |
+| 2 | hls_manifest_sample.m3u8 | Master playlist sample | 2 KB |
+| 3 | source_video_info.png | MediaInfo của video client | 200 KB |
+| 4 | nginx_config_guide.pdf | Hướng dẫn config nginx | 500 KB |
+| 5 | upload_fix_commit.png | Screenshot commit fix | 300 KB |
+| 6 | upload_test_success.mp4 | Demo upload thành công | 10 MB |
+| 7 | resume_playback_working.mp4 | Demo resume hoạt động | 15 MB |
+| 8 | database_timestamp_records.png | Database records | 400 KB |
+| 9 | cloudfront_distribution_config.png | CloudFront config | 500 KB |
+| 10 | signed_url_test.mp4 | Demo signed URL | 8 MB |
 
 ---
 
@@ -164,13 +140,10 @@ Documentation đã được gửi qua email ngày 18/12/2024.
 
 | Issue | Status | Evidence |
 |-------|--------|----------|
-| Widevine DRM | ✅ Implemented correctly | License request logs |
-| Signed URLs | ✅ Working as configured | CloudFront config |
-| IP Restriction | ❌ Not in scope | Contract document |
-| FairPlay | ⚠️ Pending client certificate | Email request |
-| Watermarking | ❌ Milestone 5, not 3 | Milestone breakdown |
-| Anti-screen recording | ❌ Not in requirements | Original requirements |
-| Documentation | ✅ Sent via email | Email proof |
+| Adaptive Bitrate | ⚠️ Working (source limitation) | MediaConvert config |
+| Video Upload | ✅ Fixed | Commit proof |
+| Resume Playback | ⚠️ Working on staging | Video demo |
+| CloudFront CDN | ✅ Working | Config + headers |
 
 ---
 

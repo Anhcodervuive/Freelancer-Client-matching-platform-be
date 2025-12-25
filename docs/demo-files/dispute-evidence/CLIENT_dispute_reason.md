@@ -1,86 +1,98 @@
 # DISPUTE EVIDENCE - CLIENT SIDE
-## Milestone 3: DRM Protection & Security
+## Milestone 2: Video Streaming Infrastructure
 
 ---
 
 ## 📋 DISPUTE TITLE
-**DRM Protection không hoạt động đúng theo yêu cầu - Milestone 3**
+**Video Streaming không đạt yêu cầu - Milestone 2**
 
 ---
 
-## ❌ VẤN ĐỀ 1: Widevine DRM không hoạt động trên Chrome
+## ❌ VẤN ĐỀ 1: Adaptive Bitrate Streaming không hoạt động
 
 ### Mô tả:
-Video vẫn có thể download được bằng browser extension (Video DownloadHelper). Điều này cho thấy DRM chưa được implement đúng cách.
+Video chỉ có 1 quality level (720p), không có 360p, 480p, 1080p như đã cam kết. Khi throttle network, video bị buffer liên tục thay vì tự động chuyển quality thấp hơn.
 
 ### Bằng chứng:
-- File: `video_download_proof.mp4`
-- Mô tả: Screen recording cho thấy quá trình download video bằng extension
-- Thời gian test: 20/12/2024, 14:30
-- Browser: Chrome 120.0.6099.130
-- OS: Windows 11
-
-### Expected behavior:
-- Video phải được encrypt và không thể download
-- Nếu download được thì file phải không playable
-
----
-
-## ❌ VẤN ĐỀ 2: Signed URLs có thể bypass
-
-### Mô tả:
-Copy URL video và mở trong incognito window vẫn play được. URL không expire sau thời gian quy định (2 giờ).
-
-### Bằng chứng:
-- File: `url_bypass_screenshot.png`
-- Mô tả: Screenshot cho thấy URL vẫn work sau 24 giờ
+- File: `network_throttle_test.mp4`
+- Mô tả: Screen recording test adaptive bitrate với Chrome DevTools throttling
 - Test steps:
-  1. Copy video URL lúc 10:00 ngày 19/12
-  2. Mở URL trong incognito lúc 10:00 ngày 20/12
-  3. Video vẫn play bình thường
+  1. Mở video trên staging
+  2. Bật DevTools > Network > Throttle "Slow 3G"
+  3. Video buffer liên tục, không switch quality
+- Thời gian test: 20/12/2024, 14:30
+- Browser: Chrome 120, Firefox 121
 
 ### Expected behavior:
-- URL phải expire sau 2 giờ
-- Mở trong incognito phải yêu cầu authentication
+- Video phải có 4 quality levels: 360p, 480p, 720p, 1080p
+- Khi network chậm, tự động switch xuống quality thấp hơn
 
 ---
 
-## ❌ VẤN ĐỀ 3: Thiếu tính năng đã cam kết
+## ❌ VẤN ĐỀ 2: Video Upload có vấn đề
 
-### 3.1 FairPlay cho Safari/iOS
-- Đã test trên iPhone 14 Pro, iOS 17.2
-- Safari hiển thị lỗi: "This video format is not supported"
-- File: `safari_error_screenshot.png`
+### Mô tả:
+Upload video lớn (> 500MB) bị timeout. Progress bar không chính xác - nhảy từ 30% lên 100% đột ngột.
 
-### 3.2 Watermarking
-- Trong requirements document (page 12) có yêu cầu watermarking
-- Hiện tại video không có watermark
-- File: `original_requirements.pdf` (highlight page 12)
+### Bằng chứng:
+- File: `upload_timeout_screenshot.png`
+- Mô tả: Screenshot lỗi "Request timeout" khi upload file 600MB
+- Test steps:
+  1. Chọn video 600MB để upload
+  2. Progress bar chạy đến 30%
+  3. Sau 2 phút, hiện lỗi timeout
 
-### 3.3 Anti-screen recording
-- Không có warning khi screen record
-- Không có blackout khi detect screen recording
+### Expected behavior:
+- Upload video bất kỳ kích thước (đã thỏa thuận hỗ trợ đến 2GB)
+- Progress bar hiển thị chính xác tiến trình
 
 ---
 
-## ❌ VẤN ĐỀ 4: Documentation không đầy đủ
+## ❌ VẤN ĐỀ 3: Resume Playback không hoạt động
 
-### Thiếu:
-- Hướng dẫn configure DRM license server
-- Troubleshooting guide cho common issues
-- API documentation cho DRM endpoints
+### Mô tả:
+Khi refresh trang hoặc quay lại video, video bắt đầu lại từ đầu thay vì từ vị trí đã xem.
 
-### Đã nhận:
-- Chỉ có basic setup guide (2 trang)
-- Không có chi tiết về license server configuration
+### Bằng chứng:
+- File: `resume_playback_bug.mp4`
+- Mô tả: Screen recording demo bug resume playback
+- Test steps:
+  1. Xem video đến phút 5:30
+  2. Refresh trang (F5)
+  3. Video bắt đầu lại từ 0:00
+  4. Đã test với nhiều user accounts khác nhau
+
+### Expected behavior:
+- Timestamp được lưu vào database
+- Khi quay lại, video tiếp tục từ vị trí đã xem
+
+---
+
+## ❌ VẤN ĐỀ 4: CloudFront CDN chưa được setup đúng
+
+### Mô tả:
+Video load rất chậm (5-10 giây để bắt đầu play). Không thấy cache headers trong response.
+
+### Bằng chứng:
+- File: `cloudfront_headers.png`
+- Mô tả: Screenshot Network tab không có X-Cache header
+- Observations:
+  - Không có header `X-Cache: Hit from cloudfront`
+  - Response time: 5-10 giây cho video đầu tiên
+  - Signed URLs không hoạt động - video public accessible
+
+### Expected behavior:
+- Video load trong < 3 giây
+- Cache headers present
+- Signed URLs với expiration
 
 ---
 
 ## 💰 YÊU CẦU
 
 ### Option 1: Hoàn tiền 50%
-- Số tiền: $3,000 (50% của $6,000)
-- Lý do: Chỉ ~50% requirements được hoàn thành
+- Số tiền: $5,000 (50% của $10,000)
+- Lý do: Nhiều features core không hoạt động
 
 ### Option 2: Fix hoàn chỉnh
 - Deadline: 1 tuần từ ngày dispute
@@ -93,11 +105,10 @@ Copy URL video và mở trong incognito window vẫn play được. URL không e
 
 | # | File Name | Description | Size |
 |---|-----------|-------------|------|
-| 1 | video_download_proof.mp4 | Screen recording download video | 15 MB |
-| 2 | url_bypass_screenshot.png | Screenshot URL work sau 24h | 500 KB |
-| 3 | safari_error_screenshot.png | Lỗi trên Safari iOS | 300 KB |
-| 4 | original_requirements.pdf | Requirements ban đầu | 2 MB |
-| 5 | chrome_network_tab.png | Network tab không có license request | 400 KB |
+| 1 | network_throttle_test.mp4 | Video test adaptive bitrate | 20 MB |
+| 2 | upload_timeout_screenshot.png | Screenshot lỗi upload | 500 KB |
+| 3 | resume_playback_bug.mp4 | Video demo bug resume | 15 MB |
+| 4 | cloudfront_headers.png | Screenshot thiếu cache headers | 400 KB |
 
 ---
 
@@ -105,7 +116,7 @@ Copy URL video và mở trong incognito window vẫn play được. URL không e
 
 | Date | Event |
 |------|-------|
-| 01/12/2024 | Milestone 3 started |
+| 01/12/2024 | Milestone 2 started |
 | 15/12/2024 | First submission |
 | 16/12/2024 | Client feedback - issues found |
 | 18/12/2024 | Second submission |

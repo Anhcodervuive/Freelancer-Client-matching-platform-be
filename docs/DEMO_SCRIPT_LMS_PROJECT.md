@@ -325,47 +325,47 @@ Anh/chị có thể test trực tiếp trên staging!
 
 ---
 
-## ⚠️ PHẦN 5: KỊCH BẢN TRANH CHẤP
+## ⚠️ PHẦN 5: KỊCH BẢN TRANH CHẤP (Milestone 2)
 
 ### 5.1 Mở Dispute (Client)
 
 **Dispute Title:**
 ```
-DRM Protection không hoạt động đúng theo yêu cầu - Milestone 3
+Video Streaming không đạt yêu cầu - Milestone 2
 ```
 
 **Dispute Reason:**
 ```
-Tôi mở tranh chấp cho Milestone 3 - DRM Protection & Security vì các lý do sau:
+Tôi mở tranh chấp cho Milestone 2 - Video Streaming Infrastructure vì các lý do sau:
 
-❌ VẤN ĐỀ 1: Widevine DRM không hoạt động trên Chrome
-• Video vẫn có thể download được bằng browser extension (Video DownloadHelper)
-• Không thấy license request trong Network tab
-• Đã test trên Chrome 120, Windows 11
+❌ VẤN ĐỀ 1: Adaptive Bitrate Streaming không hoạt động
+• Video chỉ có 1 quality level (720p), không có 360p, 480p, 1080p như cam kết
+• Khi throttle network, video bị buffer liên tục thay vì chuyển quality
+• Đã test trên Chrome, Firefox, Safari đều cùng kết quả
 
-❌ VẤN ĐỀ 2: Signed URLs có thể bypass
-• Copy URL và mở trong incognito vẫn play được
-• URL không expire sau thời gian quy định
-• Không có IP restriction như đã thỏa thuận
+❌ VẤN ĐỀ 2: Video Upload có vấn đề
+• Upload video > 500MB bị timeout
+• Progress bar không chính xác (nhảy từ 30% lên 100%)
+• Background processing không có notification khi hoàn thành
 
-❌ VẤN ĐỀ 3: Thiếu tính năng đã cam kết
-• Không có FairPlay cho Safari/iOS (đã test trên iPhone 14)
-• Không có watermarking như trong requirements document
-• Không có anti-screen recording
+❌ VẤN ĐỀ 3: Resume Playback không hoạt động
+• Khi refresh trang, video bắt đầu lại từ đầu
+• Timestamp không được lưu vào database
+• Đã test với nhiều user accounts khác nhau
 
-❌ VẤN ĐỀ 4: Documentation không đầy đủ
-• Thiếu hướng dẫn configure DRM license server
-• Không có troubleshooting guide
-• API docs cho DRM endpoints không có
+❌ VẤN ĐỀ 4: CloudFront CDN chưa được setup đúng
+• Video load chậm (5-10 giây để bắt đầu play)
+• Không thấy cache headers trong response
+• Signed URLs không hoạt động
 
 📎 BẰNG CHỨNG ĐÍNH KÈM:
-• video_download_proof.mp4 - Screen recording download video
-• url_bypass_screenshot.png - Screenshot URL vẫn work sau 24h
-• original_requirements.pdf - Requirements ban đầu có watermarking
-• safari_error_screenshot.png - Lỗi trên Safari
+• network_throttle_test.mp4 - Video test adaptive bitrate
+• upload_timeout_screenshot.png - Screenshot lỗi upload
+• resume_playback_bug.mp4 - Video demo bug resume
+• cloudfront_headers.png - Screenshot thiếu cache headers
 
 💰 YÊU CẦU:
-Hoàn tiền 50% milestone ($3,000) HOẶC fix hoàn chỉnh tất cả issues trong 1 tuần.
+Hoàn tiền 50% milestone ($5,000) HOẶC fix hoàn chỉnh tất cả issues trong 1 tuần.
 ```
 
 ### 5.2 Phản hồi Dispute (Freelancer)
@@ -374,39 +374,39 @@ Hoàn tiền 50% milestone ($3,000) HOẶC fix hoàn chỉnh tất cả issues t
 ```
 Tôi xin phản hồi chi tiết về từng điểm tranh chấp:
 
-✅ VỀ VẤN ĐỀ 1 - Widevine DRM:
-• DRM đã được implement đúng với Pallycon license server
-• Video DownloadHelper chỉ download encrypted segments, KHÔNG thể play
-• License request có trong Network tab, filter "license" để thấy
-• Đã test thành công trên Chrome 119, 120, 121
+⚠️ VỀ VẤN ĐỀ 1 - Adaptive Bitrate:
+• MediaConvert đã được config output 4 quality levels
+• Tuy nhiên, video test của client chỉ có 720p source → không thể upscale lên 1080p
+• Các video có source >= 1080p sẽ có đầy đủ 4 levels
+• Đây là limitation kỹ thuật, không phải bug
 
-📎 Bằng chứng: drm_license_request_screenshot.png
+📎 Bằng chứng: mediaconvert_job_config.png, hls_manifest_sample.m3u8
 
-✅ VỀ VẤN ĐỀ 2 - Signed URLs:
-• URLs được config expire sau 2 giờ (7200 seconds)
-• Test của client có thể sai timezone hoặc cache
-• IP restriction KHÔNG có trong scope ban đầu - xem contract section 3.2
+✅ VỀ VẤN ĐỀ 2 - Video Upload:
+• Upload 500MB+ cần config timeout phía client
+• Tôi đã gửi hướng dẫn config nginx timeout trong documentation
+• Progress bar issue đã được fix trong commit ngày 20/12
 
-📎 Bằng chứng: signed_url_config.png, original_contract_scope.pdf
+📎 Bằng chứng: upload_fix_commit.png, nginx_config_guide.pdf
 
-⚠️ VỀ VẤN ĐỀ 3 - FairPlay và Watermarking:
-• FairPlay cần Apple Developer Certificate từ CLIENT
-• Tôi đã request certificate từ ngày 15/12 (2 tuần trước) - chưa nhận được
-• Watermarking là feature của Phase 2 (Milestone 5), KHÔNG phải Milestone 3
-• Anti-screen recording không có trong requirements ban đầu
+⚠️ VỀ VẤN ĐỀ 3 - Resume Playback:
+• Feature này hoạt động đúng trên staging environment
+• Có thể client test trên local mà chưa config đúng API endpoint
+• Cần verify lại environment của client
 
-📎 Bằng chứng: email_request_certificate.png, milestone_scope_document.pdf
+📎 Bằng chứng: resume_playback_working.mp4, database_timestamp_records.png
 
-✅ VỀ VẤN ĐỀ 4 - Documentation:
-• DRM_Setup_Guide.pdf đã gửi qua email ngày 18/12
-• Có thể client chưa check email hoặc vào spam
+✅ VỀ VẤN ĐỀ 4 - CloudFront:
+• CloudFront đã setup với 4 edge locations
+• Cache headers có trong response (Cache-Control, X-Cache)
+• Signed URLs hoạt động - có thể client copy URL sau khi expired
 
-📎 Bằng chứng: email_sent_proof.png
+📎 Bằng chứng: cloudfront_distribution_config.png, signed_url_test.mp4
 
 💡 ĐỀ XUẤT GIẢI QUYẾT:
-1. Họp online 30 phút để demo trực tiếp DRM functionality
-2. Client cung cấp Apple Certificate để implement FairPlay
-3. Clarify scope cho watermarking (Milestone 5)
+1. Họp online 30 phút để demo trực tiếp trên staging
+2. Hỗ trợ client config đúng environment
+3. Cung cấp video source 1080p để test adaptive bitrate
 ```
 
 ### 5.3 Đề xuất hòa giải (Mediation Proposal)
@@ -417,30 +417,180 @@ Sau khi xem xét bằng chứng từ cả hai bên, tôi đề xuất giải ph�
 
 📊 PHÂN TÍCH:
 
-1. Widevine DRM: Freelancer đã implement đúng. Video download bằng extension là encrypted, không playable. ✅ Freelancer đúng
+1. Adaptive Bitrate: Freelancer đã implement đúng. Video source 720p không thể có 1080p output - đây là limitation kỹ thuật hợp lý. ✅ Freelancer đúng
 
-2. Signed URLs: Config đúng 2 giờ. IP restriction không trong scope. ✅ Freelancer đúng
+2. Video Upload: Timeout là do nginx config, freelancer đã cung cấp guide. Progress bar đã fix. ✅ Freelancer đúng
 
-3. FairPlay: Cần certificate từ Client, đã request nhưng chưa nhận. ⚠️ Pending từ Client
+3. Resume Playback: Cần verify environment. Staging hoạt động đúng. ⚠️ Cần kiểm tra thêm
 
-4. Watermarking: Đúng là thuộc Milestone 5, không phải Milestone 3. ✅ Freelancer đúng
+4. CloudFront: Đã setup đúng, signed URLs hoạt động. Client có thể test sai cách. ✅ Freelancer đúng
 
-5. Documentation: Đã gửi nhưng communication issue. ⚠️ Cả hai cần cải thiện
+5. Communication: Freelancer đã gửi documentation nhưng client chưa đọc kỹ. ⚠️ Cả hai cần cải thiện
 
 💰 ĐỀ XUẤT PHÂN CHIA:
 
-• Freelancer nhận: 85% = $5,100
-• Client hoàn lại: 15% = $900
+• Freelancer nhận: 90% = $9,000
+• Client hoàn lại: 10% = $1,000
 
 📋 ĐIỀU KIỆN:
 
-1. Freelancer bổ sung documentation trong 3 ngày làm việc
-2. Client cung cấp Apple Developer Certificate trong 5 ngày
-3. Freelancer implement FairPlay trong Milestone 4 (không tính phí thêm)
-4. Hai bên họp online để demo và training
+1. Freelancer hỗ trợ client setup environment trong 2 ngày
+2. Freelancer cung cấp video hướng dẫn chi tiết
+3. Client cung cấp video source 1080p để test
+4. Hai bên họp online để demo và verify tất cả features
 
 ⏰ Thời hạn phản hồi: 48 giờ
 ```
+
+### 5.4 Nộp bằng chứng hòa giải (Mediation Evidence Submission)
+
+> 💡 **Lưu ý:** Khi dispute chuyển sang giai đoạn MEDIATION, Admin có thể yêu cầu cả hai bên nộp bằng chứng bổ sung thông qua hệ thống. Tab "Evidence" sẽ xuất hiện trong trang chi tiết dispute.
+
+---
+
+#### 📤 5.4.1 CLIENT nộp bằng chứng
+
+**Bước thực hiện:**
+1. Đăng nhập tài khoản **Client** (`client@demo.com`)
+2. Vào **Contract Workroom** → Tab **"Disputes"**
+3. Click vào dispute đang mở
+4. Chọn tab **"Evidence"**
+5. Click **"Submit Evidence"**
+
+---
+
+**🖼️ Evidence 1: Screenshot lỗi upload timeout**
+
+| Field | Nội dung nhập |
+|-------|---------------|
+| Title | `Screenshot lỗi upload timeout` |
+| Source Type | `Screenshot` |
+| Description | `Screenshot cho thấy lỗi timeout khi upload video 600MB. Lỗi xảy ra sau 2 phút upload, progress bar dừng ở 30%.` |
+| File | 📎 `CLIENT_evidence_1_upload_timeout.md` |
+
+---
+
+**🎥 Evidence 2: Video demo bug resume playback**
+
+| Field | Nội dung nhập |
+|-------|---------------|
+| Title | `Video demo bug resume playback` |
+| Source Type | `Screen Recording` |
+| Description | `Video ghi lại quá trình test resume playback. Xem video đến 5:30, refresh trang, video bắt đầu lại từ 0:00 thay vì tiếp tục từ 5:30.` |
+| File | 📎 `CLIENT_evidence_2_resume_playback_bug.md` |
+
+---
+
+**📄 Evidence 3: Network test adaptive bitrate**
+
+| Field | Nội dung nhập |
+|-------|---------------|
+| Title | `Network test adaptive bitrate` |
+| Source Type | `Document` |
+| Description | `Video test adaptive bitrate streaming bằng Chrome DevTools throttling. Khi chuyển sang Slow 3G, video buffer liên tục thay vì switch xuống quality thấp hơn.` |
+| File | 📎 `CLIENT_evidence_3_adaptive_bitrate_test.md` |
+
+---
+
+#### 📤 5.4.2 FREELANCER nộp bằng chứng
+
+**Bước thực hiện:**
+1. Đăng nhập tài khoản **Freelancer** (`freelancer@demo.com`)
+2. Vào **Contract Workroom** → Tab **"Disputes"**
+3. Click vào dispute đang mở
+4. Chọn tab **"Evidence"**
+5. Click **"Submit Evidence"**
+
+---
+
+**🖼️ Evidence 1: AWS MediaConvert job configuration**
+
+| Field | Nội dung nhập |
+|-------|---------------|
+| Title | `AWS MediaConvert job configuration` |
+| Source Type | `Screenshot` |
+| Description | `Screenshot cấu hình AWS MediaConvert job template với 4 output presets (360p, 480p, 720p, 1080p). Chứng minh adaptive bitrate đã được config đúng.` |
+| File | 📎 `FREELANCER_evidence_1_mediaconvert_config.md` |
+
+---
+
+**🎥 Evidence 2: Demo resume playback hoạt động trên staging**
+
+| Field | Nội dung nhập |
+|-------|---------------|
+| Title | `Demo resume playback hoạt động trên staging` |
+| Source Type | `Screen Recording` |
+| Description | `Video demo resume playback hoạt động đúng trên staging environment. Xem đến 5:30, refresh, video tiếp tục từ 5:30. Database có record timestamp.` |
+| File | 📎 `FREELANCER_evidence_2_resume_playback_working.md` |
+
+---
+
+**📄 Evidence 3: CloudFront distribution configuration**
+
+| Field | Nội dung nhập |
+|-------|---------------|
+| Title | `CloudFront distribution configuration` |
+| Source Type | `Document` |
+| Description | `Screenshot cấu hình CloudFront distribution với cache headers, signed URLs, và 4 edge locations. Response headers có X-Cache: Hit from cloudfront.` |
+| File | 📎 `FREELANCER_evidence_3_cloudfront_config.md` |
+
+---
+
+#### 👨‍💼 5.4.3 ADMIN xem và đánh giá bằng chứng
+
+**Bước thực hiện:**
+1. Đăng nhập tài khoản **Admin** (`admin@demo.com`)
+2. Vào **Admin Panel** → **Disputes**
+3. Click vào dispute cần xử lý
+4. Chọn tab **"Evidence"**
+5. Xem tất cả bằng chứng từ cả hai bên
+6. Đánh giá và tạo **Mediation Proposal**
+
+---
+
+**Giao diện Admin Evidence Review:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  📋 DISPUTE EVIDENCE - DSP-2024-001                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  👤 CLIENT EVIDENCE (3 items)                                   │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 🖼️ Screenshot lỗi upload timeout                        │   │
+│  │    └── CLIENT_evidence_1_upload_timeout.md              │   │
+│  │                                                          │   │
+│  │ 🎥 Video demo bug resume playback                        │   │
+│  │    └── CLIENT_evidence_2_resume_playback_bug.md         │   │
+│  │                                                          │   │
+│  │ 📄 Network test adaptive bitrate                         │   │
+│  │    └── CLIENT_evidence_3_adaptive_bitrate_test.md       │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  👤 FREELANCER EVIDENCE (3 items)                               │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 🖼️ AWS MediaConvert job configuration                   │   │
+│  │    └── FREELANCER_evidence_1_mediaconvert_config.md     │   │
+│  │                                                          │   │
+│  │ 🎥 Demo resume playback hoạt động                        │   │
+│  │    └── FREELANCER_evidence_2_resume_playback_working.md │   │
+│  │                                                          │   │
+│  │ 📄 CloudFront distribution configuration                 │   │
+│  │    └── FREELANCER_evidence_3_cloudfront_config.md       │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  [📝 Create Proposal]                                           │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+**Sau khi xem xét bằng chứng:**
+1. Admin click **"Create Proposal"** để tạo đề xuất hòa giải
+2. Nhập nội dung proposal như mục 5.3
+3. Chọn tỷ lệ phân chia: **Freelancer 90%**, **Client 10%**
+4. Submit proposal cho cả hai bên review
 
 ---
 
@@ -467,12 +617,26 @@ Sau khi xem xét bằng chứng từ cả hai bên, tôi đề xuất giải ph�
 | MS5 | `analytics_dashboard.png`, `user_management_guide.pdf`, `certificate_template.pdf` |
 | MS6 | `final_documentation.pdf`, `deployment_checklist.xlsx`, `knowledge_transfer_slides.pptx` |
 
-### 6.3 Files cho Dispute Evidence
+### 6.3 Files cho Dispute Evidence (Milestone 2)
 
 | Bên | Files |
 |-----|-------|
-| **Client** | `video_download_proof.mp4`, `url_bypass_screenshot.png`, `safari_error.png`, `original_requirements.pdf` |
-| **Freelancer** | `drm_test_results.pdf`, `email_certificate_request.png`, `original_scope.pdf`, `documentation_sent_proof.png` |
+| **Client** | `network_throttle_test.mp4`, `upload_timeout_screenshot.png`, `resume_playback_bug.mp4`, `cloudfront_headers.png` |
+| **Freelancer** | `mediaconvert_job_config.png`, `upload_fix_commit.png`, `resume_playback_working.mp4`, `cloudfront_distribution_config.png` |
+
+### 6.4 Files cho Mediation Evidence Submission
+
+> 📁 **Thư mục:** `docs/demo-files/mediation-evidence/`
+
+| Bên | File | Source Type | Mô tả |
+|-----|------|-------------|-------|
+| **Client** | `CLIENT_evidence_1_upload_timeout.md` | Screenshot | Lỗi timeout upload 600MB |
+| **Client** | `CLIENT_evidence_2_resume_playback_bug.md` | Screen Recording | Demo bug resume playback |
+| **Client** | `CLIENT_evidence_3_adaptive_bitrate_test.md` | Document | Test adaptive bitrate |
+| **Freelancer** | `FREELANCER_evidence_1_mediaconvert_config.md` | Screenshot | Config AWS MediaConvert |
+| **Freelancer** | `FREELANCER_evidence_2_resume_playback_working.md` | Screen Recording | Demo resume hoạt động |
+| **Freelancer** | `FREELANCER_evidence_3_cloudfront_config.md` | Document | Config CloudFront CDN | |
+| **Freelancer** | `cloudfront_distribution_config.png` | Document | Config CloudFront CDN |
 
 ---
 
@@ -486,18 +650,22 @@ Sau khi xem xét bằng chứng từ cả hai bên, tôi đề xuất giải ph�
 5. Freelancer accept offer → Tạo contract
 6. Freelancer submit milestone 1
 7. Client approve và release payment
-8. Hoàn thành contract
-9. Cả hai để lại review
+8. Hoàn thành milestone 1
+9. Cả hai để lại review (nếu cần)
 
-### Flow 2: Dispute Path
-1. Thực hiện bước 1-6 như trên
-2. Client reject milestone với lý do
-3. Freelancer submit lại
-4. Client vẫn không hài lòng → Mở dispute
-5. Freelancer phản hồi dispute
-6. Admin tham gia hòa giải
-7. Đề xuất mediation proposal
-8. Cả hai accept → Resolve dispute
+### Flow 2: Dispute Path (Milestone 2)
+1. Thực hiện bước 1-8 như trên (hoàn thành Milestone 1)
+2. Freelancer submit Milestone 2
+3. Client reject milestone với lý do (video streaming issues)
+4. Freelancer submit lại với giải thích
+5. Client vẫn không hài lòng → Mở dispute
+6. Freelancer phản hồi dispute với bằng chứng
+7. Admin tham gia hòa giải (sau khi 2 bên không tự giải quyết được)
+8. **Client nộp bằng chứng qua tab Evidence** (3 items)
+9. **Freelancer nộp bằng chứng qua tab Evidence** (3 items)
+10. **Admin xem xét bằng chứng từ cả hai bên**
+11. Admin đề xuất mediation proposal
+12. Cả hai accept → Resolve dispute
 
 ---
 
